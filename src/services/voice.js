@@ -1,5 +1,7 @@
 // 语音播报（TTS）封装 —— 对应安卓 AICoach 的系统 TextToSpeech 回退路径。
 // 懒加载 react-native-tts：未安装时全部为安全 no-op，安装后自动生效（无需改业务代码）。
+import {Platform} from 'react-native';
+
 let Tts = null;
 let inited = false;
 let available = false;
@@ -13,6 +15,16 @@ function ensure() {
     try {
       Tts.setDefaultLanguage('zh-CN');
     } catch (e) {}
+    // iOS 关键修复：默认 TTS 会被「静音拨片(响铃/静音开关)」静音，导致很多用户“听不到兔兔说话”。
+    // 设为 ignore 后即使手机处于静音档位也能正常播报（与安卓系统 TTS 行为一致）。
+    if (Platform.OS === 'ios') {
+      try {
+        Tts.setIgnoreSilentSwitch('ignore');
+      } catch (e) {}
+      try {
+        Tts.setDucking(true);
+      } catch (e) {}
+    }
     available = true;
   } catch (e) {
     available = false;

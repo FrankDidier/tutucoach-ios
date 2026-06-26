@@ -30,6 +30,7 @@ import {ALARM_SOUNDS, alarmNameById} from '../utils/alarmSounds';
 import {playAlarmId, stopAlarm} from '../services/alarmPlayer';
 import {getItem, setItem} from '../services/storage';
 import {pick} from '../utils/rabbitMessages';
+import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import TutuDetector, {TutuDetectorView} from 'tutu-detector';
 
 const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
@@ -76,6 +77,8 @@ const DetectionScreen = ({navigation, route}) => {
   const periodTotalRef = useRef(0);
   const periodSecRef = useRef(0);
   const alarmIdRef = useRef(0);
+  // 组件是否仍挂载：用于阻止卸载/返回后到达的原生回调再 setState（配合原生侧守卫，杜绝闪退）。
+  const aliveRef = useRef(true);
 
   // 载入已选教练 / 语音开关 / 铃声选择。
   useEffect(() => {
@@ -100,12 +103,27 @@ const DetectionScreen = ({navigation, route}) => {
   }, [route?.params?.coachId]);
 
   useEffect(() => {
+    aliveRef.current = true;
     return () => {
+      aliveRef.current = false;
       if (tickTimer.current) clearInterval(tickTimer.current);
       stopSpeak();
       stopAlarm();
     };
   }, []);
+
+  // 返回前先停止检测（把 active 置 false），让原生相机/MediaPipe 有序停下，
+  // 再配合原生 willMoveToWindow 的彻底清理，避免“进入检测后返回”闪退。
+  const handleBack = () => {
+    setDetecting(false);
+    if (tickTimer.current) {
+      clearInterval(tickTimer.current);
+      tickTimer.current = null;
+    }
+    stopSpeak();
+    stopAlarm();
+    navigation?.goBack?.();
+  };
 
   // 教练说话（带语速/音高/冷却），仅 AI 陪练版 + 已开启语音。
   const coachSpeak = (text, {force = false} = {}) => {
@@ -118,6 +136,7 @@ const DetectionScreen = ({navigation, route}) => {
   };
 
   const onDetectorResult = e => {
+    if (!aliveRef.current) return;
     const r = e?.nativeEvent || {};
     if (typeof r.matchRate === 'number') {
       setMatchRate(r.matchRate);
@@ -157,30 +176,78 @@ const DetectionScreen = ({navigation, route}) => {
     }
   };
 
-  const onSetTemplate = async () => {
-    if (!detecting) {
+  // 把检测结果落地为“已设置/未检测到手”的统一提示。
+  const reportTemplateResult = res => {
+    if (res && (res.hasLeft || res.hasRight)) {
+      setHasTemplate(true);
       Alert.alert(
-        '设置目标手型',
-        '请先点「启动」，把手摆成正确姿势对准摄像头，然后回到此处点「拍照/选模版」定格为目标模版。',
+        '模版已设置',
+        `已记录${res.hasLeft ? '左手' : ''}${
+          res.hasLeft && res.hasRight ? '、' : ''
+        }${res.hasRight ? '右手' : ''}目标手型，开始对照练习吧！`,
       );
-      return;
+    } else {
+      Alert.alert('未检测到手', '请选择一张手部清晰、完整对准镜头的照片再试一次。');
     }
+  };
+
+  // 从一张本地图片设置模版（拍照 / 相册）。native 需要文件系统路径，去掉 file:// 前缀。
+  const applyTemplateFromUri = async uri => {
+    if (!uri) return;
+    const path = uri.replace(/^file:\/\//, '');
     try {
-      const res = await TutuDetector.captureTemplateFromLive();
-      if (res && (res.hasLeft || res.hasRight)) {
-        setHasTemplate(true);
-        Alert.alert(
-          '模版已设置',
-          `已记录${res.hasLeft ? '左手' : ''}${
-            res.hasLeft && res.hasRight ? '、' : ''
-          }${res.hasRight ? '右手' : ''}目标手型，开始对照练习吧！`,
-        );
-      } else {
-        Alert.alert('未检测到手', '请把手完整对准摄像头后再试一次。');
-      }
+      const res = await TutuDetector.setTemplateFromImage(path);
+      reportTemplateResult(res);
     } catch (err) {
       Alert.alert('设置失败', String(err?.message || err));
     }
+  };
+
+  const pickTemplateFrom = async source => {
+    const r =
+      source === 'camera'
+        ? await captureFromCamera()
+        : await pickFromGallery({maxWidth: 1280, maxHeight: 1280, quality: 0.92});
+    if (!r || r.cancelled) return;
+    if (r.error) {
+      if (r.error === 'no_module') {
+        Alert.alert('暂不可用', '图片选择组件未就绪，请稍后重试。');
+      } else if (r.error === 'permission') {
+        Alert.alert(
+          '需要授权',
+          source === 'camera'
+            ? '请在「设置」中允许兔兔教练使用相机。'
+            : '请在「设置」中允许兔兔教练访问相册。',
+        );
+      } else {
+        Alert.alert('选择失败', String(r.error));
+      }
+      return;
+    }
+    await applyTemplateFromUri(r.uri);
+  };
+
+  // 定格当前实时画面为模版（需正在检测）。
+  const captureLiveTemplate = async () => {
+    try {
+      const res = await TutuDetector.captureTemplateFromLive();
+      reportTemplateResult(res);
+    } catch (err) {
+      Alert.alert('设置失败', String(err?.message || err));
+    }
+  };
+
+  // 选择模版来源：拍照 / 相册（+ 检测中可定格当前画面），对应安卓 showTemplateSourceDialog。
+  const onSetTemplate = () => {
+    const buttons = [
+      {text: '拍照', onPress: () => pickTemplateFrom('camera')},
+      {text: '从相册选择', onPress: () => pickTemplateFrom('gallery')},
+    ];
+    if (detecting) {
+      buttons.push({text: '定格当前画面', onPress: captureLiveTemplate});
+    }
+    buttons.push({text: '取消', style: 'cancel'});
+    Alert.alert('设置目标手型', '选择手型模版来源', buttons, {cancelable: true});
   };
 
   const onToggleDetect = async () => {
@@ -297,7 +364,7 @@ const DetectionScreen = ({navigation, route}) => {
 
       <ScreenHeader
         title={premium ? '智能AI陪练' : '手型检测'}
-        onBack={() => navigation?.goBack?.()}
+        onBack={handleBack}
       />
 
       <View style={styles.body}>

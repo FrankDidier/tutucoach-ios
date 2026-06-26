@@ -12,6 +12,9 @@
 @property(nonatomic, strong) MPPHandLandmarker *liveLandmarker;
 @property(nonatomic, assign) BOOL configured;
 @property(nonatomic, assign) NSInteger frameTimestampMs;
+// YES 表示视图正在/已被销毁：用于抑制销毁后到达的相机帧 / MediaPipe 回调，
+// 避免在 RN 已拆除该视图后再调用 onResult 而崩溃（对应安卓 isMonitoring 守卫）。
+@property(nonatomic, assign) BOOL tornDown;
 @end
 
 @implementation TutuDetectorView
@@ -31,6 +34,7 @@
 }
 
 - (void)setActive:(BOOL)active {
+  if (_tornDown) return;
   if (_active == active) return;
   _active = active;
   if (active) {
@@ -40,8 +44,47 @@
   }
 }
 
+// RN 在导航返回 / 卸载该原生视图时会把它从窗口移除（newWindow == nil）。
+// 这一步发生在 dealloc 与 bridge 拆除 onResult 之前，是最可靠的清理时机：
+// 先彻底停掉相机与 MediaPipe，并清空 onResult，杜绝“返回后还回调 -> 闪退”。
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+  [super willMoveToWindow:newWindow];
+  if (newWindow == nil) {
+    [self teardown];
+  }
+}
+
 - (void)dealloc {
-  [self stopDetection];
+  [self teardown];
+}
+
+// 不可逆的彻底清理（幂等）。停止接收帧、停会话、释放 landmarker、断开回调。
+// 注意：清理块只捕获局部强引用、不捕获 self —— 即使 teardown 从 dealloc 触发也安全（不会复活 self）。
+- (void)teardown {
+  if (_tornDown) return;
+  _tornDown = YES;
+  _active = NO;
+  // 立刻断开 onResult：emit/回调里都会检查，确保不再向已失效的 RN bridge 抛事件。
+  self.onResult = nil;
+  // 取出资源到局部强引用；清空 ivar（之后 captureOutput 读到 nil 会直接 return）。
+  AVCaptureVideoDataOutput *output = _videoOutput;
+  AVCaptureSession *session = _session;
+  MPPHandLandmarker *landmarker = _liveLandmarker;
+  _liveLandmarker = nil;
+  dispatch_queue_t q = _cameraQueue;
+  if (q) {
+    dispatch_async(q, ^{
+      // 在相机串行队列上执行：与 captureOutput 串行化，杜绝数据竞争。
+      if (output) {
+        [output setSampleBufferDelegate:nil queue:NULL];
+      }
+      if ([session isRunning]) {
+        [session stopRunning];
+      }
+      [[TutuDetectorEngine shared] stopSession];
+      (void)landmarker;  // 持有到块结束，确保在任何在途帧处理完成后再释放
+    });
+  }
 }
 
 #pragma mark - 启停
@@ -49,16 +92,20 @@
 - (void)startDetection {
   __weak TutuDetectorView *weakSelf = self;
   [self requestCameraPermission:^(BOOL granted) {
+    TutuDetectorView *strongSelf = weakSelf;
+    if (strongSelf == nil || strongSelf.tornDown) return;
     if (!granted) {
-      [weakSelf emit:@{@"handDetected": @NO, @"hasMatch": @NO, @"pass": @NO,
-                       @"matchRate": @0, @"errors": @[@"未获得摄像头权限"]}];
+      [strongSelf emit:@{@"handDetected": @NO, @"hasMatch": @NO, @"pass": @NO,
+                         @"matchRate": @0, @"errors": @[@"未获得摄像头权限"]}];
       return;
     }
-    dispatch_async(weakSelf.cameraQueue, ^{
-      [weakSelf configureIfNeeded];
+    dispatch_async(strongSelf.cameraQueue, ^{
+      TutuDetectorView *s = weakSelf;
+      if (s == nil || s.tornDown || !s.active) return;
+      [s configureIfNeeded];
       [[TutuDetectorEngine shared] startSession];
-      if (![weakSelf.session isRunning]) {
-        [weakSelf.session startRunning];
+      if (![s.session isRunning]) {
+        [s.session startRunning];
       }
     });
   }];
@@ -128,12 +175,15 @@
     conn.videoOrientation = AVCaptureVideoOrientationPortrait;
   }
 
-  // 预览层（铺满，等比裁剪）。
+  // 预览层（铺满，等比裁剪）。用 weakSelf 避免“点启动后立刻返回”时在已销毁视图上操作图层而崩溃。
+  __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
-    self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.session];
-    self.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-    self.previewLayer.frame = self.bounds;
-    [self.layer insertSublayer:self.previewLayer atIndex:0];
+    TutuDetectorView *s = weakSelf;
+    if (s == nil || s.tornDown) return;
+    s.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:s.session];
+    s.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    s.previewLayer.frame = s.bounds;
+    [s.layer insertSublayer:s.previewLayer atIndex:0];
   });
 
   [self setupLiveLandmarker];
@@ -159,7 +209,7 @@
 - (void)captureOutput:(AVCaptureOutput *)output
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection {
-  if (_liveLandmarker == nil) return;
+  if (_tornDown || !_active || _liveLandmarker == nil) return;
   NSError *err = nil;
   // 后置相机竖屏：朝向 .right 让 MediaPipe 拿到正立的竖屏图像。
   MPPImage *image = [[MPPImage alloc] initWithSampleBuffer:sampleBuffer
@@ -176,7 +226,7 @@
     didFinishDetectionWithResult:(MPPHandLandmarkerResult *)result
          timestampInMilliseconds:(NSInteger)timestampInMilliseconds
                            error:(NSError *)error {
-  if (error != nil || result == nil) {
+  if (_tornDown || !_active || error != nil || result == nil) {
     return;
   }
   NSMutableArray *hands = [NSMutableArray array];
@@ -201,9 +251,13 @@
 }
 
 - (void)emit:(NSDictionary *)payload {
-  if (self.onResult == nil) return;
+  if (_tornDown || self.onResult == nil) return;
+  __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
-    if (self.onResult) self.onResult(payload);
+    TutuDetectorView *s = weakSelf;
+    if (s == nil || s.tornDown) return;
+    RCTBubblingEventBlock cb = s.onResult;
+    if (cb) cb(payload);
   });
 }
 

@@ -8,8 +8,8 @@ try {
   picker = null;
 }
 
-// 仅相册（与安卓头像选择一致：相册，最长边压缩到 ~512）。
-export function pickFromGallery() {
+// 相册选图。默认按头像场景压到 ~512；手型模版需要更高清晰度，可传 opts 覆盖。
+export function pickFromGallery(opts = {}) {
   return new Promise(resolve => {
     if (!picker || !picker.launchImageLibrary) {
       resolve({error: 'no_module'});
@@ -19,9 +19,9 @@ export function pickFromGallery() {
       {
         mediaType: 'photo',
         selectionLimit: 1,
-        maxWidth: 512,
-        maxHeight: 512,
-        quality: 0.88,
+        maxWidth: opts.maxWidth || 512,
+        maxHeight: opts.maxHeight || 512,
+        quality: opts.quality || 0.88,
         includeBase64: false,
       },
       response => {
