@@ -9,11 +9,20 @@
 /* Begin PBXBuildFile section */
 		00E356F31AD99517003FC87E /* TutuCoachRNTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 00E356F21AD99517003FC87E /* TutuCoachRNTests.m */; };
 		0C80B921A6F3F58F76C31292 /* libPods-TutuCoachRN.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-TutuCoachRN.a */; };
+		13A3259A761CEA366F361703 /* alarm_dog.wav in Resources */ = {isa = PBXBuildFile; fileRef = AE0AF03331A79EE7CB9030D0 /* alarm_dog.wav */; };
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
+		2F0103A969C4465DA0019FD0 /* alarm_female_voice.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6234A9E20D030AC0E120CD04 /* alarm_female_voice.wav */; };
+		479C2E898510519A1B121E71 /* alarm_cat.wav in Resources */ = {isa = PBXBuildFile; fileRef = E54F837662E1DC39A63AE810 /* alarm_cat.wav */; };
+		69CDD81C05B080DB1D01D597 /* alarm_default.wav in Resources */ = {isa = PBXBuildFile; fileRef = 0728C01F8D4DED1972FF75E0 /* alarm_default.wav */; };
 		7699B88040F8A987B510C191 /* libPods-TutuCoachRN-TutuCoachRNTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 19F6CBCC0A4E27FBF8BF4A61 /* libPods-TutuCoachRN-TutuCoachRNTests.a */; };
+		789CF07E19E31561AA03A3DA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		88B2ADB863CAFE4C46D34C93 /* alarm_siren.wav in Resources */ = {isa = PBXBuildFile; fileRef = E932FB1BD6F859DD70828FCF /* alarm_siren.wav */; };
+		95E431BFCF60F676206A1BBB /* alarm_male_voice.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */; };
+		E29131F5B1E673C95BA86635 /* alarm_piano.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */; };
+		E9C16D99BC6291EF94762CFB /* alarm_ambulance.wav in Resources */ = {isa = PBXBuildFile; fileRef = 287D584FEF8C919F629A0C04 /* alarm_ambulance.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +39,7 @@
 		00E356EE1AD99517003FC87E /* TutuCoachRNTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TutuCoachRNTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		00E356F11AD99517003FC87E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		00E356F21AD99517003FC87E /* TutuCoachRNTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TutuCoachRNTests.m; sourceTree = "<group>"; };
+		0728C01F8D4DED1972FF75E0 /* alarm_default.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_default.wav; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* TutuCoachRN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TutuCoachRN.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FAF1A68108700A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = TutuCoachRN/AppDelegate.h; sourceTree = "<group>"; };
 		13B07FB01A68108700A75B9A /* AppDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = TutuCoachRN/AppDelegate.mm; sourceTree = "<group>"; };
@@ -38,12 +48,19 @@
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = TutuCoachRN/main.m; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = TutuCoachRN/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		19F6CBCC0A4E27FBF8BF4A61 /* libPods-TutuCoachRN-TutuCoachRNTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TutuCoachRN-TutuCoachRNTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		287D584FEF8C919F629A0C04 /* alarm_ambulance.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_ambulance.wav; sourceTree = "<group>"; };
+		3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_male_voice.wav; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-TutuCoachRN.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN.debug.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN/Pods-TutuCoachRN.debug.xcconfig"; sourceTree = "<group>"; };
+		4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_piano.wav; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-TutuCoachRN.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN.release.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN/Pods-TutuCoachRN.release.xcconfig"; sourceTree = "<group>"; };
 		5B7EB9410499542E8C5724F5 /* Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN-TutuCoachRNTests/Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-TutuCoachRN.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TutuCoachRN.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6234A9E20D030AC0E120CD04 /* alarm_female_voice.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_female_voice.wav; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = TutuCoachRN/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-TutuCoachRN-TutuCoachRNTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN-TutuCoachRNTests.release.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN-TutuCoachRNTests/Pods-TutuCoachRN-TutuCoachRNTests.release.xcconfig"; sourceTree = "<group>"; };
+		AE0AF03331A79EE7CB9030D0 /* alarm_dog.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_dog.wav; sourceTree = "<group>"; };
+		E54F837662E1DC39A63AE810 /* alarm_cat.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_cat.wav; sourceTree = "<group>"; };
+		E932FB1BD6F859DD70828FCF /* alarm_siren.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_siren.wav; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -94,6 +111,7 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				F154BD7CADDB34417ED817E3 /* Sounds */,
 			);
 			name = TutuCoachRN;
 			sourceTree = "<group>";
@@ -148,6 +166,22 @@
 				89C6BE57DB24E9ADA2F236DE /* Pods-TutuCoachRN-TutuCoachRNTests.release.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		F154BD7CADDB34417ED817E3 /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				287D584FEF8C919F629A0C04 /* alarm_ambulance.wav */,
+				E54F837662E1DC39A63AE810 /* alarm_cat.wav */,
+				0728C01F8D4DED1972FF75E0 /* alarm_default.wav */,
+				AE0AF03331A79EE7CB9030D0 /* alarm_dog.wav */,
+				6234A9E20D030AC0E120CD04 /* alarm_female_voice.wav */,
+				3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */,
+				4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */,
+				E932FB1BD6F859DD70828FCF /* alarm_siren.wav */,
+			);
+			name = Sounds;
+			path = TutuCoachRN/Sounds;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -245,6 +279,15 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				789CF07E19E31561AA03A3DA /* PrivacyInfo.xcprivacy in Resources */,
+				E9C16D99BC6291EF94762CFB /* alarm_ambulance.wav in Resources */,
+				479C2E898510519A1B121E71 /* alarm_cat.wav in Resources */,
+				69CDD81C05B080DB1D01D597 /* alarm_default.wav in Resources */,
+				13A3259A761CEA366F361703 /* alarm_dog.wav in Resources */,
+				2F0103A969C4465DA0019FD0 /* alarm_female_voice.wav in Resources */,
+				95E431BFCF60F676206A1BBB /* alarm_male_voice.wav in Resources */,
+				E29131F5B1E673C95BA86635 /* alarm_piano.wav in Resources */,
+				88B2ADB863CAFE4C46D34C93 /* alarm_siren.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -467,7 +510,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6GAG9LR66G;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = TutuCoachRN/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -475,13 +520,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.5.26;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.impit.tutucoach;
 				PRODUCT_NAME = TutuCoachRN;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -495,20 +540,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6GAG9LR66G;
 				INFOPLIST_FILE = TutuCoachRN/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.5.26;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.impit.tutucoach;
 				PRODUCT_NAME = TutuCoachRN;
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -584,7 +631,14 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				USE_HERMES = true;
 			};
 			name = Debug;
 		};
@@ -649,7 +703,13 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;

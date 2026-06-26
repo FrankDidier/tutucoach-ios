@@ -1,118 +1,116 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, {useEffect, useState} from 'react';
+import {View, Image, Platform} from 'react-native';
+import {NavigationContainer} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import PracticeScreen from './src/screens/PracticeScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import TeacherProfileScreen from './src/screens/TeacherProfileScreen';
+import TeacherScreen from './src/screens/TeacherScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import DetectionScreen from './src/screens/DetectionScreen';
+import ClassManageScreen from './src/screens/ClassManageScreen';
+import AISelectScreen from './src/screens/AISelectScreen';
+import AISettingsScreen from './src/screens/AISettingsScreen';
+import GuideScreen from './src/screens/GuideScreen';
+import CheckinStatsScreen from './src/screens/CheckinStatsScreen';
+import StudentEntryScreen from './src/screens/StudentEntryScreen';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+import {Colors} from './src/utils/colors';
+import {Images} from './src/assets/images';
+import {getItem} from './src/services/storage';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+const TAB_ICONS: Record<string, any> = {
+  首页: Images.tabHome,
+  练琴: Images.tabPractice,
+  我的: Images.tabProfile,
+};
+
+function TabIcon({label, color}: {label: string; focused: boolean; color: string}) {
   return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
+    <View style={{alignItems: 'center', justifyContent: 'center', width: 28, height: 28}}>
+      <Image
+        source={TAB_ICONS[label]}
+        style={{width: 24, height: 24, tintColor: color}}
+        resizeMode="contain"
+      />
     </View>
   );
 }
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
-
+function MainTabs() {
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <Tab.Navigator
+      screenOptions={({route}) => ({
+        headerShown: false,
+        tabBarIcon: ({focused, color}) => (
+          <TabIcon label={route.name} focused={focused} color={color} />
+        ),
+        tabBarActiveTintColor: Colors.pinkPrimary,
+        tabBarInactiveTintColor: Colors.greyMedium,
+        tabBarStyle: {
+          height: Platform.OS === 'ios' ? 85 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          paddingTop: 6,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 0.5,
+          borderTopColor: Colors.greyDivider,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          shadowOffset: {width: 0, height: -2},
+        },
+        tabBarLabelStyle: {fontSize: 11, fontWeight: '600'},
+      })}>
+      <Tab.Screen name="首页" component={WelcomeScreen} />
+      <Tab.Screen name="练琴" component={PracticeScreen} />
+      <Tab.Screen name="我的" component={ProfileScreen} />
+    </Tab.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+function App(): React.JSX.Element {
+  // 首次启动显示引导页（对应安卓 GuideActivity 为 LAUNCHER）。
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const shown = await getItem('guide_shown');
+      setInitialRoute(shown === '1' ? 'MainTabs' : 'Guide');
+    })();
+  }, []);
+
+  if (!initialRoute) {
+    return <View style={{flex: 1, backgroundColor: Colors.pinkBg}} />;
+  }
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{headerShown: false}}>
+        <Stack.Screen name="Guide" component={GuideScreen} />
+        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen name="Teacher" component={TeacherScreen} />
+        <Stack.Screen name="TeacherProfile" component={TeacherProfileScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+        <Stack.Screen name="Detection" component={DetectionScreen} />
+        <Stack.Screen name="ClassManage" component={ClassManageScreen} />
+        <Stack.Screen name="AISelect" component={AISelectScreen} />
+        <Stack.Screen name="AISettings" component={AISettingsScreen} />
+        <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
+        <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
 
 export default App;

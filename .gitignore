@@ -72,3 +72,15 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Signing material / secrets (NEVER commit these; they live in CI secrets)
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.certSigningRequest
+*.csr
+dist.key
+signing.env
+.env
+.env.*

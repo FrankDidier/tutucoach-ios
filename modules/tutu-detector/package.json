@@ -1,0 +1,11 @@
+{
+  "name": "tutu-detector",
+  "version": "0.1.0",
+  "description": "兔兔教练 手型检测原生模块 (MediaPipe HandLandmarker + C++ 黄金核心)",
+  "main": "src/index.js",
+  "private": true,
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

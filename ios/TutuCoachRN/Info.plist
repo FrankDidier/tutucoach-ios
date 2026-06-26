@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>TutuCoachRN</string>
+	<string>兔兔教练</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,6 +34,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>兔兔教练需要使用摄像头来检测钢琴手型</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>兔兔教练需要使用麦克风录制练习音频</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>兔兔教练需要访问相册来选择手型模版照片</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
