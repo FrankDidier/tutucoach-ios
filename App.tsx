@@ -22,6 +22,7 @@ import StudentEntryScreen from './src/screens/StudentEntryScreen';
 import {Colors} from './src/utils/colors';
 import {Images} from './src/assets/images';
 import {getItem} from './src/services/storage';
+import {initDeviceId} from './src/services/device';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -82,6 +83,8 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     (async () => {
+      // 先固化稳定设备 ID（账号/会员/练习/入班绑定都依赖它），再决定首屏。
+      await initDeviceId();
       const shown = await getItem('guide_shown');
       setInitialRoute(shown === '1' ? 'MainTabs' : 'Guide');
     })();

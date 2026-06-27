@@ -8,12 +8,23 @@ import {
   FlatList,
   TextInput,
   StatusBar,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
+import {registerAccount} from '../services/account';
 import {fetchStudents} from '../services/teacher';
+
+let Clipboard = null;
+try {
+  // eslint-disable-next-line global-require
+  Clipboard = require('@react-native-clipboard/clipboard').default;
+} catch (e) {
+  Clipboard = null;
+}
 
 function fmtMinutes(min) {
   const m = Math.round(min || 0);
@@ -28,8 +39,13 @@ const ClassManageScreen = ({navigation}) => {
   useEffect(() => {
     let alive = true;
     (async () => {
+      const tid = getDeviceId();
       try {
-        const r = await fetchStudents(getDeviceId());
+        // 确保本设备已是「老师」账号，教师统计才查得到本班学生。
+        await registerAccount(tid, 'teacher');
+      } catch (e) {}
+      try {
+        const r = await fetchStudents(tid);
         if (alive && r && r.ok && Array.isArray(r.students)) {
           setStudents(
             r.students.map(s => ({
@@ -51,6 +67,21 @@ const ClassManageScreen = ({navigation}) => {
     };
   }, []);
 
+  const onStudentPress = item => {
+    Alert.alert(item.name, `完整 ID：${item.id}`, [
+      {text: '关闭', style: 'cancel'},
+      {
+        text: '复制 ID',
+        onPress: () => {
+          if (Clipboard) {
+            Clipboard.setString(item.id);
+            Alert.alert('已复制', '学生完整 ID 已复制');
+          }
+        },
+      },
+    ]);
+  };
+
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return students;
@@ -60,7 +91,10 @@ const ClassManageScreen = ({navigation}) => {
   }, [students, query]);
 
   const renderStudent = ({item}) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.85}
+      onPress={() => onStudentPress(item)}>
       <View style={styles.cardLeft}>
         <Image
           source={Images.avatarRabbit}
@@ -91,7 +125,7 @@ const ClassManageScreen = ({navigation}) => {
           </Text>
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (

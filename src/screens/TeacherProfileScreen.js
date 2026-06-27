@@ -17,6 +17,7 @@ import {
   getTeacherAvatarUri,
   setTeacherAvatarUri,
 } from '../services/profilePrefs';
+import {ensureTeacherUnlocked} from '../services/teacherAuth';
 
 const MenuRow = ({icon, label, onPress, divider}) => (
   <TouchableOpacity
@@ -32,14 +33,25 @@ const MenuRow = ({icon, label, onPress, divider}) => (
 
 const TeacherProfileScreen = ({navigation}) => {
   const [avatarUri, setAvatar] = useState(null);
+  const [unlocked, setUnlocked] = useState(false);
 
+  // 进入教师端先做口令校验（对应安卓 TeacherGate）。未通过则退回上一页。
   useEffect(() => {
     let alive = true;
-    getTeacherAvatarUri().then(u => alive && setAvatar(u));
+    (async () => {
+      const ok = await ensureTeacherUnlocked();
+      if (!alive) return;
+      if (!ok) {
+        navigation?.goBack?.();
+        return;
+      }
+      setUnlocked(true);
+      getTeacherAvatarUri().then(u => alive && setAvatar(u));
+    })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [navigation]);
 
   const onChangeAvatar = async () => {
     const r = await pickFromGallery();
@@ -51,6 +63,11 @@ const TeacherProfileScreen = ({navigation}) => {
       Alert.alert('提示', '图片选择模块未集成（需重新编译）');
     }
   };
+
+  if (!unlocked) {
+    // 口令校验中 / 未通过：先显示空白底，避免泄露教师功能入口。
+    return <SafeAreaView style={styles.container} />;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
