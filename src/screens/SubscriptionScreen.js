@@ -88,7 +88,16 @@ const SubscriptionScreen = ({navigation}) => {
     }
     try {
       const r = await payWithWeChat(selected, getDeviceId());
-      Alert.alert('微信支付', r.ok ? '支付成功，会员已开通' : r.message || '支付未完成');
+      if (r.ok) {
+        // 支付成功后刷新会员状态，立即更新顶部横幅（对应安卓 refreshMembership）。
+        try {
+          const m = await getMembership(getDeviceId());
+          if (m && m.ok) setVip(m);
+        } catch (e) {}
+        Alert.alert('微信支付', '支付成功，会员已开通');
+      } else {
+        Alert.alert('微信支付', r.message || '支付未完成');
+      }
     } catch (e) {
       Alert.alert('微信支付', '网络异常，请重试');
     }

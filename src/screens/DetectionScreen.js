@@ -16,8 +16,8 @@ import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
-import {syncPractice} from '../services/account';
-import {requestSummary} from '../services/coach';
+import {syncPractice, getMembership} from '../services/account';
+import {requestSummary, fetchCoaches} from '../services/coach';
 import {speak, stop as stopSpeak} from '../services/voice';
 import {
   getSelectedCoachId,
@@ -37,6 +37,45 @@ const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
 const ENCOURAGE_INTERVAL_MS = 25000; // 对应 aiTimer 鼓励间隔 ~25s
 const ALARM_PERIOD_SEC = 3; // 对应免费版 monitorPeriod 默认 3 秒
 const ALARM_MATCH_TARGET = 70; // 周期匹配率门槛（%），低于则报警
+
+// 检测设置项（对应安卓 MainActivity 设置弹窗）。
+const SETTINGS_KEY = 'det_settings';
+const SENSITIVITY_ANGLE = {strict: 18, normal: 22, lenient: 28}; // 灵敏度 → 角度阈值
+const SPEAK_FREQ_MS = {fast: 2000, normal: 3000, slow: 5000}; // AI 播报频率 → 冷却
+const DEFAULT_SETTINGS = {
+  sensitivity: 'normal',
+  period: 3,
+  matchTarget: 70,
+  speakFreq: 'normal',
+};
+const SENS_OPTIONS = [
+  {key: 'strict', label: '严格(18°)'},
+  {key: 'normal', label: '标准(22°)'},
+  {key: 'lenient', label: '宽松(28°)'},
+];
+const PERIOD_OPTIONS = [2, 3, 5];
+const MATCH_OPTIONS = [60, 70, 80];
+const FREQ_OPTIONS = [
+  {key: 'fast', label: '快(2s)'},
+  {key: 'normal', label: '标准(3s)'},
+  {key: 'slow', label: '慢(5s)'},
+];
+
+// 把后台教练记录映射成检测页用的语音 profile（在内置兜底之上覆盖自定义字段）。
+function serverCoachToProfile(c, base) {
+  if (!c) return base;
+  const nonEmpty = a => (Array.isArray(a) && a.length ? a : null);
+  return {
+    ...base,
+    displayName: c.name || base.displayName,
+    speechRate: c.speechRate || base.speechRate || 1.0,
+    pitch: c.pitch || base.pitch || 1.0,
+    encouragements: nonEmpty(c.encouragements) || base.encouragements,
+    errorTemplates: nonEmpty(c.errorTemplates) || base.errorTemplates,
+    noHandReminders: nonEmpty(c.noHandReminders) || base.noHandReminders,
+    voiceId: c.voiceId || 0,
+  };
+}
 
 const BTN_START = {r: 255, g: 107, b: 138};
 const BTN_END = {r: 255, g: 138, b: 171};
@@ -66,6 +105,9 @@ const DetectionScreen = ({navigation, route}) => {
   const [showRingtone, setShowRingtone] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [alarmId, setAlarmId] = useState(0);
+  const [vip, setVip] = useState(true); // 免费公测期默认全员会员；按 /api/membership 校正
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
   const sessionStart = useRef(0);
   const sessionMatchRate = useRef(0);
@@ -77,29 +119,76 @@ const DetectionScreen = ({navigation, route}) => {
   const periodTotalRef = useRef(0);
   const periodSecRef = useRef(0);
   const alarmIdRef = useRef(0);
+  const speakCooldownRef = useRef(SPEAK_COOLDOWN_MS);
+  const periodTargetRef = useRef(ALARM_PERIOD_SEC);
+  const matchTargetRef = useRef(ALARM_MATCH_TARGET);
   // 组件是否仍挂载：用于阻止卸载/返回后到达的原生回调再 setState（配合原生侧守卫，杜绝闪退）。
   const aliveRef = useRef(true);
 
-  // 载入已选教练 / 语音开关 / 铃声选择。
+  // 应用检测设置：写入运行期 refs + 原生角度阈值，可选持久化。
+  const applySettings = async (next, persist) => {
+    setSettings(next);
+    periodTargetRef.current = next.period;
+    matchTargetRef.current = next.matchTarget;
+    speakCooldownRef.current = SPEAK_FREQ_MS[next.speakFreq] || SPEAK_COOLDOWN_MS;
+    try {
+      await TutuDetector.setAngleThreshold(
+        SENSITIVITY_ANGLE[next.sensitivity] || 22,
+      );
+    } catch (e) {}
+    if (persist) {
+      try {
+        await setItem(SETTINGS_KEY, JSON.stringify(next));
+      } catch (e) {}
+    }
+  };
+
+  // 载入已选教练 / 语音开关 / 铃声选择 / 检测设置 / 会员状态。
   useEffect(() => {
     let alive = true;
     (async () => {
       const id = route?.params?.coachId || (await getSelectedCoachId());
-      const prof = profileById(id);
+      // 先用内置角色兜底，再用后台自定义资料（自定义文案/语速/音色）覆盖。
+      const base = profileById(id);
       const von = await isVoiceEnabled();
       const savedAlarm = Number((await getItem('alarm_sound_id')) || '0');
+      let saved = DEFAULT_SETTINGS;
+      try {
+        const raw = await getItem(SETTINGS_KEY);
+        if (raw) saved = {...DEFAULT_SETTINGS, ...JSON.parse(raw)};
+      } catch (e) {}
       if (!alive) return;
       setCoachId(id);
-      profileRef.current = prof;
-      setCoachName(prof.displayName);
+      profileRef.current = base;
+      setCoachName(base.displayName);
       setVoiceOn(von);
       const aId = Number.isNaN(savedAlarm) ? 0 : savedAlarm;
       setAlarmId(aId);
       alarmIdRef.current = aId;
+      await applySettings(saved, false);
+
+      // 拉取后台教练，命中所选 id 则覆盖为老师自定义资料（与安卓一致）。
+      try {
+        const res = await fetchCoaches();
+        const list = (res && (res.coaches || res.data)) || [];
+        const sc = list.find(c => c.id === id);
+        if (alive && sc) {
+          const merged = serverCoachToProfile(sc, base);
+          profileRef.current = merged;
+          setCoachName(merged.displayName);
+        }
+      } catch (e) {}
+
+      // 会员状态（用于免费版会员铃声解锁）；公测期通常 is_vip=true。
+      try {
+        const m = await getMembership(getDeviceId());
+        if (alive && m && m.ok) setVip(!!m.is_vip);
+      } catch (e) {}
     })();
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route?.params?.coachId]);
 
   useEffect(() => {
@@ -129,7 +218,7 @@ const DetectionScreen = ({navigation, route}) => {
   const coachSpeak = (text, {force = false} = {}) => {
     if (!premium || !voiceOn || !text) return;
     const now = Date.now();
-    if (!force && now - lastSpeakRef.current < SPEAK_COOLDOWN_MS) return;
+    if (!force && now - lastSpeakRef.current < speakCooldownRef.current) return;
     lastSpeakRef.current = now;
     const p = profileRef.current || {};
     speak(text, {rate: p.speechRate || 1.0, pitch: p.pitch || 1.0});
@@ -267,11 +356,11 @@ const DetectionScreen = ({navigation, route}) => {
         setElapsedSec(Math.floor((Date.now() - sessionStart.current) / 1000));
         // 免费版周期报警：每 ALARM_PERIOD_SEC 秒评估周期匹配率，过低则播放铃声。
         periodSecRef.current += 1;
-        if (periodSecRef.current >= ALARM_PERIOD_SEC) {
+        if (periodSecRef.current >= periodTargetRef.current) {
           periodSecRef.current = 0;
           const total = periodTotalRef.current;
           const rate = total > 0 ? (periodMatchRef.current / total) * 100 : 100;
-          if (!premium && total > 0 && rate < ALARM_MATCH_TARGET) {
+          if (!premium && total > 0 && rate < matchTargetRef.current) {
             playAlarmId(alarmIdRef.current);
           }
           periodMatchRef.current = 0;
@@ -321,7 +410,7 @@ const DetectionScreen = ({navigation, route}) => {
   };
 
   const onSelectAlarm = async sound => {
-    if (sound.locked) {
+    if (!sound.free && !vip) {
       Alert.alert('会员铃声', '该铃声为会员专属，开通会员后可使用。');
       return;
     }
@@ -365,6 +454,14 @@ const DetectionScreen = ({navigation, route}) => {
       <ScreenHeader
         title={premium ? '智能AI陪练' : '手型检测'}
         onBack={handleBack}
+        right={
+          <TouchableOpacity
+            onPress={() => setShowSettings(true)}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            accessibilityLabel="检测设置">
+            <Text style={styles.gearText}>⚙</Text>
+          </TouchableOpacity>
+        }
       />
 
       <View style={styles.body}>
@@ -483,6 +580,7 @@ const DetectionScreen = ({navigation, route}) => {
             <ScrollView style={styles.alarmList}>
               {ALARM_SOUNDS.map(s => {
                 const active = s.id === alarmId;
+                const locked = !s.free && !vip;
                 return (
                   <TouchableOpacity
                     key={s.id}
@@ -490,12 +588,9 @@ const DetectionScreen = ({navigation, route}) => {
                     activeOpacity={0.7}
                     onPress={() => onSelectAlarm(s)}>
                     <Text
-                      style={[
-                        styles.alarmName,
-                        s.locked && styles.alarmLocked,
-                      ]}>
+                      style={[styles.alarmName, locked && styles.alarmLocked]}>
                       {s.name}
-                      {s.locked ? ' 🔒' : ''}
+                      {locked ? ' 🔒' : ''}
                     </Text>
                     {active ? <Text style={styles.alarmCheck}>✓</Text> : null}
                   </TouchableOpacity>
@@ -506,6 +601,119 @@ const DetectionScreen = ({navigation, route}) => {
               style={styles.modalClose}
               onPress={() => setShowRingtone(false)}>
               <Text style={styles.modalCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showSettings}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSettings(false)}>
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowSettings(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+            <Text style={styles.modalTitle}>检测设置</Text>
+            <ScrollView style={styles.alarmList}>
+              <Text style={styles.settingLabel}>灵敏度（角度阈值）</Text>
+              <View style={styles.segRow}>
+                {SENS_OPTIONS.map(o => (
+                  <TouchableOpacity
+                    key={o.key}
+                    style={[
+                      styles.segItem,
+                      settings.sensitivity === o.key && styles.segItemActive,
+                    ]}
+                    onPress={() =>
+                      applySettings({...settings, sensitivity: o.key}, true)
+                    }>
+                    <Text
+                      style={[
+                        styles.segText,
+                        settings.sensitivity === o.key && styles.segTextActive,
+                      ]}>
+                      {o.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.settingLabel}>监测周期（秒）</Text>
+              <View style={styles.segRow}>
+                {PERIOD_OPTIONS.map(v => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[
+                      styles.segItem,
+                      settings.period === v && styles.segItemActive,
+                    ]}
+                    onPress={() =>
+                      applySettings({...settings, period: v}, true)
+                    }>
+                    <Text
+                      style={[
+                        styles.segText,
+                        settings.period === v && styles.segTextActive,
+                      ]}>
+                      {v}s
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.settingLabel}>达标匹配率（%）</Text>
+              <View style={styles.segRow}>
+                {MATCH_OPTIONS.map(v => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[
+                      styles.segItem,
+                      settings.matchTarget === v && styles.segItemActive,
+                    ]}
+                    onPress={() =>
+                      applySettings({...settings, matchTarget: v}, true)
+                    }>
+                    <Text
+                      style={[
+                        styles.segText,
+                        settings.matchTarget === v && styles.segTextActive,
+                      ]}>
+                      {v}%
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.settingLabel}>AI 播报频率</Text>
+              <View style={styles.segRow}>
+                {FREQ_OPTIONS.map(o => (
+                  <TouchableOpacity
+                    key={o.key}
+                    style={[
+                      styles.segItem,
+                      settings.speakFreq === o.key && styles.segItemActive,
+                    ]}
+                    onPress={() =>
+                      applySettings({...settings, speakFreq: o.key}, true)
+                    }>
+                    <Text
+                      style={[
+                        styles.segText,
+                        settings.speakFreq === o.key && styles.segTextActive,
+                      ]}>
+                      {o.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowSettings(false)}>
+              <Text style={styles.modalCloseText}>完成</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -759,6 +967,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalCloseText: {color: '#fff', fontSize: 15, fontWeight: '700'},
+  gearText: {fontSize: 20, color: '#333333'},
+  settingLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  segRow: {flexDirection: 'row', gap: 8},
+  segItem: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.greyDivider,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  segItemActive: {
+    backgroundColor: Colors.pinkPrimary,
+    borderColor: Colors.pinkPrimary,
+  },
+  segText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
+  segTextActive: {color: '#fff'},
 });
 
 export default DetectionScreen;
