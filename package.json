@@ -23,7 +23,8 @@
     "react-native-sound": "^0.11.2",
     "react-native-tts": "^4.1.1",
     "tutu-detector": "file:./modules/tutu-detector",
-    "tutu-recorder": "file:./modules/tutu-recorder"
+    "tutu-recorder": "file:./modules/tutu-recorder",
+    "tutu-wechat": "file:./modules/tutu-wechat"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

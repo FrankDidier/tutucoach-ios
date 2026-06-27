@@ -23,6 +23,7 @@ import {Colors} from './src/utils/colors';
 import {Images} from './src/assets/images';
 import {getItem} from './src/services/storage';
 import {initDeviceId} from './src/services/device';
+import {registerWeChat} from './src/services/wechat';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -85,6 +86,8 @@ function App(): React.JSX.Element {
     (async () => {
       // 先固化稳定设备 ID（账号/会员/练习/入班绑定都依赖它），再决定首屏。
       await initDeviceId();
+      // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
+      registerWeChat();
       const shown = await getItem('guide_shown');
       setInitialRoute(shown === '1' ? 'MainTabs' : 'Guide');
     })();

@@ -10,7 +10,7 @@
 //   4) AppDelegate 处理 openURL / continueUserActivity 回调；
 //   5) 写一个 RNWeChat 原生模块导出 registerApp / sendAuthReq / sendPayReq / shareWebpage。
 import {NativeModules, Platform} from 'react-native';
-import {WECHAT_APP_ID} from './config';
+import {WECHAT_APP_ID, WECHAT_UNIVERSAL_LINK} from './config';
 import {wechatLogin} from './account';
 import {postJson} from './api';
 
@@ -22,7 +22,12 @@ export function isWeChatBridgeReady() {
 
 export async function registerWeChat() {
   if (!RNWeChat) return false;
-  return RNWeChat.registerApp(WECHAT_APP_ID);
+  try {
+    // iOS 需要 Universal Link；Android 第二参数会被忽略。
+    return await RNWeChat.registerApp(WECHAT_APP_ID, WECHAT_UNIVERSAL_LINK);
+  } catch (e) {
+    return false;
+  }
 }
 
 /** 登录：唤起授权 → 拿 code → 交后端换 OpenID。返回后端账号结果。 */
