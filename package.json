@@ -22,7 +22,8 @@
     "react-native-screens": "3.35.0",
     "react-native-sound": "^0.11.2",
     "react-native-tts": "^4.1.1",
-    "tutu-detector": "file:./modules/tutu-detector"
+    "tutu-detector": "file:./modules/tutu-detector",
+    "tutu-recorder": "file:./modules/tutu-recorder"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

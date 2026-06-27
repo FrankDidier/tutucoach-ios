@@ -1,0 +1,11 @@
+{
+  "name": "tutu-recorder",
+  "version": "0.1.0",
+  "description": "兔兔教练 录音原生模块 (AVAudioRecorder -> m4a/AAC，用于声音复刻)",
+  "main": "src/index.js",
+  "private": true,
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}
