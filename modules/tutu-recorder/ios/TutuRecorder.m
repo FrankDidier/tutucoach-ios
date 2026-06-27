@@ -66,12 +66,19 @@ RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve
   NSTimeInterval durMs = ([[NSDate date] timeIntervalSince1970] - self.startTime) * 1000.0;
   NSString *path = self.fileURL.path ?: @"";
   self.recorder = nil;
-  NSError *e = nil;
-  [[AVAudioSession sharedInstance]
-      setActive:NO
-      withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
-      error:&e];
+  [self restorePlaybackSession];
   resolve(@{@"path": path, @"durationMs": @((NSInteger)durMs)});
+}
+
+// 录音结束后把音频会话恢复成可播放的 Playback，否则录完音兔兔语音会没声音。
+- (void)restorePlaybackSession {
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+  NSError *e = nil;
+  [session setCategory:AVAudioSessionCategoryPlayback
+                  mode:AVAudioSessionModeDefault
+               options:AVAudioSessionCategoryOptionMixWithOthers
+                 error:&e];
+  [session setActive:YES error:&e];
 }
 
 RCT_EXPORT_METHOD(cancel:(RCTPromiseResolveBlock)resolve
@@ -83,6 +90,7 @@ RCT_EXPORT_METHOD(cancel:(RCTPromiseResolveBlock)resolve
   if (self.fileURL) {
     [[NSFileManager defaultManager] removeItemAtURL:self.fileURL error:nil];
   }
+  [self restorePlaybackSession];
   resolve(@{@"ok": @YES});
 }
 

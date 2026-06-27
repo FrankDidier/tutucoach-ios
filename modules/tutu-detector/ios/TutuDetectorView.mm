@@ -141,6 +141,10 @@
   _configured = YES;
 
   _session = [[AVCaptureSession alloc] init];
+  // 关键：不要让相机会话自动接管 App 的音频会话。默认 YES 时，相机一开始运行就会
+  // 重设/停用我们在 AppDelegate 里激活的 Playback 会话，导致「检测时兔兔没声音」。
+  // 我们只用相机的视频（不录音），所以关掉自动配置，保住语音播报。
+  _session.automaticallyConfiguresApplicationAudioSession = NO;
   // 4:3 预设：iPhone 后置相机竖屏 = 3:4，与安卓 MEDIA_SIZE(1080×1440, 3:4) 一致。
   if ([_session canSetSessionPreset:AVCaptureSessionPresetPhoto]) {
     _session.sessionPreset = AVCaptureSessionPresetPhoto;

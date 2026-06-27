@@ -17,12 +17,12 @@ function ensure() {
     } catch (e) {}
     // iOS 关键修复：默认 TTS 会被「静音拨片(响铃/静音开关)」静音，导致很多用户“听不到兔兔说话”。
     // 设为 ignore 后即使手机处于静音档位也能正常播报（与安卓系统 TTS 行为一致）。
+    // 不要开 ducking：react-native-tts 的 ducking 会在每句话结束时 setActive:NO，
+    // 把我们在 AppDelegate 里统一激活的音频会话停掉，反而导致后续没声音。
+    // 音频会话的激活/分类统一由原生 AppDelegate(tutu_activateAudioSession) 负责。
     if (Platform.OS === 'ios') {
       try {
         Tts.setIgnoreSilentSwitch('ignore');
-      } catch (e) {}
-      try {
-        Tts.setDucking(true);
       } catch (e) {}
     }
     available = true;
