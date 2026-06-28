@@ -84,3 +84,5 @@ dist.key
 signing.env
 .env
 .env.*
+ios/build_device/
+build_signing/

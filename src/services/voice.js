@@ -44,9 +44,26 @@ function ensure() {
   return available;
 }
 
+// iOS：是否可用原生合成器（TutuDetector.ttsSpeak）。react-native-tts 在 release/真机上
+// 经常说不出话，所以 iOS 一律优先走我们自己的原生 AVSpeechSynthesizer 兜底。
+function iosNativeTts() {
+  if (Platform.OS !== 'ios') return null;
+  const m = NativeModules.TutuDetector;
+  return m && typeof m.ttsSpeak === 'function' ? m : null;
+}
+
 // rate: 语速倍率（安卓 speechRate，默认 1.0）。pitch: 音高（默认 1.0）。
 export function speak(text, {rate = 1.0, pitch = 1.0, flush = true} = {}) {
-  if (!text || !ensure()) return;
+  if (!text) return;
+  // iOS 首选原生合成器。
+  const native = iosNativeTts();
+  if (native) {
+    try {
+      native.ttsSpeak(String(text), rate || 1.0, pitch || 1.0);
+      return;
+    } catch (e) {}
+  }
+  if (!ensure()) return;
   try {
     reactivateAudioSessionIOS();
     if (flush) {
@@ -64,6 +81,13 @@ export function speak(text, {rate = 1.0, pitch = 1.0, flush = true} = {}) {
 }
 
 export function stop() {
+  const native = iosNativeTts();
+  if (native) {
+    try {
+      native.ttsStop();
+    } catch (e) {}
+    return;
+  }
   if (!ensure()) return;
   try {
     Tts.stop();
@@ -71,6 +95,7 @@ export function stop() {
 }
 
 export function isAvailable() {
+  if (iosNativeTts()) return true;
   return ensure();
 }
 

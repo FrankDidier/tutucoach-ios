@@ -4,11 +4,19 @@
 
 // 兔兔教练 手型检测原生模块（iOS）。
 // 薄封装：把 JS 调用转发到共享引擎 TutuDetectorEngine。
+@interface TutuDetectorModule ()
+// 关键：合成器必须被「强引用持有」。若用局部变量，话还没说出口对象就被释放 → 没声音。
+// （react-native-tts 在 release/真机上经常说不出话，所以我们自己用原生 AVSpeechSynthesizer 兜底。）
+@property(nonatomic, strong) AVSpeechSynthesizer *synth;
+@property(nonatomic, strong) AVSpeechSynthesisVoice *zhVoice;
+@end
+
 @implementation TutuDetectorModule
 
 RCT_EXPORT_MODULE(TutuDetector);
 
-+ (BOOL)requiresMainQueueSetup { return NO; }
+// 语音合成必须在主线程初始化/调用。
++ (BOOL)requiresMainQueueSetup { return YES; }
 
 // 设置角度阈值（默认 20，与安卓一致）。
 RCT_EXPORT_METHOD(setAngleThreshold:(double)threshold) {
@@ -27,6 +35,51 @@ RCT_EXPORT_METHOD(reactivateAudioSession) {
                options:AVAudioSessionCategoryOptionMixWithOthers
                  error:&err];
   [session setActive:YES error:&err];
+}
+
+#pragma mark - 原生语音播报（AVSpeechSynthesizer）
+
+// 自己用原生合成器播报中文，取代 react-native-tts（后者在 release/真机上常常没声音）。
+// rate：语速倍率（1.0 = 正常）；pitch：音高（1.0 = 正常）。
+RCT_EXPORT_METHOD(ttsSpeak:(NSString *)text rate:(double)rate pitch:(double)pitch) {
+  if (text.length == 0) return;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    // 1) 懒加载并强引用持有合成器。关键：usesApplicationAudioSession = NO，
+    // 让合成器「自己管理音频会话」——这是 AVSpeechSynthesizer 在真机上「调了 speak
+    // 却不出声、连 didStart 都不触发」的标准修复（App 自己激活的会话会和它打架）。
+    if (self.synth == nil) {
+      self.synth = [[AVSpeechSynthesizer alloc] init];
+      self.synth.usesApplicationAudioSession = NO;
+    }
+    if (self.zhVoice == nil) {
+      self.zhVoice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
+      if (self.zhVoice == nil) {
+        self.zhVoice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-Hans-CN"];
+      }
+    }
+
+    // 2) 打断上一句，避免叠音。
+    if (self.synth.isSpeaking) {
+      [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    }
+
+    AVSpeechUtterance *u = [[AVSpeechUtterance alloc] initWithString:text];
+    if (self.zhVoice) u.voice = self.zhVoice;
+    // 默认语速约 0.5；按倍率缩放并夹在合理区间，避免太快听不清。
+    float base = AVSpeechUtteranceDefaultSpeechRate;
+    float r = base * (float)(rate <= 0 ? 1.0 : rate);
+    u.rate = MAX(AVSpeechUtteranceMinimumSpeechRate, MIN(AVSpeechUtteranceMaximumSpeechRate, r));
+    u.pitchMultiplier = (float)(pitch <= 0 ? 1.0 : MAX(0.5, MIN(2.0, pitch)));
+    [self.synth speakUtterance:u];
+  });
+}
+
+RCT_EXPORT_METHOD(ttsStop) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.synth.isSpeaking) {
+      [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    }
+  });
 }
 
 // 仅检测一张图片的 21 关键点（验证 MediaPipe 跑通）。
