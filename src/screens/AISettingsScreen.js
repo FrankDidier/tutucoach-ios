@@ -24,6 +24,7 @@ import {
   uploadAvatar,
   cloneVoice,
   absAvatarUrl,
+  getAuthInfo,
 } from '../services/coachAdmin';
 import {
   isRecorderAvailable,
@@ -87,16 +88,32 @@ const AISettingsScreen = ({navigation}) => {
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  // 方案A：教师只能编辑自己绑定的那一个分身；管理员可编辑全部。
+  const [authInfo, setAuthInfo] = useState({role: 'admin', coachId: ''});
+  const isTeacher = authInfo.role === 'teacher';
   const recStartRef = useRef(0);
 
   const loadCoaches = async (selectId) => {
+    const info = await getAuthInfo();
+    setAuthInfo(info);
     const r = await listAllCoaches();
     if (r && r.ok && Array.isArray(r.coaches)) {
-      setCoaches(r.coaches);
+      // 教师：把列表收窄到自己绑定的那一个分身。
+      const list =
+        info.role === 'teacher'
+          ? r.coaches.filter(c => c.id === info.coachId)
+          : r.coaches;
+      setCoaches(list);
       const pick =
-        (selectId && r.coaches.find(c => c.id === selectId)) ||
-        r.coaches[0];
-      if (pick) setDraft(coachToDraft(pick));
+        (selectId && list.find(c => c.id === selectId)) || list[0];
+      if (pick) {
+        setDraft(coachToDraft(pick));
+      } else if (info.role === 'teacher') {
+        Alert.alert(
+          '未找到你的分身',
+          '当前口令没有可编辑的分身，可能已被管理员调整，请联系管理员。',
+        );
+      }
     }
     setLoading(false);
   };
@@ -109,7 +126,10 @@ const AISettingsScreen = ({navigation}) => {
   const set = (k, v) => setDraft(prev => ({...prev, [k]: v}));
 
   const selectCoach = c => setDraft(coachToDraft(c));
-  const newCoach = () => setDraft(emptyDraft());
+  const newCoach = () => {
+    if (isTeacher) return; // 教师不能新建分身
+    setDraft(emptyDraft());
+  };
 
   const onSave = async () => {
     const name = draft.name.trim();
@@ -271,35 +291,44 @@ const AISettingsScreen = ({navigation}) => {
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            {/* 分身选择 */}
-            <Text style={styles.sectionLabel}>选择分身</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}>
-              {coaches.map(c => {
-                const active = c.id === draft.id;
-                return (
+            {/* 分身选择（教师：只显示自己的那一个，不可新建/切换其它） */}
+            {isTeacher ? (
+              <Text style={styles.sectionLabel}>我的分身（仅可编辑自己的）</Text>
+            ) : (
+              <>
+                <Text style={styles.sectionLabel}>选择分身</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipRow}>
+                  {coaches.map(c => {
+                    const active = c.id === draft.id;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => selectCoach(c)}
+                        activeOpacity={0.85}>
+                        <Text
+                          style={[
+                            styles.chipText,
+                            active && styles.chipTextActive,
+                          ]}
+                          numberOfLines={1}>
+                          {c.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                   <TouchableOpacity
-                    key={c.id}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => selectCoach(c)}
+                    style={[styles.chip, styles.chipNew]}
+                    onPress={newCoach}
                     activeOpacity={0.85}>
-                    <Text
-                      style={[styles.chipText, active && styles.chipTextActive]}
-                      numberOfLines={1}>
-                      {c.name}
-                    </Text>
+                    <Text style={styles.chipNewText}>＋ 新建</Text>
                   </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={[styles.chip, styles.chipNew]}
-                onPress={newCoach}
-                activeOpacity={0.85}>
-                <Text style={styles.chipNewText}>＋ 新建</Text>
-              </TouchableOpacity>
-            </ScrollView>
+                </ScrollView>
+              </>
+            )}
 
             {/* 头像 + 名称 */}
             <View style={styles.card}>

@@ -6,7 +6,11 @@ import {getItem, setItem} from './storage';
 import {getJson, postJson, postForm} from './api';
 
 const K_TOKEN = 'admin_token';
+const K_ROLE = 'admin_role'; // 'admin' | 'teacher'
+const K_COACH = 'admin_coach_id'; // teacher 绑定的分身 id
 let cachedToken = null;
+let cachedRole = null;
+let cachedCoachId = null;
 
 export async function getAdminToken() {
   if (cachedToken != null) return cachedToken;
@@ -21,7 +25,26 @@ export async function setAdminToken(token) {
 
 export async function clearAdminToken() {
   cachedToken = '';
+  cachedRole = '';
+  cachedCoachId = '';
   await setItem(K_TOKEN, '');
+  await setItem(K_ROLE, '');
+  await setItem(K_COACH, '');
+}
+
+// 记录 admin_check 返回的身份（方案A）：admin=全权；teacher=只能编辑 coachId。
+async function applyAuth(r) {
+  cachedRole = (r && r.role) || 'admin';
+  cachedCoachId = (r && r.coachId) || '';
+  await setItem(K_ROLE, cachedRole);
+  await setItem(K_COACH, cachedCoachId);
+}
+
+/** 当前登录身份：{role:'admin'|'teacher', coachId, coachName}。 */
+export async function getAuthInfo() {
+  if (cachedRole == null) cachedRole = (await getItem(K_ROLE)) || 'admin';
+  if (cachedCoachId == null) cachedCoachId = (await getItem(K_COACH)) || '';
+  return {role: cachedRole || 'admin', coachId: cachedCoachId || ''};
 }
 
 async function authHeader() {
@@ -37,19 +60,24 @@ export async function verifyAndSaveToken(token) {
     });
     if (r && r.ok) {
       await setAdminToken(token);
+      await applyAuth(r);
       return true;
     }
   } catch (e) {}
   return false;
 }
 
-/** 已存口令是否仍有效（进入教师端时校验）。 */
+/** 已存口令是否仍有效（进入教师端时校验），同时刷新身份。 */
 export async function hasValidToken() {
   const t = await getAdminToken();
   if (!t) return false;
   try {
     const r = await getJson('/api/coach/admin_check', null, {'X-Admin-Token': t});
-    return !!(r && r.ok);
+    if (r && r.ok) {
+      await applyAuth(r);
+      return true;
+    }
+    return false;
   } catch (e) {
     return false;
   }
@@ -100,6 +128,7 @@ export default {
   getAdminToken,
   setAdminToken,
   clearAdminToken,
+  getAuthInfo,
   verifyAndSaveToken,
   hasValidToken,
   listAllCoaches,
