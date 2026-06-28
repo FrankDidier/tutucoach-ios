@@ -15,6 +15,10 @@
 // YES 表示视图正在/已被销毁：用于抑制销毁后到达的相机帧 / MediaPipe 回调，
 // 避免在 RN 已拆除该视图后再调用 onResult 而崩溃（对应安卓 isMonitoring 守卫）。
 @property(nonatomic, assign) BOOL tornDown;
+// YES 表示视图被临时移出窗口（例如系统相机/相册选择器全屏弹出时，UIKit 会把
+// 下层 RN 视图暂时从窗口移除）。这是「可恢复」的暂停，绝不能当作永久销毁——
+// 否则弹完选择器回来，相机就再也起不来了（灰屏、无法检测）。
+@property(nonatomic, assign) BOOL windowDetached;
 @end
 
 @implementation TutuDetectorView
@@ -44,18 +48,57 @@
   }
 }
 
-// RN 在导航返回 / 卸载该原生视图时会把它从窗口移除（newWindow == nil）。
-// 这一步发生在 dealloc 与 bridge 拆除 onResult 之前，是最可靠的清理时机：
-// 先彻底停掉相机与 MediaPipe，并清空 onResult，杜绝“返回后还回调 -> 闪退”。
+// 视图离开/进入窗口。注意：会因「两种完全不同的原因」触发 newWindow == nil：
+//   ① 导航返回 / RN 卸载视图（之后会 dealloc）——需要彻底清理；
+//   ② 全屏弹出系统相机/相册选择器时，UIKit 暂时把下层视图移出窗口（之后会再加回来，
+//      不会 dealloc）——只能「暂停」，不能彻底销毁，否则回来后相机再也起不来。
+// 因为这里无法区分两者，所以统一只做「可恢复的暂停」：停相机但保留资源、用
+// windowDetached 守卫丢弃在途回调（既防闪退、又能恢复）。真正的不可逆清理放到 dealloc。
 - (void)willMoveToWindow:(UIWindow *)newWindow {
   [super willMoveToWindow:newWindow];
+  if (_tornDown) return;
   if (newWindow == nil) {
-    [self teardown];
+    _windowDetached = YES;
+    [self pauseCapture];
+  } else {
+    _windowDetached = NO;
+    // 回到窗口：若仍处于「检测中」，把相机重新拉起来（对应弹完选择器返回的场景）。
+    if (_active) {
+      [self resumeCapture];
+    }
   }
 }
 
 - (void)dealloc {
   [self teardown];
+}
+
+// 可恢复的暂停：停掉相机会话与引擎，但保留 session/landmarker/onResult，便于回来恢复。
+- (void)pauseCapture {
+  dispatch_queue_t q = _cameraQueue;
+  AVCaptureSession *session = _session;
+  if (q == nil) return;
+  dispatch_async(q, ^{
+    if ([session isRunning]) {
+      [session stopRunning];
+    }
+    [[TutuDetectorEngine shared] stopSession];
+  });
+}
+
+// 从暂停恢复：在已配置好的前提下，重新开始会话。
+- (void)resumeCapture {
+  if (_tornDown || !_active) return;
+  __weak TutuDetectorView *weakSelf = self;
+  dispatch_async(self.cameraQueue, ^{
+    TutuDetectorView *s = weakSelf;
+    if (s == nil || s.tornDown || !s.active || s.windowDetached) return;
+    [s configureIfNeeded];
+    [[TutuDetectorEngine shared] startSession];
+    if (![s.session isRunning]) {
+      [s.session startRunning];
+    }
+  });
 }
 
 // 不可逆的彻底清理（幂等）。停止接收帧、停会话、释放 landmarker、断开回调。
@@ -101,7 +144,7 @@
     }
     dispatch_async(strongSelf.cameraQueue, ^{
       TutuDetectorView *s = weakSelf;
-      if (s == nil || s.tornDown || !s.active) return;
+      if (s == nil || s.tornDown || !s.active || s.windowDetached) return;
       [s configureIfNeeded];
       [[TutuDetectorEngine shared] startSession];
       if (![s.session isRunning]) {
@@ -213,7 +256,7 @@
 - (void)captureOutput:(AVCaptureOutput *)output
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection {
-  if (_tornDown || !_active || _liveLandmarker == nil) return;
+  if (_tornDown || _windowDetached || !_active || _liveLandmarker == nil) return;
   NSError *err = nil;
   // 后置相机竖屏：朝向 .right 让 MediaPipe 拿到正立的竖屏图像。
   MPPImage *image = [[MPPImage alloc] initWithSampleBuffer:sampleBuffer
@@ -230,7 +273,7 @@
     didFinishDetectionWithResult:(MPPHandLandmarkerResult *)result
          timestampInMilliseconds:(NSInteger)timestampInMilliseconds
                            error:(NSError *)error {
-  if (_tornDown || !_active || error != nil || result == nil) {
+  if (_tornDown || _windowDetached || !_active || error != nil || result == nil) {
     return;
   }
   NSMutableArray *hands = [NSMutableArray array];
@@ -255,11 +298,11 @@
 }
 
 - (void)emit:(NSDictionary *)payload {
-  if (_tornDown || self.onResult == nil) return;
+  if (_tornDown || _windowDetached || self.onResult == nil) return;
   __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     TutuDetectorView *s = weakSelf;
-    if (s == nil || s.tornDown) return;
+    if (s == nil || s.tornDown || s.windowDetached) return;
     RCTBubblingEventBlock cb = s.onResult;
     if (cb) cb(payload);
   });

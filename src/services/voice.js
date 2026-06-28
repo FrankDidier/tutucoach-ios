@@ -1,10 +1,22 @@
 // 语音播报（TTS）封装 —— 对应安卓 AICoach 的系统 TextToSpeech 回退路径。
 // 懒加载 react-native-tts：未安装时全部为安全 no-op，安装后自动生效（无需改业务代码）。
-import {Platform} from 'react-native';
+import {Platform, NativeModules} from 'react-native';
 
 let Tts = null;
 let inited = false;
 let available = false;
+
+// iOS：每次播报前重新激活音频会话。系统相机/相册选择器、来电、其它 App 都可能
+// 在「App 没有真正回到前台」的情况下把我们的 Playback 会话改掉/停掉（这正是
+// 「拍完模版后兔兔就没声音」的根因）。幂等调用，原生侧只是重设并激活会话。
+function reactivateAudioSessionIOS() {
+  if (Platform.OS !== 'ios') return;
+  try {
+    NativeModules.TutuDetector &&
+      NativeModules.TutuDetector.reactivateAudioSession &&
+      NativeModules.TutuDetector.reactivateAudioSession();
+  } catch (e) {}
+}
 
 function ensure() {
   if (inited) return available;
@@ -36,6 +48,7 @@ function ensure() {
 export function speak(text, {rate = 1.0, pitch = 1.0, flush = true} = {}) {
   if (!text || !ensure()) return;
   try {
+    reactivateAudioSessionIOS();
     if (flush) {
       Tts.stop();
     }

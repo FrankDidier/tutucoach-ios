@@ -21,6 +21,16 @@
   [session setActive:YES error:&err];
 }
 
+// 音频会话被打断（来电 / Siri / 闹钟 / 其它 App 抢占）结束后，重新激活，
+// 否则打断之后兔兔就一直没声音。
+- (void)tutu_handleAudioInterruption:(NSNotification *)note
+{
+  NSNumber *type = note.userInfo[AVAudioSessionInterruptionTypeKey];
+  if (type.unsignedIntegerValue == AVAudioSessionInterruptionTypeEnded) {
+    [self tutu_activateAudioSession];
+  }
+}
+
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
   self.moduleName = @"TutuCoachRN";
@@ -34,6 +44,10 @@
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector(tutu_activateAudioSession)
                                                name:UIApplicationDidBecomeActiveNotification
+                                             object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(tutu_handleAudioInterruption:)
+                                               name:AVAudioSessionInterruptionNotification
                                              object:nil];
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
