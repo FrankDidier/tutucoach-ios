@@ -68,14 +68,21 @@ function serverCoachToProfile(c, base) {
   return {
     ...base,
     displayName: c.name || base.displayName,
+    greeting: c.greeting || base.greeting,
     speechRate: c.speechRate || base.speechRate || 1.0,
     pitch: c.pitch || base.pitch || 1.0,
     encouragements: nonEmpty(c.encouragements) || base.encouragements,
     errorTemplates: nonEmpty(c.errorTemplates) || base.errorTemplates,
     noHandReminders: nonEmpty(c.noHandReminders) || base.noHandReminders,
+    celebrations:
+      nonEmpty(c.celebrations) || base.celebrations || base.celebrationPhrases,
     voiceId: c.voiceId || 0,
   };
 }
+
+const DEFAULT_NO_HAND = ['手呢？快放回琴键上来～', '看不到你的手啦，对准镜头哦。'];
+const NO_HAND_AFTER_MS = 10000; // 连续无手 10 秒后提醒
+const NO_HAND_COOLDOWN_MS = 15000; // 无手提醒间隔
 
 const BTN_START = {r: 255, g: 107, b: 138};
 const BTN_END = {r: 255, g: 138, b: 171};
@@ -122,6 +129,8 @@ const DetectionScreen = ({navigation, route}) => {
   const speakCooldownRef = useRef(SPEAK_COOLDOWN_MS);
   const periodTargetRef = useRef(ALARM_PERIOD_SEC);
   const matchTargetRef = useRef(ALARM_MATCH_TARGET);
+  const lastHandSeenRef = useRef(0); // 最近一次检测到手的时刻
+  const lastNoHandSpeakRef = useRef(0); // 最近一次「无手提醒」播报时刻
   // 组件是否仍挂载：用于阻止卸载/返回后到达的原生回调再 setState（配合原生侧守卫，杜绝闪退）。
   const aliveRef = useRef(true);
 
@@ -244,6 +253,25 @@ const DetectionScreen = ({navigation, route}) => {
       periodTotalRef.current += 1;
       if (!hasError && r.pass) periodMatchRef.current += 1;
     }
+    // 无手提醒（AI 陪练版）：连续 10 秒检测不到手 → 播报一句，按冷却节流。
+    const now0 = Date.now();
+    if (r.handDetected) {
+      lastHandSeenRef.current = now0;
+    } else if (premium && voiceOn) {
+      const noHandFor = now0 - (lastHandSeenRef.current || sessionStart.current);
+      if (
+        noHandFor > NO_HAND_AFTER_MS &&
+        now0 - lastNoHandSpeakRef.current > NO_HAND_COOLDOWN_MS
+      ) {
+        lastNoHandSpeakRef.current = now0;
+        const p = profileRef.current || {};
+        const list =
+          p.noHandReminders && p.noHandReminders.length
+            ? p.noHandReminders
+            : DEFAULT_NO_HAND;
+        coachSpeak(pick(list), {force: true});
+      }
+    }
     // AI 实时语音反馈（对应 AICoach.processFrameResult / aiTimer）。
     if (premium && voiceOn) {
       const p = profileRef.current || {};
@@ -351,6 +379,8 @@ const DetectionScreen = ({navigation, route}) => {
       periodMatchRef.current = 0;
       periodTotalRef.current = 0;
       periodSecRef.current = 0;
+      lastHandSeenRef.current = Date.now();
+      lastNoHandSpeakRef.current = 0;
       setDetecting(true);
       tickTimer.current = setInterval(() => {
         setElapsedSec(Math.floor((Date.now() - sessionStart.current) / 1000));
@@ -367,9 +397,10 @@ const DetectionScreen = ({navigation, route}) => {
           periodTotalRef.current = 0;
         }
       }, 1000);
-      // 开始监测语音（AI 陪练版）。
+      // 开场问候（AI 陪练版）：优先用分身「问候语」，没有则用默认开场白。
       if (premium && voiceOn) {
-        coachSpeak('开始监测，注意保持正确手型', {force: true});
+        const p = profileRef.current || {};
+        coachSpeak(p.greeting || '开始监测，注意保持正确手型', {force: true});
       }
       return;
     }
@@ -399,7 +430,14 @@ const DetectionScreen = ({navigation, route}) => {
         if (s && s.ok && s.text) {
           if (voiceOn) {
             const p = profileRef.current || {};
-            speak(s.text, {rate: p.speechRate || 1.0, pitch: p.pitch || 1.0});
+            // 表现优秀（匹配率≥85%）时，用分身「庆祝语」作为点评开头。
+            const celebs = p.celebrations || p.celebrationPhrases;
+            const cheer =
+              rate >= 85 && celebs && celebs.length ? pick(celebs) + ' ' : '';
+            speak(cheer + s.text, {
+              rate: p.speechRate || 1.0,
+              pitch: p.pitch || 1.0,
+            });
           }
           Alert.alert('本次练习点评', s.text);
         }

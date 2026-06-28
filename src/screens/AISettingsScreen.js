@@ -57,6 +57,8 @@ function emptyDraft() {
     greeting: '你好，准备好练琴了吗？',
     encouragements: '',
     errorTemplates: '',
+    noHandReminders: '',
+    celebrations: '',
     voiceId: 0,
     avatarUrl: '',
   };
@@ -71,6 +73,8 @@ function coachToDraft(c) {
     greeting: c.greeting || '你好，准备好练琴了吗？',
     encouragements: linesToText(c.encouragements),
     errorTemplates: linesToText(c.errorTemplates),
+    noHandReminders: linesToText(c.noHandReminders),
+    celebrations: linesToText(c.celebrations),
     voiceId: c.voiceId || 0,
     avatarUrl: c.avatarUrl || '',
   };
@@ -122,6 +126,8 @@ const AISettingsScreen = ({navigation}) => {
         greeting: draft.greeting.trim(),
         encouragements: textToLines(draft.encouragements),
         errorTemplates: textToLines(draft.errorTemplates),
+        noHandReminders: textToLines(draft.noHandReminders),
+        celebrations: textToLines(draft.celebrations),
         voiceId: draft.voiceId || 0,
       };
       if (draft.id) payload.id = draft.id;
@@ -363,9 +369,37 @@ const AISettingsScreen = ({navigation}) => {
               </TouchableOpacity>
             </View>
 
+            {/* 语音生效说明 */}
+            <View style={styles.noteCard}>
+              <Text style={styles.noteText}>
+                以下文案在学生使用「智能AI陪练（会员）」练习时由 AI 主动播报；
+                免费版只有提示音。修改保存后，学生端下次进入练习即生效。
+              </Text>
+            </View>
+
+            {/* 问候语 */}
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>问候语（开场白）</Text>
+              <Text style={styles.fieldHint}>
+                触发：学生点「启动」开始练习时，开场播报 1 次。
+              </Text>
+              <TextInput
+                style={styles.multiline}
+                value={draft.greeting}
+                onChangeText={t => set('greeting', t)}
+                placeholder={'同学你好，准备好开始今天的练习了吗？'}
+                placeholderTextColor={Colors.textSecondary}
+                multiline
+              />
+            </View>
+
             {/* 人设 / 说话逻辑 */}
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>分身人设（结束点评的口吻 / 思考方式）</Text>
+              <Text style={styles.fieldLabel}>分身人设（思考方式）</Text>
+              <Text style={styles.fieldHint}>
+                触发：仅用于练习「结束点评」——AI 按这个人设，把本次练习时长、
+                匹配率、主要问题组织成一段个性化点评。不影响练习中的实时播报。
+              </Text>
               <TextInput
                 style={styles.multiline}
                 value={draft.systemPrompt}
@@ -378,6 +412,10 @@ const AISettingsScreen = ({navigation}) => {
 
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>鼓励语（每行一句）</Text>
+              <Text style={styles.fieldHint}>
+                触发：练习中手型持续正确时，约每 25 秒随机播报一句（按上方
+                「AI 播报频率」节流）。
+              </Text>
               <TextInput
                 style={styles.multiline}
                 value={draft.encouragements}
@@ -390,11 +428,47 @@ const AISettingsScreen = ({navigation}) => {
 
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>纠错语（每行一句，用 %s 代表错误点）</Text>
+              <Text style={styles.fieldHint}>
+                触发：检测到手型错误（如塌掌、扁指、勾指）时播报，%s 会自动替换成
+                具体错误名称。
+              </Text>
               <TextInput
                 style={styles.multiline}
                 value={draft.errorTemplates}
                 onChangeText={t => set('errorTemplates', t)}
                 placeholder={'注意，%s需要纠正\n%s的问题出现较多，请注意'}
+                placeholderTextColor={Colors.textSecondary}
+                multiline
+              />
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>无手提醒（每行一句）</Text>
+              <Text style={styles.fieldHint}>
+                触发：练习中镜头里超过约 10 秒检测不到手时播报，提醒学生把手放回
+                画面（避免空练）。
+              </Text>
+              <TextInput
+                style={styles.multiline}
+                value={draft.noHandReminders}
+                onChangeText={t => set('noHandReminders', t)}
+                placeholder={'手呢？快放回琴键上来～\n看不到你的手啦，对准镜头哦。'}
+                placeholderTextColor={Colors.textSecondary}
+                multiline
+              />
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>庆祝语（每行一句）</Text>
+              <Text style={styles.fieldHint}>
+                触发：一次练习结束且表现优秀（整体匹配率 ≥ 85%）时，作为结束点评的
+                开头播报一句。
+              </Text>
+              <TextInput
+                style={styles.multiline}
+                value={draft.celebrations}
+                onChangeText={t => set('celebrations', t)}
+                placeholder={'太棒了，今天手型很标准！\n这次练得真好，给你点赞！'}
                 placeholderTextColor={Colors.textSecondary}
                 multiline
               />
@@ -473,6 +547,19 @@ const styles = StyleSheet.create({
   avatarBadgeText: {color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1},
   nameCol: {flex: 1, marginLeft: 16},
   fieldLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
+  fieldHint: {
+    fontSize: 11.5,
+    color: Colors.pinkDark,
+    marginTop: 5,
+    lineHeight: 17,
+  },
+  noteCard: {
+    backgroundColor: Colors.pinkLight,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 14,
+  },
+  noteText: {fontSize: 12, color: Colors.pinkDark, lineHeight: 18},
   hint: {fontSize: 12, color: Colors.textSecondary, marginTop: 6, lineHeight: 18},
   nameInput: {
     marginTop: 6,
