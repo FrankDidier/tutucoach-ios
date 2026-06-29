@@ -94,9 +94,20 @@ export function stop() {
   } catch (e) {}
 }
 
+// iOS：预热原生合成器，建立音频通道，避免「第一句没声音、后面才有声」的冷启动问题。
+// 在进入检测页时调用一次即可（幂等，静默播放一个空串）。
+export function prewarm() {
+  const native = iosNativeTts();
+  if (native && typeof native.ttsPrewarm === 'function') {
+    try {
+      native.ttsPrewarm();
+    } catch (e) {}
+  }
+}
+
 export function isAvailable() {
   if (iosNativeTts()) return true;
   return ensure();
 }
 
-export default {speak, stop, isAvailable};
+export default {speak, stop, prewarm, isAvailable};

@@ -11,6 +11,7 @@ import {
   Modal,
   Switch,
   ScrollView,
+  Linking,
 } from 'react-native';
 import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
@@ -18,7 +19,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {syncPractice, getMembership} from '../services/account';
 import {requestSummary, fetchCoaches} from '../services/coach';
-import {speak, stop as stopSpeak} from '../services/voice';
+import {speak, stop as stopSpeak, prewarm as prewarmTts} from '../services/voice';
 import {
   getSelectedCoachId,
   profileById,
@@ -115,6 +116,9 @@ const DetectionScreen = ({navigation, route}) => {
   const [vip, setVip] = useState(true); // 免费公测期默认全员会员；按 /api/membership 校正
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  // 相机权限被拒：显示明确的「去设置」引导，而不是一片灰屏（这正是部分用户
+  // 「拍完模版后相机画面出不来」的常见原因——某次拒绝过相机权限，iOS 会一直拦着）。
+  const [cameraDenied, setCameraDenied] = useState(false);
 
   const sessionStart = useRef(0);
   const sessionMatchRate = useRef(0);
@@ -202,6 +206,21 @@ const DetectionScreen = ({navigation, route}) => {
 
   useEffect(() => {
     aliveRef.current = true;
+    // 预热原生合成器：消除「第一句没声音、后面才有声」的冷启动。
+    try {
+      prewarmTts();
+    } catch (e) {}
+    // 进入检测页时查询相机授权状态：被拒/受限则提前显示「去设置」引导。
+    (async () => {
+      try {
+        if (TutuDetector && TutuDetector.cameraAuthStatus) {
+          const st = await TutuDetector.cameraAuthStatus();
+          if (aliveRef.current && (st === 'denied' || st === 'restricted')) {
+            setCameraDenied(true);
+          }
+        }
+      } catch (e) {}
+    })();
     return () => {
       aliveRef.current = false;
       if (tickTimer.current) clearInterval(tickTimer.current);
@@ -243,6 +262,10 @@ const DetectionScreen = ({navigation, route}) => {
     const hasError = Array.isArray(r.errors) && r.errors.length > 0;
     if (hasError) {
       setErrorText(r.errors[0]);
+      // 原生侧权限被拒会回传「未获得摄像头权限」，升级为明确的去设置引导。
+      if (typeof r.errors[0] === 'string' && r.errors[0].indexOf('权限') >= 0) {
+        setCameraDenied(true);
+      }
     } else if (r.hasMatch && r.pass) {
       setErrorText('');
     }
@@ -545,10 +568,26 @@ const DetectionScreen = ({navigation, route}) => {
                 onResult={onDetectorResult}
               />
             ) : null}
-            {!detecting ? (
+            {!detecting && !cameraDenied ? (
               <Text style={styles.cameraPlaceholder}>相机预览</Text>
             ) : null}
-            {detecting && errorText ? (
+            {cameraDenied ? (
+              <View style={styles.permOverlay}>
+                <Text style={styles.permTitle}>无法显示相机画面</Text>
+                <Text style={styles.permDesc}>
+                  请在「设置 → 兔兔教练 → 相机」中允许使用相机，然后返回本页重试。
+                </Text>
+                <TouchableOpacity
+                  style={styles.permBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    Linking.openSettings().catch(() => {});
+                  }}>
+                  <Text style={styles.permBtnText}>去设置开启相机</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {detecting && errorText && !cameraDenied ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{errorText}</Text>
               </View>
@@ -855,6 +894,37 @@ const styles = StyleSheet.create({
   cameraPlaceholder: {
     fontSize: 14,
     color: Colors.textSecondary,
+  },
+  permOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+  },
+  permTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  permDesc: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  permBtn: {
+    backgroundColor: Colors.pinkPrimary,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+  },
+  permBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   rabbitOverlay: {
     position: 'absolute',

@@ -82,6 +82,39 @@ RCT_EXPORT_METHOD(ttsStop) {
   });
 }
 
+// 预热合成器：建立音频通道，避免「第一句没声音、后面才有声」的冷启动问题。
+RCT_EXPORT_METHOD(ttsPrewarm) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.synth == nil) {
+      self.synth = [[AVSpeechSynthesizer alloc] init];
+      self.synth.usesApplicationAudioSession = NO;
+    }
+    if (self.zhVoice == nil) {
+      self.zhVoice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
+      if (self.zhVoice == nil) {
+        self.zhVoice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-Hans-CN"];
+      }
+    }
+    AVSpeechUtterance *u = [[AVSpeechUtterance alloc] initWithString:@" "];
+    if (self.zhVoice) u.voice = self.zhVoice;
+    u.volume = 0.0f;  // 静默预热
+    [self.synth speakUtterance:u];
+  });
+}
+
+#pragma mark - 相机权限状态查询
+
+// 返回相机授权状态，供 JS 端在「灰屏」时引导用户去设置开启权限。
+RCT_EXPORT_METHOD(cameraAuthStatus:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  AVAuthorizationStatus st = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+  NSString *s = @"notDetermined";
+  if (st == AVAuthorizationStatusAuthorized) s = @"authorized";
+  else if (st == AVAuthorizationStatusDenied) s = @"denied";
+  else if (st == AVAuthorizationStatusRestricted) s = @"restricted";
+  resolve(s);
+}
+
 // 仅检测一张图片的 21 关键点（验证 MediaPipe 跑通）。
 RCT_EXPORT_METHOD(analyzeImagePath:(NSString *)path
                   resolver:(RCTPromiseResolveBlock)resolve
