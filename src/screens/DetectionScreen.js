@@ -116,6 +116,9 @@ const DetectionScreen = ({navigation, route}) => {
   const [vip, setVip] = useState(true); // 免费公测期默认全员会员；按 /api/membership 校正
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  // 练习结束总结弹窗（对应安卓 dialog_ai_summary）。
+  const [showSummary, setShowSummary] = useState(false);
+  const [summary, setSummary] = useState(null);
   // 相机权限被拒：显示明确的「去设置」引导，而不是一片灰屏（这正是部分用户
   // 「拍完模版后相机画面出不来」的常见原因——某次拒绝过相机权限，iOS 会一直拦着）。
   const [cameraDenied, setCameraDenied] = useState(false);
@@ -252,7 +255,11 @@ const DetectionScreen = ({navigation, route}) => {
     if (!force && now - lastSpeakRef.current < speakCooldownRef.current) return;
     lastSpeakRef.current = now;
     const p = profileRef.current || {};
-    speak(text, {rate: p.speechRate || 1.0, pitch: p.pitch || 1.0});
+    speak(text, {
+      rate: p.speechRate || 1.0,
+      pitch: p.pitch || 1.0,
+      voiceId: p.voiceId || 0,
+    });
   };
 
   const onDetectorResult = e => {
@@ -460,18 +467,31 @@ const DetectionScreen = ({navigation, route}) => {
           matchRate: rate,
         });
         if (s && s.ok && s.text) {
+          const p = profileRef.current || {};
+          // 表现优秀（匹配率≥85%）时，用分身「庆祝语」作为点评开头。
+          const celebs = p.celebrations || p.celebrationPhrases;
+          const cheer =
+            rate >= 85 && celebs && celebs.length ? pick(celebs) + ' ' : '';
+          const fullText = cheer + s.text;
           if (voiceOn) {
-            const p = profileRef.current || {};
-            // 表现优秀（匹配率≥85%）时，用分身「庆祝语」作为点评开头。
-            const celebs = p.celebrations || p.celebrationPhrases;
-            const cheer =
-              rate >= 85 && celebs && celebs.length ? pick(celebs) + ' ' : '';
-            speak(cheer + s.text, {
+            speak(fullText, {
               rate: p.speechRate || 1.0,
               pitch: p.pitch || 1.0,
+              voiceId: s.voice_id || p.voiceId || 0,
             });
           }
-          Alert.alert('本次练习点评', s.text);
+          // 安卓风格总结弹窗：时长 / 正确率 / 正确·不正确用时 / AI 点评。
+          const durSec = Math.round((Date.now() - sessionStart.current) / 1000);
+          const okSec = Math.round((durSec * rate) / 100);
+          setSummary({
+            minutes: Math.max(1, Math.round(minutes)),
+            durSec,
+            rate: Math.round(rate),
+            correctSec: okSec,
+            incorrectSec: Math.max(0, durSec - okSec),
+            comment: fullText,
+          });
+          setShowSummary(true);
         }
       }
     } catch (e) {
@@ -644,6 +664,46 @@ const DetectionScreen = ({navigation, route}) => {
           </View>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showSummary}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          stopSpeak();
+          setShowSummary(false);
+        }}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>本次练习点评</Text>
+            <View style={styles.summaryStatsRow}>
+              <View style={styles.summaryStat}>
+                <Text style={styles.summaryStatNum}>{summary?.minutes ?? 0}</Text>
+                <Text style={styles.summaryStatLabel}>练习分钟</Text>
+              </View>
+              <View style={styles.summaryStat}>
+                <Text style={styles.summaryStatNum}>{summary?.rate ?? 0}%</Text>
+                <Text style={styles.summaryStatLabel}>手型正确率</Text>
+              </View>
+            </View>
+            <Text style={styles.summaryDetail}>
+              正确用时 {summary?.correctSec ?? 0}s ｜ 待改进 {summary?.incorrectSec ?? 0}s
+            </Text>
+            <ScrollView style={styles.summaryCommentBox}>
+              <Text style={styles.summaryComment}>{summary?.comment || ''}</Text>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.summaryBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                stopSpeak();
+                setShowSummary(false);
+              }}>
+              <Text style={styles.summaryBtnText}>好的</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showRingtone}
@@ -1051,6 +1111,68 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginBottom: 12,
     textAlign: 'center',
+  },
+  summaryCard: {
+    width: '85%',
+    maxHeight: '76%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  summaryStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  summaryStat: {
+    alignItems: 'center',
+  },
+  summaryStatNum: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: Colors.pinkPrimary,
+  },
+  summaryStatLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  summaryDetail: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  summaryCommentBox: {
+    maxHeight: 200,
+    backgroundColor: Colors.pinkBg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  summaryComment: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: Colors.textPrimary,
+  },
+  summaryBtn: {
+    backgroundColor: Colors.pinkPrimary,
+    borderRadius: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  summaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   voiceRow: {
     flexDirection: 'row',

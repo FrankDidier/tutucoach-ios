@@ -1,6 +1,7 @@
 // 语音播报（TTS）封装 —— 对应安卓 AICoach 的系统 TextToSpeech 回退路径。
 // 懒加载 react-native-tts：未安装时全部为安全 no-op，安装后自动生效（无需改业务代码）。
 import {Platform, NativeModules} from 'react-native';
+import {BASE_URL} from './config';
 
 let Tts = null;
 let inited = false;
@@ -53,12 +54,24 @@ function iosNativeTts() {
 }
 
 // rate: 语速倍率（安卓 speechRate，默认 1.0）。pitch: 音高（默认 1.0）。
-export function speak(text, {rate = 1.0, pitch = 1.0, flush = true} = {}) {
+// voiceId: 百度声音复刻音色 ID（>0 用老师本人音色，0 用系统音色）。
+export function speak(text, {rate = 1.0, pitch = 1.0, voiceId = 0, flush = true} = {}) {
   if (!text) return;
-  // iOS 首选原生合成器。
+  // iOS 首选原生合成器/声音复刻。
   const native = iosNativeTts();
   if (native) {
     try {
+      // voiceId>0：走声音复刻（后端拉老师本人音色 WAV），失败时原生侧自动回退系统音色。
+      if (voiceId > 0 && typeof native.ttsSpeakCloned === 'function') {
+        native.ttsSpeakCloned(
+          String(text),
+          Number(voiceId) || 0,
+          rate || 1.0,
+          pitch || 1.0,
+          BASE_URL,
+        );
+        return;
+      }
       native.ttsSpeak(String(text), rate || 1.0, pitch || 1.0);
       return;
     } catch (e) {}
