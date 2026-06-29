@@ -14,6 +14,7 @@ import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId} from '../services/coachPrefs';
 import {Images} from '../assets/images';
+import {BASE_URL} from '../services/config';
 import ScreenHeader from '../components/ScreenHeader';
 
 // 与安卓 SettingsActivity.styleLabel 一致
@@ -28,6 +29,17 @@ function avatarFor(name) {
   const n = name || '';
   if (n.includes('老师') || n.includes('专业')) return Images.avatarUser;
   return Images.rabbitMascot;
+}
+
+// 优先用后台上传的自定义头像（avatarUrl），没有再回退到按名字选内置头像。
+// 这修复「设置了 AI 分身头像，但角色选择页仍显示原来兔子」的问题。
+function avatarSource(coach) {
+  const url = coach && coach.avatarUrl;
+  if (url) {
+    const abs = url.startsWith('http') ? url : BASE_URL + url;
+    return {uri: abs};
+  }
+  return avatarFor(coach && coach.name);
 }
 
 const BTN_START = {r: 255, g: 90, b: 127};
@@ -94,7 +106,12 @@ const AISelectScreen = ({navigation, route}) => {
   const gridItems = useMemo(() => {
     const source =
       remoteCoaches && remoteCoaches.length
-        ? remoteCoaches.map(c => ({id: c.id, name: c.name, style: c.style}))
+        ? remoteCoaches.map(c => ({
+            id: c.id,
+            name: c.name,
+            style: c.style,
+            avatarUrl: c.avatarUrl,
+          }))
         : builtInProfiles.map(p => ({
             id: p.id,
             name: p.displayName,
@@ -104,7 +121,7 @@ const AISelectScreen = ({navigation, route}) => {
       id: c.id,
       name: c.name,
       styleText: styleLabel(c.style),
-      avatar: avatarFor(c.name),
+      avatar: avatarSource(c),
     }));
   }, [remoteCoaches]);
 

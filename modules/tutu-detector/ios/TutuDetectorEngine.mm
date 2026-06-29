@@ -211,6 +211,23 @@ static NSArray<NSString *> *ErrorMessages(const std::vector<ErrorDetail> &errors
   }
 
   HandAssignment assign = tutucoach::resolveHandedness(allPoints, mpLabels, mpConfidences);
+
+  // 修复「塌掌 → 匹配失败」：单手练习时塌掌会让 MediaPipe 偶发翻转 Left/Right 标签，
+  // 这只手于是被丢进未设模板的一侧，analyzeDualHandMatch() 因模板侧无当前手而返回
+  // 无值（底部「匹配失败」），而扁指/勾指不改变手心朝向、标签稳定故能识别。
+  // 画面只有一只手、且只设置了一只手的模板时，直接按「已设模板侧」归属。
+  if (allPoints.size() == 1) {
+    bool onlyLeftTpl = _analyzer.hasLeftTemplate() && !_analyzer.hasRightTemplate();
+    bool onlyRightTpl = _analyzer.hasRightTemplate() && !_analyzer.hasLeftTemplate();
+    if (onlyLeftTpl) {
+      assign.leftIndex = 0;
+      assign.rightIndex = -1;
+    } else if (onlyRightTpl) {
+      assign.leftIndex = -1;
+      assign.rightIndex = 0;
+    }
+  }
+
   if (assign.leftIndex >= 0) {
     std::vector<tutucoach::Point> stable =
         _stabilizer.stabilize("Left", allPoints[assign.leftIndex]);
