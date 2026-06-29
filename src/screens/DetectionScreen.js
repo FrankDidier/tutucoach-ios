@@ -500,7 +500,8 @@ const DetectionScreen = ({navigation, route}) => {
   // 第二张卡：免费版=铃声选择；AI 陪练版=选择教练。
   const onSecondCard = () => {
     if (premium) {
-      navigation.navigate('AISelect', {returnTo: 'Detection'});
+      // 传入 premium，确保选完教练返回检测页时仍是 AI 陪练版（保留语音）。
+      navigation.navigate('AISelect', {returnTo: 'Detection', premium: true});
     } else {
       setShowRingtone(true);
     }

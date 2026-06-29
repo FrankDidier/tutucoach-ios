@@ -71,9 +71,13 @@ const AISelectScreen = ({navigation, route}) => {
 
   const onConfirm = async () => {
     await setSelectedCoachId(selected);
-    // 若由检测页跳来选择，回传所选教练。
+    // 若由检测页跳来选择，回传所选教练。务必保留 premium（AI 陪练版）标记，
+    // 否则返回后检测页会退回成「手型检测」（免费版）：变成铃声选择、只有滴滴声、没有语音。
     if (route?.params?.returnTo) {
-      navigation.navigate(route.params.returnTo, {coachId: selected});
+      navigation.navigate(route.params.returnTo, {
+        coachId: selected,
+        premium: !!route?.params?.premium,
+      });
     } else {
       navigation.goBack();
     }
