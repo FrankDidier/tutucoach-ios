@@ -19,6 +19,8 @@
 // 下层 RN 视图暂时从窗口移除）。这是「可恢复」的暂停，绝不能当作永久销毁——
 // 否则弹完选择器回来，相机就再也起不来了（灰屏、无法检测）。
 @property(nonatomic, assign) BOOL windowDetached;
+// 是否已通知 JS「预览就绪」（用于隐藏占位）。只发一次。
+@property(nonatomic, assign) BOOL previewSignaled;
 @end
 
 @implementation TutuDetectorView
@@ -37,14 +39,17 @@
   _previewLayer.frame = self.bounds;
 }
 
+// active 只切换「是否跑 MediaPipe 打分」（对应安卓 isMonitoring）。
+// 相机预览本身在视图进入窗口时就一直开着（对应安卓 onCreate→startCamera），
+// 不随 active 启停 —— 这样用户一进检测页就能看到实时画面，而不是一片灰屏。
 - (void)setActive:(BOOL)active {
   if (_tornDown) return;
   if (_active == active) return;
   _active = active;
   if (active) {
-    [self startDetection];
-  } else {
-    [self stopDetection];
+    // 开始打分前重置统计，并兜底确保相机在跑。
+    [[TutuDetectorEngine shared] startSession];
+    [self startPreview];
   }
 }
 
@@ -62,10 +67,9 @@
     [self pauseCapture];
   } else {
     _windowDetached = NO;
-    // 回到窗口：若仍处于「检测中」，把相机重新拉起来（对应弹完选择器返回的场景）。
-    if (_active) {
-      [self resumeCapture];
-    }
+    // 一进入/回到窗口就开预览（与安卓 onCreate→startCamera 一致）：包含首次进入检测页，
+    // 以及全屏弹出系统相机/相册选择器后返回的场景。预览不依赖 active。
+    [self startPreview];
   }
 }
 
@@ -86,20 +90,6 @@
   });
 }
 
-// 从暂停恢复：在已配置好的前提下，重新开始会话。
-- (void)resumeCapture {
-  if (_tornDown || !_active) return;
-  __weak TutuDetectorView *weakSelf = self;
-  dispatch_async(self.cameraQueue, ^{
-    TutuDetectorView *s = weakSelf;
-    if (s == nil || s.tornDown || !s.active || s.windowDetached) return;
-    [s configureIfNeeded];
-    [[TutuDetectorEngine shared] startSession];
-    if (![s.session isRunning]) {
-      [s.session startRunning];
-    }
-  });
-}
 
 // 不可逆的彻底清理（幂等）。停止接收帧、停会话、释放 landmarker、断开回调。
 // 注意：清理块只捕获局部强引用、不捕获 self —— 即使 teardown 从 dealloc 触发也安全（不会复活 self）。
@@ -130,9 +120,10 @@
   }
 }
 
-#pragma mark - 启停
+#pragma mark - 预览（相机一进页面就开，独立于 active 打分）
 
-- (void)startDetection {
+- (void)startPreview {
+  if (_tornDown || _windowDetached) return;
   __weak TutuDetectorView *weakSelf = self;
   [self requestCameraPermission:^(BOOL granted) {
     TutuDetectorView *strongSelf = weakSelf;
@@ -144,23 +135,17 @@
     }
     dispatch_async(strongSelf.cameraQueue, ^{
       TutuDetectorView *s = weakSelf;
-      if (s == nil || s.tornDown || !s.active || s.windowDetached) return;
+      if (s == nil || s.tornDown || s.windowDetached) return;
       [s configureIfNeeded];
-      [[TutuDetectorEngine shared] startSession];
       if (![s.session isRunning]) {
         [s.session startRunning];
       }
+      // 通知 JS 预览已就绪（隐藏「相机预览」占位）。即便没在打分也会发。
+      if ([s.session isRunning]) {
+        [s emit:@{@"previewReady": @YES}];
+      }
     });
   }];
-}
-
-- (void)stopDetection {
-  dispatch_async(self.cameraQueue, ^{
-    if ([self.session isRunning]) {
-      [self.session stopRunning];
-    }
-    [[TutuDetectorEngine shared] stopSession];
-  });
 }
 
 - (void)requestCameraPermission:(void (^)(BOOL granted))completion {
@@ -181,7 +166,6 @@
 
 - (void)configureIfNeeded {
   if (_configured) return;
-  _configured = YES;
 
   _session = [[AVCaptureSession alloc] init];
   // 关键：不要让相机会话自动接管 App 的音频会话。默认 YES 时，相机一开始运行就会
@@ -199,12 +183,24 @@
                                          mediaType:AVMediaTypeVideo
                                           position:AVCaptureDevicePositionBack];
   if (device == nil) {
+    // 退而求其次：任意可用视频设备（极少数机型/系统下后置广角枚举失败）。
+    device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+  }
+  if (device == nil) {
+    [self emit:@{@"handDetected": @NO, @"hasMatch": @NO, @"pass": @NO,
+                 @"matchRate": @0, @"errors": @[@"未找到摄像头设备"]}];
     return;
   }
   NSError *err = nil;
   AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&err];
   if (input && [_session canAddInput:input]) {
     [_session addInput:input];
+  } else {
+    [self emit:@{@"handDetected": @NO, @"hasMatch": @NO, @"pass": @NO,
+                 @"matchRate": @0,
+                 @"errors": @[err ? [NSString stringWithFormat:@"无法打开摄像头：%@", err.localizedDescription]
+                                  : @"无法打开摄像头（输入）"]}];
+    return;
   }
 
   _videoOutput = [[AVCaptureVideoDataOutput alloc] init];
@@ -234,6 +230,8 @@
   });
 
   [self setupLiveLandmarker];
+  // 仅在成功配置完成后才标记，失败路径会提前 return 并保持未配置，便于下次重试。
+  _configured = YES;
 }
 
 - (void)setupLiveLandmarker {
@@ -256,7 +254,14 @@
 - (void)captureOutput:(AVCaptureOutput *)output
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection {
-  if (_tornDown || _windowDetached || !_active || _liveLandmarker == nil) return;
+  if (_tornDown || _windowDetached) return;
+  // 第一帧到达即确认预览已就绪（即使尚未点「启动」打分），让 JS 隐藏占位。
+  if (!_previewSignaled) {
+    _previewSignaled = YES;
+    [self emit:@{@"previewReady": @YES}];
+  }
+  // 仅在「启动」后跑 MediaPipe 打分（对应安卓 isMonitoring）。
+  if (!_active || _liveLandmarker == nil) return;
   NSError *err = nil;
   // 后置相机竖屏：朝向 .right 让 MediaPipe 拿到正立的竖屏图像。
   MPPImage *image = [[MPPImage alloc] initWithSampleBuffer:sampleBuffer

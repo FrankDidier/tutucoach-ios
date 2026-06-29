@@ -119,6 +119,9 @@ const DetectionScreen = ({navigation, route}) => {
   // 相机权限被拒：显示明确的「去设置」引导，而不是一片灰屏（这正是部分用户
   // 「拍完模版后相机画面出不来」的常见原因——某次拒绝过相机权限，iOS 会一直拦着）。
   const [cameraDenied, setCameraDenied] = useState(false);
+  // 相机预览是否已就绪：与安卓一致，进入页面相机即开（不必先点「启动」）。
+  // 就绪前显示「相机预览」占位，就绪后隐藏，避免占位文字盖住实时画面。
+  const [cameraReady, setCameraReady] = useState(false);
 
   const sessionStart = useRef(0);
   const sessionMatchRate = useRef(0);
@@ -255,6 +258,12 @@ const DetectionScreen = ({navigation, route}) => {
   const onDetectorResult = e => {
     if (!aliveRef.current) return;
     const r = e?.nativeEvent || {};
+    // 原生预览就绪信号：隐藏占位、清除可能的权限灰屏标记。
+    if (r.previewReady) {
+      setCameraReady(true);
+      setCameraDenied(false);
+      return;
+    }
     if (typeof r.matchRate === 'number') {
       setMatchRate(r.matchRate);
       sessionMatchRate.current = r.matchRate;
@@ -568,7 +577,7 @@ const DetectionScreen = ({navigation, route}) => {
                 onResult={onDetectorResult}
               />
             ) : null}
-            {!detecting && !cameraDenied ? (
+            {!cameraReady && !cameraDenied ? (
               <Text style={styles.cameraPlaceholder}>相机预览</Text>
             ) : null}
             {cameraDenied ? (
