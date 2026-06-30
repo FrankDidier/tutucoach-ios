@@ -41,19 +41,21 @@ const ALARM_MATCH_TARGET = 70; // 周期匹配率门槛（%），低于则报警
 
 // 检测设置项（对应安卓 MainActivity 设置弹窗）。
 const SETTINGS_KEY = 'det_settings';
-const SENSITIVITY_ANGLE = {strict: 18, normal: 22, lenient: 28}; // 灵敏度 → 角度阈值
 const SPEAK_FREQ_MS = {fast: 2000, normal: 3000, slow: 5000}; // AI 播报频率 → 冷却
+// 灵敏度＝角度阈值（度）。越小越严格、越容易判错。可在预设之外用步进微调。
+const ANGLE_MIN = 15;
+const ANGLE_MAX = 35;
+const ANGLE_PRESETS = [
+  {key: 'strict', label: '严格', angle: 22},
+  {key: 'normal', label: '标准', angle: 25},
+  {key: 'lenient', label: '宽松', angle: 28},
+];
 const DEFAULT_SETTINGS = {
-  sensitivity: 'normal',
+  angle: 25,
   period: 3,
   matchTarget: 70,
   speakFreq: 'normal',
 };
-const SENS_OPTIONS = [
-  {key: 'strict', label: '严格(18°)'},
-  {key: 'normal', label: '标准(22°)'},
-  {key: 'lenient', label: '宽松(28°)'},
-];
 const PERIOD_OPTIONS = [2, 3, 5];
 const MATCH_OPTIONS = [60, 70, 80];
 const FREQ_OPTIONS = [
@@ -138,6 +140,13 @@ const DetectionScreen = ({navigation, route}) => {
   // 各错误类型累计帧数（塌掌/扁指/勾指），用于结束总结里的「错误类型分布」
   // （对应安卓 AICoach.issuesText：逐类型列出次数与占比）。
   const errorCountsRef = useRef({塌掌: 0, 扁指: 0, 勾指: 0});
+  // AI 播报周期累计（对应安卓 AICoach.processFrameResult）：在「播报频率」时长内累计
+  // 匹配/不匹配与各错误名，周期末只在「匹配率低于达标线」时播报主导错误——
+  // 而不是一错就报。
+  const aiPeriodStartRef = useRef(0);
+  const aiPeriodMatchRef = useRef(0);
+  const aiPeriodMismatchRef = useRef(0);
+  const aiPeriodErrRef = useRef({});
   const alarmIdRef = useRef(0);
   const speakCooldownRef = useRef(SPEAK_COOLDOWN_MS);
   const periodTargetRef = useRef(ALARM_PERIOD_SEC);
@@ -149,18 +158,23 @@ const DetectionScreen = ({navigation, route}) => {
 
   // 应用检测设置：写入运行期 refs + 原生角度阈值，可选持久化。
   const applySettings = async (next, persist) => {
-    setSettings(next);
-    periodTargetRef.current = next.period;
-    matchTargetRef.current = next.matchTarget;
-    speakCooldownRef.current = SPEAK_FREQ_MS[next.speakFreq] || SPEAK_COOLDOWN_MS;
+    // 兼容旧存档（曾用 sensitivity 字段），并把角度夹在合法范围内。
+    const angle = Math.max(
+      ANGLE_MIN,
+      Math.min(ANGLE_MAX, Math.round(next.angle || DEFAULT_SETTINGS.angle)),
+    );
+    const normalized = {...next, angle};
+    setSettings(normalized);
+    periodTargetRef.current = normalized.period;
+    matchTargetRef.current = normalized.matchTarget;
+    speakCooldownRef.current =
+      SPEAK_FREQ_MS[normalized.speakFreq] || SPEAK_COOLDOWN_MS;
     try {
-      await TutuDetector.setAngleThreshold(
-        SENSITIVITY_ANGLE[next.sensitivity] || 22,
-      );
+      await TutuDetector.setAngleThreshold(angle);
     } catch (e) {}
     if (persist) {
       try {
-        await setItem(SETTINGS_KEY, JSON.stringify(next));
+        await setItem(SETTINGS_KEY, JSON.stringify(normalized));
       } catch (e) {}
     }
   };
@@ -324,23 +338,54 @@ const DetectionScreen = ({navigation, route}) => {
         coachSpeak(pick(list), {force: true});
       }
     }
-    // AI 实时语音反馈（对应 AICoach.processFrameResult / aiTimer）。
+    // AI 实时语音反馈（对应安卓 AICoach.processFrameResult）：
+    // 在一个「播报周期」（= 播报频率时长）内累计匹配/错误，到周期末再判断——
+    // 只有「周期匹配率 < 达标匹配率」且确有错误时，才播报这一周期里最主要的错误；
+    // 表现达标则不报错（仅按间隔偶尔鼓励）。避免「一帧错就立刻播报」。
     if (premium && voiceOn) {
       const p = profileRef.current || {};
-      if (hasError) {
-        const tpl =
-          p.errorTemplates && p.errorTemplates.length
-            ? pick(p.errorTemplates)
-            : '注意，%s需要纠正';
-        coachSpeak(tpl.replace('%s', r.errors[0]));
-      } else {
-        const now = Date.now();
-        if (now - lastEncourageRef.current > ENCOURAGE_INTERVAL_MS) {
-          lastEncourageRef.current = now;
+      if (r.hasMatch || hasError) {
+        if (hasError) {
+          aiPeriodMismatchRef.current += 1;
+          for (const es of r.errors) {
+            if (typeof es === 'string') {
+              aiPeriodErrRef.current[es] = (aiPeriodErrRef.current[es] || 0) + 1;
+            }
+          }
+        } else if (r.pass) {
+          aiPeriodMatchRef.current += 1;
+        }
+      }
+      const nowAi = Date.now();
+      if (nowAi - aiPeriodStartRef.current >= speakCooldownRef.current) {
+        const total = aiPeriodMatchRef.current + aiPeriodMismatchRef.current;
+        const periodRate =
+          total > 0 ? (aiPeriodMatchRef.current / total) * 100 : 100;
+        const belowTarget = periodRate < matchTargetRef.current;
+        const errEntries = Object.entries(aiPeriodErrRef.current);
+        if (belowTarget && errEntries.length) {
+          // 选累计帧数最多的主导错误播报（对应安卓「周期主导错误」）。
+          errEntries.sort((a, b) => b[1] - a[1]);
+          const dominant = errEntries[0][0];
+          const tpl =
+            p.errorTemplates && p.errorTemplates.length
+              ? pick(p.errorTemplates)
+              : '注意，%s需要纠正';
+          coachSpeak(tpl.replace('%s', dominant));
+        } else if (
+          total > 0 &&
+          !errEntries.length &&
+          nowAi - lastEncourageRef.current > ENCOURAGE_INTERVAL_MS
+        ) {
+          lastEncourageRef.current = nowAi;
           if (p.encouragements && p.encouragements.length) {
             coachSpeak(pick(p.encouragements));
           }
         }
+        aiPeriodStartRef.current = nowAi;
+        aiPeriodMatchRef.current = 0;
+        aiPeriodMismatchRef.current = 0;
+        aiPeriodErrRef.current = {};
       }
     }
   };
@@ -432,6 +477,10 @@ const DetectionScreen = ({navigation, route}) => {
       periodTotalRef.current = 0;
       periodSecRef.current = 0;
       errorCountsRef.current = {塌掌: 0, 扁指: 0, 勾指: 0};
+      aiPeriodStartRef.current = Date.now();
+      aiPeriodMatchRef.current = 0;
+      aiPeriodMismatchRef.current = 0;
+      aiPeriodErrRef.current = {};
       lastHandSeenRef.current = Date.now();
       lastNoHandSpeakRef.current = 0;
       setDetecting(true);
@@ -809,24 +858,53 @@ const DetectionScreen = ({navigation, route}) => {
           <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
             <Text style={styles.modalTitle}>检测设置</Text>
             <ScrollView style={styles.alarmList}>
-              <Text style={styles.settingLabel}>灵敏度（角度阈值）</Text>
+              <Text style={styles.settingLabel}>
+                灵敏度（角度阈值，越小越严格）
+              </Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    applySettings(
+                      {...settings, angle: (settings.angle || 25) - 1},
+                      true,
+                    )
+                  }>
+                  <Text style={styles.stepBtnText}>－</Text>
+                </TouchableOpacity>
+                <View style={styles.stepValueWrap}>
+                  <Text style={styles.stepValue}>{settings.angle || 25}°</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    applySettings(
+                      {...settings, angle: (settings.angle || 25) + 1},
+                      true,
+                    )
+                  }>
+                  <Text style={styles.stepBtnText}>＋</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.segRow}>
-                {SENS_OPTIONS.map(o => (
+                {ANGLE_PRESETS.map(o => (
                   <TouchableOpacity
                     key={o.key}
                     style={[
                       styles.segItem,
-                      settings.sensitivity === o.key && styles.segItemActive,
+                      settings.angle === o.angle && styles.segItemActive,
                     ]}
                     onPress={() =>
-                      applySettings({...settings, sensitivity: o.key}, true)
+                      applySettings({...settings, angle: o.angle}, true)
                     }>
                     <Text
                       style={[
                         styles.segText,
-                        settings.sensitivity === o.key && styles.segTextActive,
+                        settings.angle === o.angle && styles.segTextActive,
                       ]}>
-                      {o.label}
+                      {o.label} {o.angle}°
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1307,6 +1385,38 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginTop: 14,
     marginBottom: 8,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 10,
+  },
+  stepBtn: {
+    width: 46,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.pinkPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  stepBtnText: {
+    fontSize: 22,
+    lineHeight: 26,
+    color: Colors.pinkPrimary,
+    fontWeight: '700',
+  },
+  stepValueWrap: {
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  stepValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.textPrimary,
   },
   segRow: {flexDirection: 'row', gap: 8},
   segItem: {
