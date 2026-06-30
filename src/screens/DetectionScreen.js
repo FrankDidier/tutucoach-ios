@@ -135,6 +135,9 @@ const DetectionScreen = ({navigation, route}) => {
   const periodMatchRef = useRef(0);
   const periodTotalRef = useRef(0);
   const periodSecRef = useRef(0);
+  // 各错误类型累计帧数（塌掌/扁指/勾指），用于结束总结里的「错误类型分布」
+  // （对应安卓 AICoach.issuesText：逐类型列出次数与占比）。
+  const errorCountsRef = useRef({塌掌: 0, 扁指: 0, 勾指: 0});
   const alarmIdRef = useRef(0);
   const speakCooldownRef = useRef(SPEAK_COOLDOWN_MS);
   const periodTargetRef = useRef(ALARM_PERIOD_SEC);
@@ -292,6 +295,16 @@ const DetectionScreen = ({navigation, route}) => {
       periodTotalRef.current += 1;
       if (!hasError && r.pass) periodMatchRef.current += 1;
     }
+    // 累计各错误类型帧数：从原生回传的错误名（如「左手塌掌」「右手扁指」）里识别类型，
+    // 用于结束总结的「错误类型分布」。
+    if (hasError) {
+      for (const es of r.errors) {
+        if (typeof es !== 'string') continue;
+        if (es.indexOf('塌掌') >= 0) errorCountsRef.current.塌掌 += 1;
+        if (es.indexOf('扁指') >= 0) errorCountsRef.current.扁指 += 1;
+        if (es.indexOf('勾指') >= 0) errorCountsRef.current.勾指 += 1;
+      }
+    }
     // 无手提醒（AI 陪练版）：连续 10 秒检测不到手 → 播报一句，按冷却节流。
     const now0 = Date.now();
     if (r.handDetected) {
@@ -418,6 +431,7 @@ const DetectionScreen = ({navigation, route}) => {
       periodMatchRef.current = 0;
       periodTotalRef.current = 0;
       periodSecRef.current = 0;
+      errorCountsRef.current = {塌掌: 0, 扁指: 0, 勾指: 0};
       lastHandSeenRef.current = Date.now();
       lastNoHandSpeakRef.current = 0;
       setDetecting(true);
@@ -480,15 +494,25 @@ const DetectionScreen = ({navigation, route}) => {
               voiceId: s.voice_id || p.voiceId || 0,
             });
           }
-          // 安卓风格总结弹窗：时长 / 正确率 / 正确·不正确用时 / AI 点评。
+          // 安卓风格总结弹窗：时长 / 正确率 / 正确·不正确用时 / 错误类型分布 / AI 点评。
           const durSec = Math.round((Date.now() - sessionStart.current) / 1000);
           const okSec = Math.round((durSec * rate) / 100);
+          const ec = errorCountsRef.current;
+          const totalErr = ec.塌掌 + ec.扁指 + ec.勾指;
+          const breakdown = ['塌掌', '扁指', '勾指']
+            .filter(t => ec[t] > 0)
+            .map(t => ({
+              name: t,
+              count: ec[t],
+              percent: totalErr > 0 ? Math.round((ec[t] / totalErr) * 100) : 0,
+            }));
           setSummary({
             minutes: Math.max(1, Math.round(minutes)),
             durSec,
             rate: Math.round(rate),
             correctSec: okSec,
             incorrectSec: Math.max(0, durSec - okSec),
+            errorBreakdown: breakdown,
             comment: fullText,
           });
           setShowSummary(true);
@@ -689,6 +713,26 @@ const DetectionScreen = ({navigation, route}) => {
             <Text style={styles.summaryDetail}>
               正确用时 {summary?.correctSec ?? 0}s ｜ 待改进 {summary?.incorrectSec ?? 0}s
             </Text>
+            {summary?.errorBreakdown && summary.errorBreakdown.length ? (
+              <View style={styles.breakdownBox}>
+                <Text style={styles.breakdownTitle}>错误类型分布</Text>
+                {summary.errorBreakdown.map(b => (
+                  <View key={b.name} style={styles.breakdownRow}>
+                    <Text style={styles.breakdownName}>{b.name}</Text>
+                    <View style={styles.breakdownBarTrack}>
+                      <View
+                        style={[styles.breakdownBarFill, {width: `${b.percent}%`}]}
+                      />
+                    </View>
+                    <Text style={styles.breakdownVal}>
+                      {b.count}次 · {b.percent}%
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.breakdownEmpty}>本次未检测到明显手型问题 👍</Text>
+            )}
             <ScrollView style={styles.summaryCommentBox}>
               <Text style={styles.summaryComment}>{summary?.comment || ''}</Text>
             </ScrollView>
@@ -1145,6 +1189,55 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   summaryDetail: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  breakdownBox: {
+    backgroundColor: Colors.pinkBg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  breakdownTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  breakdownName: {
+    width: 40,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  breakdownBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffd9e3',
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  breakdownBarFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: Colors.pinkPrimary,
+  },
+  breakdownVal: {
+    width: 78,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+  },
+  breakdownEmpty: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center',
