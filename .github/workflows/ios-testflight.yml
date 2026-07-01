@@ -119,11 +119,26 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          xcrun altool --upload-app \
-            -f "$RUNNER_TEMP/export/$SCHEME.ipa" \
-            -t ios \
-            --apiKey "$ASC_KEY_ID" \
-            --apiIssuer "$ASC_ISSUER_ID"
+          IPA="$RUNNER_TEMP/export/$SCHEME.ipa"
+          # altool 偶发对 Apple 服务器超时（-1001），单次失败不代表构建有问题。
+          # 重试最多 3 次；全部失败才让这一步（以及整个 job）明确失败，避免
+          # 「CI 绿灯但 TestFlight 里根本没有这个构建」的静默丢包。
+          attempt=1
+          max=3
+          until [ "$attempt" -gt "$max" ]; do
+            echo "== Upload attempt $attempt/$max =="
+            if xcrun altool --upload-app \
+                 -f "$IPA" -t ios \
+                 --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"; then
+              echo "Upload succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Upload attempt $attempt failed; retrying in 60s..."
+            attempt=$((attempt+1))
+            sleep 60
+          done
+          echo "::error::altool upload failed after $max attempts"
+          exit 1
 
       - name: Upload IPA artifact
         if: always()
