@@ -60,6 +60,42 @@ export default function CompanionScreen({navigation}) {
   const nextContextualRef = useRef(false);
   const proactiveTimer = useRef(null);
   const aliveRef = useRef(true);
+  const focusCountRef = useRef(0);
+
+  // 读取当前所选 AI 分身（名称 / 头像背景 / 音色）。初始化和「切换分身」返回后都会调用。
+  const reloadCoach = async () => {
+    const id = await getSelectedCoachId();
+    const base = profileById(id);
+    coachIdRef.current = id;
+    profileRef.current = base;
+    if (aliveRef.current) {
+      setCoachName(base.displayName || 'AI 陪练');
+      setAvatarUri(null); // 先回退默认，若该分身有自定义头像再覆盖
+    }
+    // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。
+    try {
+      const res = await fetchCoaches();
+      const list = (res && (res.coaches || res.data)) || [];
+      const sc = list.find(c => c.id === id);
+      if (aliveRef.current && sc) {
+        profileRef.current = {
+          ...base,
+          displayName: sc.name || base.displayName,
+          greeting: sc.greeting || base.greeting,
+          speechRate: sc.speechRate || base.speechRate || 1.0,
+          pitch: sc.pitch || base.pitch || 1.0,
+          voiceId: sc.voiceId || 0,
+        };
+        setCoachName(profileRef.current.displayName);
+        if (sc.avatarUrl) {
+          const uri = /^https?:/.test(sc.avatarUrl)
+            ? sc.avatarUrl
+            : BASE_URL + sc.avatarUrl;
+          setAvatarUri(uri);
+        }
+      }
+    } catch (e) {}
+  };
 
   // ============ 初始化 ============
   useEffect(() => {
@@ -69,35 +105,7 @@ export default function CompanionScreen({navigation}) {
     } catch (e) {}
     (async () => {
       studentIdRef.current = getDeviceId();
-      const id = await getSelectedCoachId();
-      const base = profileById(id);
-      coachIdRef.current = id;
-      profileRef.current = base;
-      if (aliveRef.current) setCoachName(base.displayName || 'AI 陪练');
-
-      // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。
-      try {
-        const res = await fetchCoaches();
-        const list = (res && (res.coaches || res.data)) || [];
-        const sc = list.find(c => c.id === id);
-        if (aliveRef.current && sc) {
-          profileRef.current = {
-            ...base,
-            displayName: sc.name || base.displayName,
-            greeting: sc.greeting || base.greeting,
-            speechRate: sc.speechRate || base.speechRate || 1.0,
-            pitch: sc.pitch || base.pitch || 1.0,
-            voiceId: sc.voiceId || 0,
-          };
-          setCoachName(profileRef.current.displayName);
-          if (sc.avatarUrl) {
-            const uri = /^https?:/.test(sc.avatarUrl)
-              ? sc.avatarUrl
-              : BASE_URL + sc.avatarUrl;
-            setAvatarUri(uri);
-          }
-        }
-      } catch (e) {}
+      await reloadCoach();
 
       const von = await isVoiceEnabled();
       mutedRef.current = !von;
@@ -134,6 +142,30 @@ export default function CompanionScreen({navigation}) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 从「切换分身」页返回后（再次获得焦点），刷新所选角色的名称/背景/音色。
+  // 首次进入的焦点由初始化负责，这里跳过。
+  useEffect(() => {
+    const unsubFocus = navigation.addListener('focus', () => {
+      focusCountRef.current += 1;
+      if (focusCountRef.current <= 1) return;
+      aliveRef.current = true;
+      pausedRef.current = false;
+      reloadCoach();
+    });
+    // 离开本页（去选分身页）时暂停主动陪聊并停掉正在播的语音，避免在选择页说话。
+    const unsubBlur = navigation.addListener('blur', () => {
+      pausedRef.current = true;
+      try {
+        stopSpeak();
+      } catch (e) {}
+    });
+    return () => {
+      unsubFocus();
+      unsubBlur();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
 
   // ============ 曲目 ============
   const applyPiece = idx => {
@@ -360,9 +392,15 @@ export default function CompanionScreen({navigation}) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backIcon}>‹</Text>
           </TouchableOpacity>
-          <Text style={styles.coachName} numberOfLines={1}>
-            {coachName}
-          </Text>
+          {/* 点角色名可切换 AI 分身（背景/音色随之更新），与安卓一致；▾ 提示可点击。 */}
+          <TouchableOpacity
+            style={styles.nameWrap}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('AISelect')}>
+            <Text style={styles.coachName} numberOfLines={1}>
+              {coachName} ▾
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={showMyCode} style={styles.chip}>
             <Text style={styles.chipText}>学生码</Text>
           </TouchableOpacity>
@@ -442,7 +480,8 @@ const styles = StyleSheet.create({
   },
   backBtn: {width: 40, height: 40, justifyContent: 'center'},
   backIcon: {color: '#fff', fontSize: 30},
-  coachName: {flex: 1, color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 4},
+  nameWrap: {flex: 1, justifyContent: 'center', paddingVertical: 6},
+  coachName: {color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 4},
   chip: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 10,
