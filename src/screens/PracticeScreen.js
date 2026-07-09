@@ -83,6 +83,19 @@ const PracticeScreen = ({navigation}) => {
               </View>
             </TouchableOpacity>
           </View>
+
+          {/* AI 陪练模式：语音 + 对话陪伴练琴（对应安卓 CompanionChatActivity） */}
+          <TouchableOpacity
+            style={styles.companionBtn}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Companion')}>
+            <Text style={styles.companionIcon}>🎹</Text>
+            <View style={styles.companionCopy}>
+              <Text style={styles.companionTitle}>AI 陪练模式</Text>
+              <Text style={styles.companionSub}>AI 分身语音陪伴 + 对话 · 会员专属</Text>
+            </View>
+            <Text style={styles.companionArrow}>›</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -183,6 +196,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: Colors.textSecondary,
   },
+  companionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    backgroundColor: '#FF5B87',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  companionIcon: {fontSize: 26, marginRight: 12},
+  companionCopy: {flex: 1},
+  companionTitle: {fontSize: 16, fontWeight: '700', color: '#fff'},
+  companionSub: {fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2},
+  companionArrow: {fontSize: 24, color: '#fff'},
 });
 
 export default PracticeScreen;

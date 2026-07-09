@@ -22,6 +22,7 @@
 		88B2ADB863CAFE4C46D34C93 /* alarm_siren.wav in Resources */ = {isa = PBXBuildFile; fileRef = E932FB1BD6F859DD70828FCF /* alarm_siren.wav */; };
 		95E431BFCF60F676206A1BBB /* alarm_male_voice.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */; };
 		E29131F5B1E673C95BA86635 /* alarm_piano.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */; };
+		AA0011CC22DD33EE44FF5501 /* metro_click.wav in Resources */ = {isa = PBXBuildFile; fileRef = AA0011CC22DD33EE44FF5502 /* metro_click.wav */; };
 		E9C16D99BC6291EF94762CFB /* alarm_ambulance.wav in Resources */ = {isa = PBXBuildFile; fileRef = 287D584FEF8C919F629A0C04 /* alarm_ambulance.wav */; };
 /* End PBXBuildFile section */
 
@@ -52,6 +53,7 @@
 		3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_male_voice.wav; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-TutuCoachRN.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN.debug.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN/Pods-TutuCoachRN.debug.xcconfig"; sourceTree = "<group>"; };
 		4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = alarm_piano.wav; sourceTree = "<group>"; };
+		AA0011CC22DD33EE44FF5502 /* metro_click.wav */ = {isa = PBXFileReference; includeInIndex = 1; path = metro_click.wav; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-TutuCoachRN.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN.release.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN/Pods-TutuCoachRN.release.xcconfig"; sourceTree = "<group>"; };
 		5B7EB9410499542E8C5724F5 /* Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig"; path = "Target Support Files/Pods-TutuCoachRN-TutuCoachRNTests/Pods-TutuCoachRN-TutuCoachRNTests.debug.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-TutuCoachRN.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TutuCoachRN.a"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -178,6 +180,7 @@
 				6234A9E20D030AC0E120CD04 /* alarm_female_voice.wav */,
 				3AB35ED9FF04A984B3E1E52F /* alarm_male_voice.wav */,
 				4E0A0D149284CAD63C63F3EE /* alarm_piano.wav */,
+				AA0011CC22DD33EE44FF5502 /* metro_click.wav */,
 				E932FB1BD6F859DD70828FCF /* alarm_siren.wav */,
 			);
 			name = Sounds;
@@ -287,6 +290,7 @@
 				2F0103A969C4465DA0019FD0 /* alarm_female_voice.wav in Resources */,
 				95E431BFCF60F676206A1BBB /* alarm_male_voice.wav in Resources */,
 				E29131F5B1E673C95BA86635 /* alarm_piano.wav in Resources */,
+				AA0011CC22DD33EE44FF5501 /* metro_click.wav in Resources */,
 				88B2ADB863CAFE4C46D34C93 /* alarm_siren.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -511,7 +515,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = 6GAG9LR66G;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = TutuCoachRN/Info.plist;
@@ -520,7 +524,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5.33;
+				MARKETING_VERSION = 1.5.34;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -541,7 +545,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = 6GAG9LR66G;
 				INFOPLIST_FILE = TutuCoachRN/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -549,7 +553,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5.33;
+				MARKETING_VERSION = 1.5.34;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

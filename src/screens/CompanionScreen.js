@@ -1,0 +1,488 @@
+// AI 陪练模式 —— 对应安卓 CompanionChatActivity。
+// 独立于手型检测的「语音 + 对话」陪伴练琴：老师 AI 分身高清图为背景，微信式对话框；
+// AI 不定时主动朗读老师设置的重点（可按曲目）+ 结合对话个性陪聊；学生打字则角色扮演式回复（不朗读）。
+import React, {useEffect, useRef, useState} from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  ImageBackground,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  Alert,
+  Keyboard,
+} from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
+import {Images} from '../assets/images';
+import {BASE_URL} from '../services/config';
+import {getDeviceId} from '../services/device';
+import {chat, fetchReminders} from '../services/companionChat';
+import {speak, stop as stopSpeak, prewarm as prewarmTts} from '../services/voice';
+import {
+  getSelectedCoachId,
+  profileById,
+  isVoiceEnabled,
+} from '../services/coachPrefs';
+import {fetchCoaches} from '../services/coach';
+import MetronomeBar from '../components/MetronomeBar';
+
+let bubbleKey = 1;
+
+export default function CompanionScreen({navigation}) {
+  const [coachName, setCoachName] = useState('AI 陪练');
+  const [avatarUri, setAvatarUri] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [pieces, setPieces] = useState([]);
+  const [pieceIdx, setPieceIdx] = useState(-1);
+
+  const scrollRef = useRef(null);
+  const profileRef = useRef(profileById('coach_pro'));
+  const coachIdRef = useRef('coach_pro');
+  const studentIdRef = useRef('');
+  const historyRef = useRef([]); // [{role, content}]
+  const remindersRef = useRef([]);
+  const piecesRef = useRef([]);
+  const pieceIdxRef = useRef(-1);
+  const reminderIdxRef = useRef(0);
+  const freqRef = useRef(45);
+  const proactiveCountRef = useRef(0);
+  const busyRef = useRef(false);
+  const pausedRef = useRef(false);
+  const typingRef = useRef(false);
+  const mutedRef = useRef(false);
+  const greetedRef = useRef(false);
+  const nextContextualRef = useRef(false);
+  const proactiveTimer = useRef(null);
+  const aliveRef = useRef(true);
+
+  // ============ 初始化 ============
+  useEffect(() => {
+    aliveRef.current = true;
+    try {
+      prewarmTts();
+    } catch (e) {}
+    (async () => {
+      studentIdRef.current = getDeviceId();
+      const id = await getSelectedCoachId();
+      const base = profileById(id);
+      coachIdRef.current = id;
+      profileRef.current = base;
+      if (aliveRef.current) setCoachName(base.displayName || 'AI 陪练');
+
+      // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。
+      try {
+        const res = await fetchCoaches();
+        const list = (res && (res.coaches || res.data)) || [];
+        const sc = list.find(c => c.id === id);
+        if (aliveRef.current && sc) {
+          profileRef.current = {
+            ...base,
+            displayName: sc.name || base.displayName,
+            greeting: sc.greeting || base.greeting,
+            speechRate: sc.speechRate || base.speechRate || 1.0,
+            pitch: sc.pitch || base.pitch || 1.0,
+            voiceId: sc.voiceId || 0,
+          };
+          setCoachName(profileRef.current.displayName);
+          if (sc.avatarUrl) {
+            const uri = /^https?:/.test(sc.avatarUrl)
+              ? sc.avatarUrl
+              : BASE_URL + sc.avatarUrl;
+            setAvatarUri(uri);
+          }
+        }
+      } catch (e) {}
+
+      const von = await isVoiceEnabled();
+      mutedRef.current = !von;
+      if (aliveRef.current) setMuted(!von);
+
+      // 拉取老师为该生设置的重点（含按曲目分组）。
+      try {
+        const r = await fetchReminders(studentIdRef.current, null);
+        freqRef.current = Math.max(10, r.freqSec || 45);
+        piecesRef.current = r.pieces || [];
+        if (piecesRef.current.length) {
+          pieceIdxRef.current = 0;
+          applyPiece(0);
+          if (aliveRef.current) {
+            setPieces(piecesRef.current);
+            setPieceIdx(0);
+          }
+        } else {
+          remindersRef.current = r.reminders || [];
+        }
+      } catch (e) {}
+
+      openingGreeting();
+      scheduleProactive();
+    })();
+
+    return () => {
+      aliveRef.current = false;
+      pausedRef.current = true;
+      if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
+      try {
+        stopSpeak();
+      } catch (e) {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ============ 曲目 ============
+  const applyPiece = idx => {
+    reminderIdxRef.current = 0;
+    if (idx >= 0 && idx < piecesRef.current.length) {
+      remindersRef.current = (piecesRef.current[idx].lines || []).slice();
+    } else {
+      remindersRef.current = [];
+    }
+  };
+
+  const pickPiece = () => {
+    if (!piecesRef.current.length) return;
+    const opts = piecesRef.current.map((p, i) => ({
+      text: p.name || '曲目' + (i + 1),
+      onPress: () => {
+        pieceIdxRef.current = i;
+        applyPiece(i);
+        setPieceIdx(i);
+        nextContextualRef.current = false;
+      },
+    }));
+    opts.push({text: '取消', style: 'cancel'});
+    Alert.alert('选择当前练习的曲目', undefined, opts);
+  };
+
+  // ============ 气泡 + 逐字显示 ============
+  const pushHistory = (role, content) => {
+    historyRef.current.push({role, content});
+    if (historyRef.current.length > 20) {
+      historyRef.current = historyRef.current.slice(-20);
+    }
+  };
+
+  const scrollToEnd = () => {
+    requestAnimationFrame(() => {
+      // 用户正在打字时不要抢滚动
+      if (!typingRef.current && scrollRef.current) {
+        scrollRef.current.scrollToEnd({animated: true});
+      }
+    });
+  };
+
+  const addUserBubble = text => {
+    const key = 'u' + bubbleKey++;
+    setMessages(prev => [...prev, {key, role: 'user', shown: text, done: true}]);
+    scrollToEnd();
+  };
+
+  // 逐字显示一条 AI 气泡；speakIt=true 时同时朗读。
+  const addAiBubble = (full, speakIt) => {
+    const key = 'a' + bubbleKey++;
+    setMessages(prev => [...prev, {key, role: 'ai', shown: '', done: false}]);
+    if (speakIt && !mutedRef.current) {
+      const p = profileRef.current || {};
+      try {
+        speak(full, {
+          rate: p.speechRate || 1.0,
+          pitch: p.pitch || 1.0,
+          voiceId: p.voiceId || 0,
+        });
+      } catch (e) {}
+    }
+    // 逐字揭示
+    let i = 0;
+    const total = full.length;
+    const per = Math.max(24, Math.min(90, Math.round((speakIt ? 3500 : 2500) / Math.max(1, total))));
+    const timer = setInterval(() => {
+      if (!aliveRef.current) {
+        clearInterval(timer);
+        return;
+      }
+      i += 1;
+      const slice = full.slice(0, i);
+      setMessages(prev =>
+        prev.map(m => (m.key === key ? {...m, shown: slice, done: i >= total} : m)),
+      );
+      if (i >= total) {
+        clearInterval(timer);
+      }
+      scrollToEnd();
+    }, per);
+  };
+
+  // ============ 开场 & 主动陪伴 ============
+  const openingGreeting = () => {
+    const p = profileRef.current || {};
+    const greeting = p.greeting || '我在呢，我们一起练琴吧～';
+    greetedRef.current = true;
+    addAiBubble(greeting, true);
+    // 大模型补一句更自然的招呼（不朗读，避免抢话）。
+    chat(coachIdRef.current, studentNameSafe(), [], 'chat', '').then(res => {
+      if (res && res.ok && res.text && aliveRef.current) {
+        pushHistory('assistant', res.text);
+        addAiBubble(res.text, false);
+      }
+    });
+  };
+
+  const studentNameSafe = () => '同学';
+
+  const scheduleProactive = () => {
+    if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
+    const base = Math.max(10, freqRef.current) * 1000;
+    const delay = base * (0.8 + Math.random() * 0.6);
+    proactiveTimer.current = setTimeout(() => {
+      if (!pausedRef.current && !busyRef.current && !typingRef.current) {
+        doProactive();
+      }
+      scheduleProactive();
+    }, delay);
+  };
+
+  const doProactive = () => {
+    proactiveCountRef.current += 1;
+    // 刚和学生聊过 → 这一条让大模型结合刚才的对话来说，更连贯。
+    if (nextContextualRef.current) {
+      nextContextualRef.current = false;
+      doLlmProactive('');
+      return;
+    }
+    const reminders = remindersRef.current;
+    const useReminder = reminders.length && proactiveCountRef.current % 2 === 1;
+    if (useReminder) {
+      const r = reminders[reminderIdxRef.current % reminders.length];
+      reminderIdxRef.current += 1;
+      if (r) addAiBubble(r, true);
+      return;
+    }
+    const topic = reminders.length
+      ? reminders[reminderIdxRef.current % reminders.length]
+      : '';
+    doLlmProactive(topic);
+  };
+
+  const doLlmProactive = topic => {
+    busyRef.current = true;
+    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'proactive', topic)
+      .then(res => {
+        busyRef.current = false;
+        if (pausedRef.current || typingRef.current) return;
+        if (res && res.ok && res.text) {
+          pushHistory('assistant', res.text);
+          addAiBubble(res.text, true);
+        } else {
+          speakLocalEncouragement();
+        }
+      })
+      .catch(() => {
+        busyRef.current = false;
+        if (!pausedRef.current && !typingRef.current) speakLocalEncouragement();
+      });
+  };
+
+  const speakLocalEncouragement = () => {
+    const p = profileRef.current || {};
+    const banks = p.encouragements || [];
+    if (banks.length) {
+      addAiBubble(banks[Math.floor(Math.random() * banks.length)], true);
+    } else if (remindersRef.current.length) {
+      const r = remindersRef.current[reminderIdxRef.current % remindersRef.current.length];
+      reminderIdxRef.current += 1;
+      addAiBubble(r, true);
+    }
+  };
+
+  // ============ 学生打字 ============
+  const onSend = () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    Keyboard.dismiss();
+    typingRef.current = false;
+    addUserBubble(text);
+    pushHistory('user', text);
+    setSending(true);
+    busyRef.current = true;
+    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'chat', '')
+      .then(res => {
+        setSending(false);
+        busyRef.current = false;
+        if (res && res.ok && res.text) {
+          pushHistory('assistant', res.text);
+          addAiBubble(res.text, false); // 学生对话的回复不朗读
+          nextContextualRef.current = true;
+        } else {
+          Alert.alert('提示', '网络不太好，再发一次试试～');
+        }
+      })
+      .catch(() => {
+        setSending(false);
+        busyRef.current = false;
+      });
+  };
+
+  const toggleMute = () => {
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setMuted(next);
+    if (next) {
+      try {
+        stopSpeak();
+      } catch (e) {}
+    }
+  };
+
+  const showMyCode = () => {
+    const code = studentIdRef.current || '';
+    Clipboard.setString(code);
+    Alert.alert('我的学生码', code + '\n\n已复制，发给老师即可为你设置陪练重点。');
+  };
+
+  const bg = avatarUri ? {uri: avatarUri} : Images.avatarRabbit;
+  const pieceName =
+    pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
+
+  return (
+    <ImageBackground source={bg} style={styles.root} resizeMode="cover">
+      <View style={styles.scrim} />
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" />
+        {/* 顶部栏 */}
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.coachName} numberOfLines={1}>
+            {coachName}
+          </Text>
+          <TouchableOpacity onPress={showMyCode} style={styles.chip}>
+            <Text style={styles.chipText}>学生码</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={toggleMute} style={[styles.chip, {marginLeft: 8}]}>
+            <Text style={styles.chipText}>{muted ? '🔇' : '🔊'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 曲目选择条 */}
+        {pieces.length > 0 && (
+          <TouchableOpacity style={styles.pieceBar} onPress={pickPiece}>
+            <Text style={styles.pieceText}>🎵 当前曲目：{pieceName}  ▾</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 对话区 */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.chat}
+          contentContainerStyle={styles.chatContent}
+          keyboardShouldPersistTaps="handled">
+          {messages.map(m => (
+            <View
+              key={m.key}
+              style={[styles.bubble, m.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}>
+              <Text style={m.role === 'user' ? styles.bubbleUserText : styles.bubbleAiText}>
+                {m.shown}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* 迷你节拍器 */}
+        <MetronomeBar style={styles.metro} />
+
+        {/* 输入区 */}
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={t => {
+              setInput(t);
+              typingRef.current = t.length > 0;
+            }}
+            onFocus={() => {
+              typingRef.current = true;
+            }}
+            onBlur={() => {
+              typingRef.current = input.length > 0;
+            }}
+            placeholder="和 TA 聊聊天…"
+            placeholderTextColor="#999"
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+            onPress={onSend}
+            disabled={sending}>
+            <Text style={styles.sendText}>{sending ? '…' : '发送'}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </ImageBackground>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {flex: 1, backgroundColor: '#222'},
+  scrim: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)'},
+  safe: {flex: 1},
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  backBtn: {width: 40, height: 40, justifyContent: 'center'},
+  backIcon: {color: '#fff', fontSize: 30},
+  coachName: {flex: 1, color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 4},
+  chip: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  chipText: {color: '#fff', fontSize: 12},
+  pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
+  pieceText: {color: '#fff', fontSize: 13},
+  chat: {flex: 1},
+  chatContent: {padding: 12, paddingBottom: 8},
+  bubble: {maxWidth: '82%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10},
+  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.92)'},
+  bubbleUser: {alignSelf: 'flex-end', backgroundColor: '#FF5B87'},
+  bubbleAiText: {color: '#222', fontSize: 15, lineHeight: 21},
+  bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 21},
+  metro: {marginBottom: 6, marginRight: 10, alignSelf: 'flex-end'},
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 8,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    maxHeight: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: '#222',
+    fontSize: 15,
+  },
+  sendBtn: {
+    marginLeft: 8,
+    backgroundColor: '#FF5B87',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  sendBtnDisabled: {opacity: 0.6},
+  sendText: {color: '#fff', fontSize: 15, fontWeight: 'bold'},
+});

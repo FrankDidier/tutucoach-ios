@@ -32,6 +32,7 @@ import {playAlarmId, stopAlarm} from '../services/alarmPlayer';
 import {getItem, setItem} from '../services/storage';
 import {pick} from '../utils/rabbitMessages';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
+import MetronomeBar from '../components/MetronomeBar';
 import TutuDetector, {TutuDetectorView} from 'tutu-detector';
 
 const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
@@ -713,10 +714,13 @@ const DetectionScreen = ({navigation, route}) => {
           </Text>
         </View>
 
-        <Text style={styles.statsPink}>
-          正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
-          {Math.round(matchRate)}%
-        </Text>
+        <View style={styles.metroRow}>
+          <Text style={styles.statsPink}>
+            正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
+            {Math.round(matchRate)}%
+          </Text>
+          <MetronomeBar />
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -1184,6 +1188,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.pinkPrimary,
     marginBottom: 8,
+    flexShrink: 1,
+  },
+  metroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   footer: {
     paddingHorizontal: 20,

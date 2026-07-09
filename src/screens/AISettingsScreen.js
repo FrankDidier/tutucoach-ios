@@ -330,6 +330,20 @@ const AISettingsScreen = ({navigation}) => {
               </>
             )}
 
+            {/* 陪练提示设置入口（对应安卓：并入本页的「陪练提示设置」） */}
+            <TouchableOpacity
+              style={styles.reminderEntry}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('StudentReminder')}>
+              <View style={{flex: 1}}>
+                <Text style={styles.reminderEntryTitle}>陪练提示设置</Text>
+                <Text style={styles.reminderEntrySub}>
+                  按学生 · 按曲目设置「AI 陪练模式」重点播报内容
+                </Text>
+              </View>
+              <Text style={styles.reminderEntryArrow}>›</Text>
+            </TouchableOpacity>
+
             {/* 头像 + 名称 */}
             <View style={styles.card}>
               <View style={styles.row}>
@@ -640,6 +654,22 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
   saveHeaderText: {fontSize: 15, fontWeight: '700', color: Colors.pinkPrimary},
+  reminderEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF5B87',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 4,
+  },
+  reminderEntryTitle: {fontSize: 15, fontWeight: '700', color: '#fff'},
+  reminderEntrySub: {
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 3,
+  },
+  reminderEntryArrow: {fontSize: 24, color: '#fff', marginLeft: 8},
 });
 
 export default AISettingsScreen;
