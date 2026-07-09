@@ -22,7 +22,13 @@ function loadClick() {
   loading = true;
   clickSound = new Sound('metro_click.wav', Sound.MAIN_BUNDLE, err => {
     loading = false;
-    if (err) clickSound = null;
+    if (err) {
+      clickSound = null;
+    } else {
+      try {
+        clickSound.setVolume(1.0); // 最大音量，配合更响的专业咔哒音
+      } catch (e) {}
+    }
   });
 }
 
