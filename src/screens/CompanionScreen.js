@@ -14,13 +14,31 @@ import {
   StatusBar,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
 import {chat, fetchReminders} from '../services/companionChat';
-import {speak, stop as stopSpeak, prewarm as prewarmTts} from '../services/voice';
+import {
+  speak,
+  stop as stopSpeak,
+  prewarm as prewarmTts,
+  setKeepAwake,
+} from '../services/voice';
+
+// 角色扮演的括号内心/情景描写（（…）或(…)）只做文字展示、不朗读。
+// 朗读前把括号内容去掉，只念真正对学生说的话。
+function stripParentheticals(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/（[^）]*）/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 import {
   getSelectedCoachId,
   profileById,
@@ -103,6 +121,10 @@ export default function CompanionScreen({navigation}) {
     try {
       prewarmTts();
     } catch (e) {}
+    // 陪练模式期间不自动锁屏（离开本页会还原）。
+    try {
+      setKeepAwake(true);
+    } catch (e) {}
     (async () => {
       studentIdRef.current = getDeviceId();
       await reloadCoach();
@@ -138,6 +160,9 @@ export default function CompanionScreen({navigation}) {
       if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
       try {
         stopSpeak();
+      } catch (e) {}
+      try {
+        setKeepAwake(false);
       } catch (e) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,18 +241,23 @@ export default function CompanionScreen({navigation}) {
   };
 
   // 逐字显示一条 AI 气泡；speakIt=true 时同时朗读。
-  const addAiBubble = (full, speakIt) => {
+  // spokenOverride：朗读用的文本（如对话回复要去掉括号内心描写），不传则朗读 full。
+  const addAiBubble = (full, speakIt, spokenOverride) => {
     const key = 'a' + bubbleKey++;
     setMessages(prev => [...prev, {key, role: 'ai', shown: '', done: false}]);
     if (speakIt && !mutedRef.current) {
       const p = profileRef.current || {};
-      try {
-        speak(full, {
-          rate: p.speechRate || 1.0,
-          pitch: p.pitch || 1.0,
-          voiceId: p.voiceId || 0,
-        });
-      } catch (e) {}
+      const toSpeak =
+        spokenOverride !== undefined ? spokenOverride : full;
+      if (toSpeak) {
+        try {
+          speak(toSpeak, {
+            rate: p.speechRate || 1.0,
+            pitch: p.pitch || 1.0,
+            voiceId: p.voiceId || 0,
+          });
+        } catch (e) {}
+      }
     }
     // 逐字揭示
     let i = 0;
@@ -349,7 +379,8 @@ export default function CompanionScreen({navigation}) {
         busyRef.current = false;
         if (res && res.ok && res.text) {
           pushHistory('assistant', res.text);
-          addAiBubble(res.text, false); // 学生对话的回复不朗读
+          // 学生打字后，AI 的回复也用语音念出来（去掉括号里的内心/情景描写）。
+          addAiBubble(res.text, true, stripParentheticals(res.text));
           nextContextualRef.current = true;
         } else {
           Alert.alert('提示', '网络不太好，再发一次试试～');
@@ -387,6 +418,9 @@ export default function CompanionScreen({navigation}) {
       <View style={styles.scrim} />
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
+        <KeyboardAvoidingView
+          style={styles.kav}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* 顶部栏 */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -462,6 +496,7 @@ export default function CompanionScreen({navigation}) {
             <Text style={styles.sendText}>{sending ? '…' : '发送'}</Text>
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ImageBackground>
   );
@@ -471,6 +506,7 @@ const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#222'},
   scrim: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)'},
   safe: {flex: 1},
+  kav: {flex: 1},
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

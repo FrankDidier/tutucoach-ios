@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
+import RabbitMascot from '../components/RabbitMascot';
 
 const PracticeScreen = ({navigation}) => {
   return (
@@ -31,11 +32,8 @@ const PracticeScreen = ({navigation}) => {
             <Text style={styles.heroLine1}>HI~ ✨</Text>
             <Text style={styles.heroLine2}>我是你的兔兔教练</Text>
           </View>
-          <Image
-            source={Images.rabbitMascot}
-            style={styles.mascot}
-            resizeMode="contain"
-          />
+          {/* 「练琴」页兔子播庆祝动作（与安卓一致，用户很喜欢这个动作）。 */}
+          <RabbitMascot loopAction="celebrate" style={styles.mascot} />
         </View>
 
         <View style={styles.selectionCard}>

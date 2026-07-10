@@ -19,6 +19,16 @@ function reactivateAudioSessionIOS() {
   } catch (e) {}
 }
 
+// 防止自动锁屏（仅在「检测 / AI 陪练」页开启，离开时关闭）。iOS 走原生 idleTimerDisabled。
+export function setKeepAwake(on) {
+  if (Platform.OS !== 'ios') return;
+  try {
+    NativeModules.TutuDetector &&
+      NativeModules.TutuDetector.setKeepAwake &&
+      NativeModules.TutuDetector.setKeepAwake(!!on);
+  } catch (e) {}
+}
+
 function ensure() {
   if (inited) return available;
   inited = true;
@@ -60,6 +70,10 @@ export function speak(text, {rate = 1.0, pitch = 1.0, voiceId = 0, flush = true}
   // iOS 首选原生合成器/声音复刻。
   const native = iosNativeTts();
   if (native) {
+    // 关键：原生合成器路径之前没有重新激活音频会话，导致「App 挂后台/切走一会儿
+    // 再回来点兔子没声音」。这里先幂等地重设并激活会话，再播报（与 react-native-tts
+    // 回退路径保持一致）。
+    reactivateAudioSessionIOS();
     try {
       // voiceId>0：走声音复刻（后端拉老师本人音色 WAV），失败时原生侧自动回退系统音色。
       if (voiceId > 0 && typeof native.ttsSpeakCloned === 'function') {
@@ -123,4 +137,4 @@ export function isAvailable() {
   return ensure();
 }
 
-export default {speak, stop, prewarm, isAvailable};
+export default {speak, stop, prewarm, isAvailable, setKeepAwake};

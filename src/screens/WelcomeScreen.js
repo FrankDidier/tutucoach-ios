@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   },
   mascotBlock: {
     width: '100%',
-    minHeight: 280,
+    minHeight: 400,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -310,8 +310,8 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   rabbitImg: {
-    width: 240,
-    height: 300,
+    width: 320,
+    height: 384,
     zIndex: 1,
   },
   welcomeCaption: {

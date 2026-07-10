@@ -16,6 +16,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Colors} from '../utils/colors';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
@@ -26,11 +27,16 @@ import {fetchReminders, savePieces} from '../services/companionChat';
 const FREQ_MIN = 10;
 const FREQ_MAX = 600;
 
+// 老师给学生起的「备注名」本地存储（按老师区分）。很多学生是匿名设备号、没有昵称，
+// 后台只能显示 id 尾号；这里让老师给每个学生取个看得懂的名字，长期保存。
+const remarksKey = tid => `student_remarks:${tid}`;
+
 export default function StudentReminderScreen({navigation}) {
   const teacherId = useRef(getDeviceId()).current;
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [sel, setSel] = useState(null); // {id, name}
+  const remarksRef = useRef({}); // {studentId: 备注名}
   const [pieces, setPieces] = useState([]); // [{name, lines:[]}]
   const [freq, setFreq] = useState(45);
   const [saving, setSaving] = useState(false);
@@ -47,9 +53,26 @@ export default function StudentReminderScreen({navigation}) {
   const [manualCode, setManualCode] = useState('');
   const [manualName, setManualName] = useState('');
 
+  // 名字优先级：老师备注名 > 后台昵称 > id 尾号。
+  const displayName = s => {
+    const remark = remarksRef.current[s.user_id || s.id];
+    return (
+      remark ||
+      s.nickname ||
+      s.name ||
+      (s.user_id || s.id || '').slice(-6)
+    );
+  };
+
   useEffect(() => {
     let alive = true;
     (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(remarksKey(teacherId));
+        remarksRef.current = raw ? JSON.parse(raw) || {} : {};
+      } catch (e) {
+        remarksRef.current = {};
+      }
       try {
         await registerAccount(teacherId, 'teacher');
       } catch (e) {}
@@ -59,7 +82,7 @@ export default function StudentReminderScreen({navigation}) {
           setStudents(
             r.students.map(s => ({
               id: s.user_id,
-              name: s.nickname || s.user_id.slice(-6),
+              name: displayName(s),
             })),
           );
         }
@@ -69,7 +92,40 @@ export default function StudentReminderScreen({navigation}) {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherId]);
+
+  // 保存/更新某学生的备注名（本地长期保存 + 立即刷新界面）。
+  const setRemark = (studentId, name) => {
+    const clean = (name || '').trim();
+    const map = {...remarksRef.current};
+    if (clean) map[studentId] = clean;
+    else delete map[studentId];
+    remarksRef.current = map;
+    AsyncStorage.setItem(remarksKey(teacherId), JSON.stringify(map)).catch(() => {});
+    setStudents(prev =>
+      prev.map(s => (s.id === studentId ? {...s, name: clean || s.id.slice(-6)} : s)),
+    );
+    setSel(prev =>
+      prev && prev.id === studentId ? {...prev, name: clean || prev.id.slice(-6)} : prev,
+    );
+  };
+
+  const renameStudent = stu => {
+    Alert.prompt(
+      '备注名',
+      '给这个学生起个看得懂的名字（如：小明）',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '保存',
+          onPress: text => setRemark(stu.id, text),
+        },
+      ],
+      'plain-text',
+      remarksRef.current[stu.id] || '',
+    );
+  };
 
   const selectStudent = async stu => {
     setSel(stu);
@@ -175,6 +231,7 @@ export default function StudentReminderScreen({navigation}) {
     setStudents(prev =>
       prev.find(s => s.id === code) ? prev : [stu, ...prev],
     );
+    if (manualName.trim()) setRemark(code, manualName.trim());
     setManualOpen(false);
     setManualCode('');
     setManualName('');
@@ -243,7 +300,11 @@ export default function StudentReminderScreen({navigation}) {
               <Text style={styles.emptyHint}>
                 还没有学生入班。让学生在「AI 陪练模式」里复制学生码，用上面「＋ 学生码」录入即可。
               </Text>
-            ) : null}
+            ) : (
+              <Text style={styles.emptyHint}>
+                显示的是名字看不懂？部分学生没设昵称，选中后点「✎ 备注名」给 TA 起个名字。
+              </Text>
+            )}
 
             {sel ? (
               loadingStudent ? (
@@ -252,6 +313,16 @@ export default function StudentReminderScreen({navigation}) {
                 </View>
               ) : (
                 <>
+                  {/* 已选学生 + 备注名 */}
+                  <View style={styles.selRow}>
+                    <Text style={styles.selName} numberOfLines={1}>
+                      当前学生：{sel.name}
+                    </Text>
+                    <TouchableOpacity onPress={() => renameStudent(sel)} activeOpacity={0.8}>
+                      <Text style={styles.renameBtn}>✎ 备注名</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {/* 播报频率 */}
                   <View style={styles.freqCard}>
                     <Text style={styles.freqLabel}>播报频率（每 {freq} 秒左右一次）</Text>
@@ -453,11 +524,19 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 6,
   },
+  selRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  selName: {flex: 1, fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginRight: 10},
+  renameBtn: {fontSize: 13, fontWeight: '700', color: Colors.pinkPrimary},
   freqCard: {
     backgroundColor: Colors.white,
     borderRadius: 14,
     padding: 14,
-    marginTop: 14,
+    marginTop: 10,
     marginBottom: 6,
   },
   freqLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},

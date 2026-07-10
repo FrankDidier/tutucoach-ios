@@ -1,6 +1,7 @@
 #import "TutuDetectorModule.h"
 #import "TutuDetectorEngine.h"
 #import <AVFoundation/AVFoundation.h>
+#import <UIKit/UIKit.h>
 #import <CommonCrypto/CommonCrypto.h>
 
 // 兔兔教练 手型检测原生模块（iOS）。
@@ -40,6 +41,14 @@ RCT_EXPORT_METHOD(reactivateAudioSession) {
                options:AVAudioSessionCategoryOptionMixWithOthers
                  error:&err];
   [session setActive:YES error:&err];
+}
+
+// 防止自动锁屏：进入「检测 / AI 陪练」模式时置 YES，退出时置 NO。
+// 平常在 App 里仍会正常按系统设置锁屏（离开这些页面会还原）。
+RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [UIApplication sharedApplication].idleTimerDisabled = on;
+  });
 }
 
 #pragma mark - 原生语音播报（AVSpeechSynthesizer）

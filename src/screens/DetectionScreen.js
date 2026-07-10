@@ -19,7 +19,12 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {syncPractice, getMembership} from '../services/account';
 import {requestSummary, fetchCoaches} from '../services/coach';
-import {speak, stop as stopSpeak, prewarm as prewarmTts} from '../services/voice';
+import {
+  speak,
+  stop as stopSpeak,
+  prewarm as prewarmTts,
+  setKeepAwake,
+} from '../services/voice';
 import {
   getSelectedCoachId,
   profileById,
@@ -234,6 +239,10 @@ const DetectionScreen = ({navigation, route}) => {
     try {
       prewarmTts();
     } catch (e) {}
+    // 检测期间不自动锁屏（返回时还原）。
+    try {
+      setKeepAwake(true);
+    } catch (e) {}
     // 进入检测页时查询相机授权状态：被拒/受限则提前显示「去设置」引导。
     (async () => {
       try {
@@ -250,6 +259,9 @@ const DetectionScreen = ({navigation, route}) => {
       if (tickTimer.current) clearInterval(tickTimer.current);
       stopSpeak();
       stopAlarm();
+      try {
+        setKeepAwake(false);
+      } catch (e) {}
     };
   }, []);
 

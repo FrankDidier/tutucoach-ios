@@ -19,10 +19,24 @@ const IDLE_ACTIONS = ['happy', 'celebrate', 'think'];
 const IDLE_MIN_MS = 5000;
 const IDLE_MAX_MS = 10000;
 
-export default function RabbitMascot({style, talking}) {
-  const [action, setActionState] = useState('stand');
+// 单帧：只在自己「是否可见」变化时才重渲染，避免每帧把整套帧全部 reconcile（更省、更顺）。
+const Frame = React.memo(function Frame({src, visible}) {
+  return (
+    <Image
+      source={src}
+      resizeMode="contain"
+      fadeDuration={0}
+      style={[StyleSheet.absoluteFill, {opacity: visible ? 1 : 0}]}
+    />
+  );
+});
+
+export default function RabbitMascot({style, talking, loopAction}) {
+  // loopAction：固定循环播放某个动作（如「练琴」页固定播庆祝），忽略待机/说话/随机逻辑。
+  const initial = loopAction || 'stand';
+  const [action, setActionState] = useState(initial);
   const [frameIdx, setFrameIdx] = useState(0);
-  const stateRef = useRef({a: 'stand', i: 0, oneShot: false});
+  const stateRef = useRef({a: initial, i: 0, oneShot: false});
   const tickRef = useRef(null);
   const idleRef = useRef(null);
   const talkingRef = useRef(false);
@@ -56,7 +70,9 @@ export default function RabbitMascot({style, talking}) {
       const frames = RABBIT_FRAMES[s.a] || RABBIT_FRAMES.stand;
       let ni = s.i + 1;
       if (ni >= frames.length) {
-        if (s.oneShot) {
+        if (loopAction) {
+          ni = 0; // 固定动作：一直循环
+        } else if (s.oneShot) {
           // 一次性动作播完 → 回到待机并重新排下一次随机动作。
           stateRef.current = {a: 'stand', i: 0, oneShot: false};
           setActionState('stand');
@@ -69,7 +85,7 @@ export default function RabbitMascot({style, talking}) {
       stateRef.current = {...s, i: ni};
       setFrameIdx(ni);
     }, FRAME_MS);
-    scheduleIdleAction();
+    if (!loopAction) scheduleIdleAction();
     return () => {
       aliveRef.current = false;
       if (tickRef.current) clearInterval(tickRef.current);
@@ -79,6 +95,7 @@ export default function RabbitMascot({style, talking}) {
   }, []);
 
   useEffect(() => {
+    if (loopAction) return; // 固定动作模式：忽略说话/待机切换
     talkingRef.current = !!talking;
     if (talking) {
       if (idleRef.current) clearTimeout(idleRef.current);
@@ -98,13 +115,7 @@ export default function RabbitMascot({style, talking}) {
   return (
     <View style={style}>
       {frames.map((src, i) => (
-        <Image
-          key={`${action}-${i}`}
-          source={src}
-          resizeMode="contain"
-          fadeDuration={0}
-          style={[StyleSheet.absoluteFill, {opacity: i === shown ? 1 : 0}]}
-        />
+        <Frame key={`${action}-${i}`} src={src} visible={i === shown} />
       ))}
     </View>
   );
