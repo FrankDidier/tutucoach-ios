@@ -186,8 +186,12 @@ const WelcomeScreen = ({navigation}) => {
               <View style={styles.bubbleTail} />
             </Animated.View>
 
-            <TouchableOpacity activeOpacity={0.9} onPress={handleTap}>
-              <Animated.View style={{transform: [{scale: bounce}]}}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleTap}
+              style={styles.rabbitTouch}>
+              <Animated.View
+                style={[styles.rabbitAnimWrap, {transform: [{scale: bounce}]}]}>
                 <RabbitMascot talking={talking} style={styles.rabbitImg} />
               </Animated.View>
             </TouchableOpacity>
@@ -309,10 +313,18 @@ const styles = StyleSheet.create({
     borderTopColor: '#fff',
     marginTop: -1,
   },
+  rabbitTouch: {
+    alignSelf: 'center',
+  },
+  rabbitAnimWrap: {
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
   rabbitImg: {
     width: 320,
     height: 384,
     zIndex: 1,
+    alignSelf: 'center',
   },
   welcomeCaption: {
     marginTop: 28,
