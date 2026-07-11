@@ -21,12 +21,17 @@ const IDLE_MAX_MS = 10000;
 
 // 单帧：只在自己「是否可见」变化时才重渲染，避免每帧把整套帧全部 reconcile（更省、更顺）。
 const Frame = React.memo(function Frame({src, visible}) {
+  // 关键：iOS(Fabric) 上把 resizeMode 作为「prop」传、同时又用 absoluteFill 铺满时，
+  // contain 有时不生效 → 图片按原始尺寸左上角对齐，导致兔子整体偏左。
+  // 改为在「style 里」写 resizeMode 并显式给满宽高，contain 才会把兔子缩放并居中。
   return (
     <Image
       source={src}
-      resizeMode="contain"
       fadeDuration={0}
-      style={[StyleSheet.absoluteFill, {opacity: visible ? 1 : 0}]}
+      style={[
+        StyleSheet.absoluteFill,
+        {width: '100%', height: '100%', resizeMode: 'contain', opacity: visible ? 1 : 0},
+      ]}
     />
   );
 });
