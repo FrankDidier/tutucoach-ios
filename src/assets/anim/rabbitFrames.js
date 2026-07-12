@@ -1,4 +1,4 @@
-// AUTO-GENERATED. 兔子逐帧动画资源索引（对应安卓 assets/anim 的 5 个动作 webp）。
+// AUTO-GENERATED. 兔子逐帧动画资源索引（从安卓 480x552 webp 提取，20fps）。
 
 const stand = [
   require('./frames/stand/000.png'),
@@ -61,6 +61,26 @@ const stand = [
   require('./frames/stand/057.png'),
   require('./frames/stand/058.png'),
   require('./frames/stand/059.png'),
+  require('./frames/stand/060.png'),
+  require('./frames/stand/061.png'),
+  require('./frames/stand/062.png'),
+  require('./frames/stand/063.png'),
+  require('./frames/stand/064.png'),
+  require('./frames/stand/065.png'),
+  require('./frames/stand/066.png'),
+  require('./frames/stand/067.png'),
+  require('./frames/stand/068.png'),
+  require('./frames/stand/069.png'),
+  require('./frames/stand/070.png'),
+  require('./frames/stand/071.png'),
+  require('./frames/stand/072.png'),
+  require('./frames/stand/073.png'),
+  require('./frames/stand/074.png'),
+  require('./frames/stand/075.png'),
+  require('./frames/stand/076.png'),
+  require('./frames/stand/077.png'),
+  require('./frames/stand/078.png'),
+  require('./frames/stand/079.png'),
 ];
 
 const talk = [
@@ -134,6 +154,29 @@ const talk = [
   require('./frames/talk/067.png'),
   require('./frames/talk/068.png'),
   require('./frames/talk/069.png'),
+  require('./frames/talk/070.png'),
+  require('./frames/talk/071.png'),
+  require('./frames/talk/072.png'),
+  require('./frames/talk/073.png'),
+  require('./frames/talk/074.png'),
+  require('./frames/talk/075.png'),
+  require('./frames/talk/076.png'),
+  require('./frames/talk/077.png'),
+  require('./frames/talk/078.png'),
+  require('./frames/talk/079.png'),
+  require('./frames/talk/080.png'),
+  require('./frames/talk/081.png'),
+  require('./frames/talk/082.png'),
+  require('./frames/talk/083.png'),
+  require('./frames/talk/084.png'),
+  require('./frames/talk/085.png'),
+  require('./frames/talk/086.png'),
+  require('./frames/talk/087.png'),
+  require('./frames/talk/088.png'),
+  require('./frames/talk/089.png'),
+  require('./frames/talk/090.png'),
+  require('./frames/talk/091.png'),
+  require('./frames/talk/092.png'),
 ];
 
 const happy = [
@@ -167,6 +210,16 @@ const happy = [
   require('./frames/happy/027.png'),
   require('./frames/happy/028.png'),
   require('./frames/happy/029.png'),
+  require('./frames/happy/030.png'),
+  require('./frames/happy/031.png'),
+  require('./frames/happy/032.png'),
+  require('./frames/happy/033.png'),
+  require('./frames/happy/034.png'),
+  require('./frames/happy/035.png'),
+  require('./frames/happy/036.png'),
+  require('./frames/happy/037.png'),
+  require('./frames/happy/038.png'),
+  require('./frames/happy/039.png'),
 ];
 
 const celebrate = [
@@ -194,6 +247,14 @@ const celebrate = [
   require('./frames/celebrate/021.png'),
   require('./frames/celebrate/022.png'),
   require('./frames/celebrate/023.png'),
+  require('./frames/celebrate/024.png'),
+  require('./frames/celebrate/025.png'),
+  require('./frames/celebrate/026.png'),
+  require('./frames/celebrate/027.png'),
+  require('./frames/celebrate/028.png'),
+  require('./frames/celebrate/029.png'),
+  require('./frames/celebrate/030.png'),
+  require('./frames/celebrate/031.png'),
 ];
 
 const think = [
@@ -237,8 +298,20 @@ const think = [
   require('./frames/think/037.png'),
   require('./frames/think/038.png'),
   require('./frames/think/039.png'),
+  require('./frames/think/040.png'),
+  require('./frames/think/041.png'),
+  require('./frames/think/042.png'),
+  require('./frames/think/043.png'),
+  require('./frames/think/044.png'),
+  require('./frames/think/045.png'),
+  require('./frames/think/046.png'),
+  require('./frames/think/047.png'),
+  require('./frames/think/048.png'),
+  require('./frames/think/049.png'),
+  require('./frames/think/050.png'),
+  require('./frames/think/051.png'),
+  require('./frames/think/052.png'),
 ];
 
 export const RABBIT_FRAMES = {stand, talk, happy, celebrate, think};
-export const RABBIT_FPS = 15;
-export default RABBIT_FRAMES;
+export const RABBIT_FPS = 20;

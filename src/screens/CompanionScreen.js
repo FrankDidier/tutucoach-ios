@@ -73,6 +73,7 @@ export default function CompanionScreen({navigation}) {
   const busyRef = useRef(false);
   const pausedRef = useRef(false);
   const typingRef = useRef(false);
+  const typingIdleTimer = useRef(null);
   const mutedRef = useRef(false);
   const greetedRef = useRef(false);
   const nextContextualRef = useRef(false);
@@ -158,6 +159,7 @@ export default function CompanionScreen({navigation}) {
       aliveRef.current = false;
       pausedRef.current = true;
       if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
+      if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
       try {
         stopSpeak();
       } catch (e) {}
@@ -297,6 +299,27 @@ export default function CompanionScreen({navigation}) {
 
   const studentNameSafe = () => '同学';
 
+  // 「正在打字」只表示学生此刻在操作输入框，用来避免主动播报打断打字。
+  // 关键修复：以前是「输入框里只要还有字」就一直算在打字，结果学生打了半句、
+  // 收起键盘去练琴（字还留在框里），typingRef 就永远 true，主动播报被彻底卡死，
+  // 看起来「像死机」。现在改为：每次操作输入框刷新一个 6s 的空闲计时，
+  // 停手 6s（或收起键盘）就自动解除，主动播报恢复；绝不会永久卡住。
+  const TYPING_IDLE_MS = 6000;
+  const markTyping = () => {
+    typingRef.current = true;
+    if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
+    typingIdleTimer.current = setTimeout(() => {
+      typingRef.current = false;
+    }, TYPING_IDLE_MS);
+  };
+  const clearTyping = () => {
+    typingRef.current = false;
+    if (typingIdleTimer.current) {
+      clearTimeout(typingIdleTimer.current);
+      typingIdleTimer.current = null;
+    }
+  };
+
   const scheduleProactive = () => {
     if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
     const base = Math.max(10, freqRef.current) * 1000;
@@ -368,7 +391,7 @@ export default function CompanionScreen({navigation}) {
     if (!text) return;
     setInput('');
     Keyboard.dismiss();
-    typingRef.current = false;
+    clearTyping();
     addUserBubble(text);
     pushHistory('user', text);
     setSending(true);
@@ -477,13 +500,14 @@ export default function CompanionScreen({navigation}) {
             value={input}
             onChangeText={t => {
               setInput(t);
-              typingRef.current = t.length > 0;
+              markTyping();
             }}
             onFocus={() => {
-              typingRef.current = true;
+              markTyping();
             }}
             onBlur={() => {
-              typingRef.current = input.length > 0;
+              // 收起键盘＝此刻不在打字：立即解除，主动播报可以恢复（草稿仍保留在框里）。
+              clearTyping();
             }}
             placeholder="和 TA 聊聊天…"
             placeholderTextColor="#999"

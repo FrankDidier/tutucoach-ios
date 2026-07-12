@@ -262,11 +262,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 12,
   },
   mascotBlock: {
     width: '100%',
-    minHeight: 400,
+    minHeight: 452,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -321,8 +321,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   rabbitImg: {
-    width: 320,
-    height: 384,
+    // 画面比例与帧一致(480x552=0.87)，contain 正好铺满、不留边；放大到接近安卓的满宽观感。
+    width: 372,
+    height: 428,
     zIndex: 1,
     alignSelf: 'center',
   },

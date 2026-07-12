@@ -22,6 +22,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {registerAccount} from '../services/account';
 import {fetchStudents} from '../services/teacher';
+import {listStudents} from '../services/students';
 import {fetchReminders, savePieces} from '../services/companionChat';
 
 const FREQ_MIN = 10;
@@ -37,6 +38,7 @@ export default function StudentReminderScreen({navigation}) {
   const [students, setStudents] = useState([]);
   const [sel, setSel] = useState(null); // {id, name}
   const remarksRef = useRef({}); // {studentId: 备注名}
+  const rosterRef = useRef({}); // {studentId(学生码): 班级备注名} —— 来自「学生录入」本地班级名单
   const [pieces, setPieces] = useState([]); // [{name, lines:[]}]
   const [freq, setFreq] = useState(45);
   const [saving, setSaving] = useState(false);
@@ -53,14 +55,15 @@ export default function StudentReminderScreen({navigation}) {
   const [manualCode, setManualCode] = useState('');
   const [manualName, setManualName] = useState('');
 
-  // 名字优先级：老师备注名 > 后台昵称 > id 尾号。
+  // 名字优先级：班级名单备注名(学生录入) > 老师备注名 > 后台昵称 > id 尾号。
   const displayName = s => {
-    const remark = remarksRef.current[s.user_id || s.id];
+    const id = s.user_id || s.id;
     return (
-      remark ||
+      rosterRef.current[id] ||
+      remarksRef.current[id] ||
       s.nickname ||
       s.name ||
-      (s.user_id || s.id || '').slice(-6)
+      (id || '').slice(-6)
     );
   };
 
@@ -73,21 +76,47 @@ export default function StudentReminderScreen({navigation}) {
       } catch (e) {
         remarksRef.current = {};
       }
+      // 先读「学生录入」的本地班级名单：这里老师已经给每个学生起了名字 + 学生码。
+      // 和安卓一致——点进来就直接按班级学生的备注名显示，无需再手动补备注。
+      let roster = [];
+      try {
+        roster = (await listStudents()) || [];
+      } catch (e) {
+        roster = [];
+      }
+      const rmap = {};
+      roster.forEach(s => {
+        if (s && s.studentId) rmap[s.studentId] = (s.name || '').trim();
+      });
+      rosterRef.current = rmap;
+
       try {
         await registerAccount(teacherId, 'teacher');
       } catch (e) {}
+
+      // 合并两个来源，按学生码去重：① 本地班级名单（有名字、可能学生还没打开过 App）
+      // ② 后台已入班学生。班级名单里的备注名优先，让老师一眼看懂。
+      const byId = {};
+      roster.forEach(s => {
+        if (!s || !s.studentId) return; // 没有学生码无法定向下发提醒，跳过
+        byId[s.studentId] = {
+          id: s.studentId,
+          name: (s.name || '').trim() || s.studentId.slice(-6),
+        };
+      });
       try {
         const r = await fetchStudents(teacherId);
-        if (alive && r && r.ok && Array.isArray(r.students)) {
-          setStudents(
-            r.students.map(s => ({
-              id: s.user_id,
-              name: displayName(s),
-            })),
-          );
+        if (r && r.ok && Array.isArray(r.students)) {
+          r.students.forEach(s => {
+            byId[s.user_id] = {id: s.user_id, name: displayName(s)};
+          });
         }
       } catch (e) {}
-      if (alive) setLoading(false);
+
+      if (alive) {
+        setStudents(Object.values(byId));
+        setLoading(false);
+      }
     })();
     return () => {
       alive = false;
@@ -298,11 +327,12 @@ export default function StudentReminderScreen({navigation}) {
             </View>
             {students.length === 0 ? (
               <Text style={styles.emptyHint}>
-                还没有学生入班。让学生在「AI 陪练模式」里复制学生码，用上面「＋ 学生码」录入即可。
+                还没有学生。到「我的 → 学生录入」把学生的姓名 + 学生码加进班级，这里就会直接按姓名显示；
+                或让学生在「AI 陪练模式」里复制学生码，用上面「＋ 学生码」快速录入。
               </Text>
             ) : (
               <Text style={styles.emptyHint}>
-                显示的是名字看不懂？部分学生没设昵称，选中后点「✎ 备注名」给 TA 起个名字。
+                名单来自「学生录入」的班级名字。看到 id 尾号的是还没录入班级的学生，选中后点「✎ 备注名」给 TA 起个名字即可。
               </Text>
             )}
 
