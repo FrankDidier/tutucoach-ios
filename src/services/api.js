@@ -12,14 +12,14 @@ function withTimeout(promise, ms) {
   ]);
 }
 
-export async function postJson(path, body, headers) {
+export async function postJson(path, body, headers, timeoutMs) {
   const res = await withTimeout(
     fetch(BASE_URL + path, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', ...(headers || {})},
       body: JSON.stringify(body || {}),
     }),
-    TIMEOUT_MS,
+    timeoutMs || TIMEOUT_MS,
   );
   return res.json();
 }

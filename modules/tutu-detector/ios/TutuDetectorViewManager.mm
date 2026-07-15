@@ -14,6 +14,7 @@ RCT_EXPORT_MODULE(TutuDetectorView);
 }
 
 RCT_EXPORT_VIEW_PROPERTY(active, BOOL)
+RCT_EXPORT_VIEW_PROPERTY(useFrontCamera, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(onResult, RCTBubblingEventBlock)
 
 @end

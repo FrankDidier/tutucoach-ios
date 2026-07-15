@@ -1,9 +1,11 @@
 // AI 教练角色 + 个性化总结（D），对应 Android 的 CoachRepository + CoachSummaryClient。
 import {getJson, postJson} from './api';
+import {getDeviceId} from './device';
 
-/** 拉取后台配置的全部 AI 角色（含 voiceId / systemPrompt）。 */
+/** 拉取后台配置的可见 AI 角色（含 voiceId / systemPrompt）。
+ * 带 viewer=本设备id：这样能额外看到「自己老师」设为私有且已审核通过的分身。 */
 export function fetchCoaches() {
-  return getJson('/api/coach/list');
+  return getJson('/api/coach/list', {viewer: getDeviceId()});
 }
 
 /**

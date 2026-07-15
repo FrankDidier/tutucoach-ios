@@ -32,6 +32,10 @@ import {
   setVoiceEnabled,
 } from '../services/coachPrefs';
 import {onPracticeError, onPracticeEnd, resetSession} from '../services/companion';
+import {
+  chat as companionChatApi,
+  fetchReminders,
+} from '../services/companionChat';
 import {ALARM_SOUNDS, alarmNameById} from '../utils/alarmSounds';
 import {playAlarmId, stopAlarm} from '../services/alarmPlayer';
 import {getItem, setItem} from '../services/storage';
@@ -42,6 +46,11 @@ import TutuDetector, {TutuDetectorView} from 'tutu-detector';
 
 const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
 const ENCOURAGE_INTERVAL_MS = 25000; // 对应 aiTimer 鼓励间隔 ~25s
+// #3 智能 AI 陪聊（检测模式）：主动语句按「陪练频率」触发；固定错误提示优先，
+// 因此主动语句会避开刚播过错误的窗口，避免抢话。
+const PROACTIVE_DEFAULT_MS = 45000; // 陪练默认频率，进入时按老师设置的 freqSec 校正
+const PROACTIVE_ERROR_GUARD_MS = 6000; // 刚播过固定错误 6s 内不插入主动语句
+const AI_SUBTITLE_MS = 6000; // AI 主动语句字幕停留时长
 const ALARM_PERIOD_SEC = 3; // 对应免费版 monitorPeriod 默认 3 秒
 const ALARM_MATCH_TARGET = 70; // 周期匹配率门槛（%），低于则报警
 
@@ -133,6 +142,10 @@ const DetectionScreen = ({navigation, route}) => {
   // 相机预览是否已就绪：与安卓一致，进入页面相机即开（不必先点「启动」）。
   // 就绪前显示「相机预览」占位，就绪后隐藏，避免占位文字盖住实时画面。
   const [cameraReady, setCameraReady] = useState(false);
+  // #2 前/后置摄像头切换：默认后置；前置时画面镜像（像照镜子），左右手已在原生侧校正。
+  const [useFrontCamera, setUseFrontCamera] = useState(false);
+  // #3 智能 AI 主动语句字幕（只在 AI 陪练版显示；只语音+字幕，无聊天框）。
+  const [aiSubtitle, setAiSubtitle] = useState('');
 
   const sessionStart = useRef(0);
   const sessionMatchRate = useRef(0);
@@ -159,8 +172,15 @@ const DetectionScreen = ({navigation, route}) => {
   const matchTargetRef = useRef(ALARM_MATCH_TARGET);
   const lastHandSeenRef = useRef(0); // 最近一次检测到手的时刻
   const lastNoHandSpeakRef = useRef(0); // 最近一次「无手提醒」播报时刻
+  // #3 智能 AI 主动语句：定时器 + 频率 + 忙碌/错误优先 守卫。
+  const proactiveTimer = useRef(null);
+  const proactiveIntervalMsRef = useRef(PROACTIVE_DEFAULT_MS);
+  const proactiveBusyRef = useRef(false);
+  const lastErrorSpeakRef = useRef(0); // 最近一次「固定错误提示」播报时刻（用于错误优先）
+  const aiSubtitleTimer = useRef(null);
   // 组件是否仍挂载：用于阻止卸载/返回后到达的原生回调再 setState（配合原生侧守卫，杜绝闪退）。
   const aliveRef = useRef(true);
+  const detectingRef = useRef(false); // 供异步回调（智能语句）判断是否仍在检测中
 
   // 应用检测设置：写入运行期 refs + 原生角度阈值，可选持久化。
   const applySettings = async (next, persist) => {
@@ -226,6 +246,14 @@ const DetectionScreen = ({navigation, route}) => {
         const m = await getMembership(getDeviceId());
         if (alive && m && m.ok) setVip(!!m.is_vip);
       } catch (e) {}
+
+      // #3 智能 AI 主动语句频率：与「AI 陪练模式」一致——取老师给本学生设置的 freqSec。
+      try {
+        const rem = await fetchReminders(getDeviceId());
+        if (alive && rem && typeof rem.freqSec === 'number') {
+          proactiveIntervalMsRef.current = Math.max(15000, rem.freqSec * 1000);
+        }
+      } catch (e) {}
     })();
     return () => {
       alive = false;
@@ -256,7 +284,10 @@ const DetectionScreen = ({navigation, route}) => {
     })();
     return () => {
       aliveRef.current = false;
+      detectingRef.current = false;
       if (tickTimer.current) clearInterval(tickTimer.current);
+      if (proactiveTimer.current) clearInterval(proactiveTimer.current);
+      if (aiSubtitleTimer.current) clearTimeout(aiSubtitleTimer.current);
       stopSpeak();
       stopAlarm();
       try {
@@ -269,9 +300,14 @@ const DetectionScreen = ({navigation, route}) => {
   // 再配合原生 willMoveToWindow 的彻底清理，避免“进入检测后返回”闪退。
   const handleBack = () => {
     setDetecting(false);
+    detectingRef.current = false;
     if (tickTimer.current) {
       clearInterval(tickTimer.current);
       tickTimer.current = null;
+    }
+    if (proactiveTimer.current) {
+      clearInterval(proactiveTimer.current);
+      proactiveTimer.current = null;
     }
     stopSpeak();
     stopAlarm();
@@ -290,6 +326,57 @@ const DetectionScreen = ({navigation, route}) => {
       pitch: p.pitch || 1.0,
       voiceId: p.voiceId || 0,
     });
+  };
+
+  // #3 智能 AI 主动语句（检测模式）：按陪练频率触发；固定错误优先，因此会避开
+  // 刚播过错误的窗口，也不与其它播报抢话。内容为「结合当前正确率/主要问题」的通用
+  // 鼓励或点评（不涉及曲目重点），只语音 + 字幕，无聊天框。
+  const runProactive = async () => {
+    if (!premium || !voiceOn || !aliveRef.current || !detectingRef.current) return;
+    if (proactiveBusyRef.current) return;
+    const now = Date.now();
+    if (now - lastErrorSpeakRef.current < PROACTIVE_ERROR_GUARD_MS) return; // 错误优先
+    if (now - lastSpeakRef.current < 2500) return; // 避免与其它播报抢话
+    proactiveBusyRef.current = true;
+    try {
+      const rate = Math.round(sessionMatchRate.current || 0);
+      const ec = errorCountsRef.current;
+      const entries = Object.entries(ec)
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+      const mainErr = entries.length ? entries[0][0] : '';
+      const situation = mainErr
+        ? `手型检测练琴中，当前整体正确率约${rate}%，最近较多出现「${mainErr}」`
+        : `手型检测练琴中，当前整体正确率约${rate}%，手型基本正确`;
+      const r = await companionChatApi(
+        coachId,
+        '同学',
+        [],
+        'proactive',
+        '',
+        situation,
+      );
+      if (!aliveRef.current || !detectingRef.current) return;
+      const text = ((r && r.text) || '').trim();
+      // 再次错误优先：等 AI 回来的这几秒里若刚播过错误，就放弃这条，避免抢话
+      if (text && Date.now() - lastErrorSpeakRef.current >= PROACTIVE_ERROR_GUARD_MS) {
+        const p = profileRef.current || {};
+        lastSpeakRef.current = Date.now();
+        speak(text, {
+          rate: p.speechRate || 1.0,
+          pitch: p.pitch || 1.0,
+          voiceId: p.voiceId || 0,
+        });
+        setAiSubtitle(text);
+        if (aiSubtitleTimer.current) clearTimeout(aiSubtitleTimer.current);
+        aiSubtitleTimer.current = setTimeout(() => {
+          if (aliveRef.current) setAiSubtitle('');
+        }, AI_SUBTITLE_MS);
+      }
+    } catch (e) {
+    } finally {
+      proactiveBusyRef.current = false;
+    }
   };
 
   const onDetectorResult = e => {
@@ -377,24 +464,15 @@ const DetectionScreen = ({navigation, route}) => {
         const belowTarget = periodRate < matchTargetRef.current;
         const errEntries = Object.entries(aiPeriodErrRef.current);
         if (belowTarget && errEntries.length) {
-          // 选累计帧数最多的主导错误播报（对应安卓「周期主导错误」）。
+          // #3 固定错误提示：直接播报「左手塌掌 / 右手扁指」等 APP 内置 4 字提示
+          //（不再用老师可编辑的纠错模板）。并记录时刻，用于「错误优先于智能陪聊」。
           errEntries.sort((a, b) => b[1] - a[1]);
           const dominant = errEntries[0][0];
-          const tpl =
-            p.errorTemplates && p.errorTemplates.length
-              ? pick(p.errorTemplates)
-              : '注意，%s需要纠正';
-          coachSpeak(tpl.replace('%s', dominant));
-        } else if (
-          total > 0 &&
-          !errEntries.length &&
-          nowAi - lastEncourageRef.current > ENCOURAGE_INTERVAL_MS
-        ) {
-          lastEncourageRef.current = nowAi;
-          if (p.encouragements && p.encouragements.length) {
-            coachSpeak(pick(p.encouragements));
-          }
+          coachSpeak(dominant);
+          lastErrorSpeakRef.current = nowAi;
         }
+        // 通用鼓励/点评改由「智能 AI 主动语句」承担（见 proactive 定时器），此处不再本地播报，
+        // 避免和智能语句重复/抢话。
         aiPeriodStartRef.current = nowAi;
         aiPeriodMatchRef.current = 0;
         aiPeriodMismatchRef.current = 0;
@@ -496,7 +574,17 @@ const DetectionScreen = ({navigation, route}) => {
       aiPeriodErrRef.current = {};
       lastHandSeenRef.current = Date.now();
       lastNoHandSpeakRef.current = 0;
+      lastErrorSpeakRef.current = 0;
       setDetecting(true);
+      detectingRef.current = true;
+      // #3 启动智能 AI 主动语句定时器（仅 AI 陪练版）。
+      if (premium) {
+        if (proactiveTimer.current) clearInterval(proactiveTimer.current);
+        proactiveTimer.current = setInterval(
+          runProactive,
+          proactiveIntervalMsRef.current,
+        );
+      }
       tickTimer.current = setInterval(() => {
         setElapsedSec(Math.floor((Date.now() - sessionStart.current) / 1000));
         // 免费版周期报警：每 ALARM_PERIOD_SEC 秒评估周期匹配率，过低则播放铃声。
@@ -520,10 +608,16 @@ const DetectionScreen = ({navigation, route}) => {
       return;
     }
     setDetecting(false);
+    detectingRef.current = false;
     if (tickTimer.current) {
       clearInterval(tickTimer.current);
       tickTimer.current = null;
     }
+    if (proactiveTimer.current) {
+      clearInterval(proactiveTimer.current);
+      proactiveTimer.current = null;
+    }
+    setAiSubtitle('');
     stopSpeak();
     stopAlarm();
     const minutes = Math.max(0, (Date.now() - sessionStart.current) / 60000);
@@ -681,11 +775,22 @@ const DetectionScreen = ({navigation, route}) => {
               <TutuDetectorView
                 style={StyleSheet.absoluteFill}
                 active={detecting}
+                useFrontCamera={useFrontCamera}
                 onResult={onDetectorResult}
               />
             ) : null}
             {!cameraReady && !cameraDenied ? (
               <Text style={styles.cameraPlaceholder}>相机预览</Text>
+            ) : null}
+            {!cameraDenied ? (
+              <TouchableOpacity
+                style={styles.camFlipBtn}
+                activeOpacity={0.85}
+                onPress={() => setUseFrontCamera(v => !v)}>
+                <Text style={styles.camFlipText}>
+                  {useFrontCamera ? '前置 ⇄' : '后置 ⇄'}
+                </Text>
+              </TouchableOpacity>
             ) : null}
             {cameraDenied ? (
               <View style={styles.permOverlay}>
@@ -706,6 +811,11 @@ const DetectionScreen = ({navigation, route}) => {
             {detecting && errorText && !cameraDenied ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{errorText}</Text>
+              </View>
+            ) : null}
+            {premium && aiSubtitle && !cameraDenied ? (
+              <View style={styles.aiSubtitleBanner}>
+                <Text style={styles.aiSubtitleText}>{aiSubtitle}</Text>
               </View>
             ) : null}
           </View>
@@ -1103,6 +1213,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
   },
+  camFlipBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  camFlipText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#fff',
+  },
   permOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -1194,6 +1318,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  aiSubtitleBanner: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 10,
+    backgroundColor: 'rgba(255,90,127,0.92)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  aiSubtitleText: {
+    color: '#fff',
+    fontSize: 13.5,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   statsPink: {
     fontSize: 13,

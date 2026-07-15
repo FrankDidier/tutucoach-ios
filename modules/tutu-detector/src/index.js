@@ -6,7 +6,7 @@ if (!TutuDetector && Platform.OS === 'ios') {
   console.warn('[tutu-detector] 原生模块未找到，请确认已 pod install 并重新构建 iOS。');
 }
 
-// 实时相机检测视图（iOS 原生）。props: active(bool), onResult(event), style。
+// 实时相机检测视图（iOS 原生）。props: active(bool), useFrontCamera(bool), onResult(event), style。
 export const TutuDetectorView =
   Platform.OS === 'ios' ? requireNativeComponent('TutuDetectorView') : null;
 

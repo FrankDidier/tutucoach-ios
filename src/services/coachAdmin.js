@@ -4,6 +4,7 @@
 import {BASE_URL} from './config';
 import {getItem, setItem} from './storage';
 import {getJson, postJson, postForm} from './api';
+import {getDeviceId} from './device';
 
 const K_TOKEN = 'admin_token';
 const K_ROLE = 'admin_role'; // 'admin' | 'teacher'
@@ -83,18 +84,22 @@ export async function hasValidToken() {
   }
 }
 
-/** 拉取全部角色（含未启用，用于教师端编辑）。 */
+/** 拉取「本设备（老师）名下 + 公开内置」角色。owner 模式：能看到自己建的（含待审核/被驳回）。 */
 export async function listAllCoaches() {
   try {
-    return await getJson('/api/coach/list', {all: 1});
+    return await getJson('/api/coach/list', {owner: getDeviceId()});
   } catch (e) {
     return {ok: false};
   }
 }
 
-/** 新建/更新一个 AI 分身（说话逻辑 / 人设）。coach: {id?, name, systemPrompt, ...}。 */
+/**
+ * 新建/更新一个 AI 分身（#1 归属+审核）。coach: {id?, name, systemPrompt, greeting, visibility?, ...}。
+ * App 端一律带 ownerId=本设备id：新建/修改都会进入「待管理员审核」，审核通过后学生端才生效。
+ */
 export async function saveCoach(coach) {
-  return postJson('/api/coach/save', coach, await authHeader());
+  const payload = {...coach, ownerId: getDeviceId()};
+  return postJson('/api/coach/save', payload, await authHeader());
 }
 
 /** 删除自定义分身（内置不可删）。 */

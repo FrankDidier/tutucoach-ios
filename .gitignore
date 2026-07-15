@@ -86,3 +86,4 @@ signing.env
 .env.*
 ios/build_device/
 build_signing/
+ios/build_verify/

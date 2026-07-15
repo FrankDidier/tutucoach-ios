@@ -24,8 +24,8 @@ import {
   uploadAvatar,
   cloneVoice,
   absAvatarUrl,
-  getAuthInfo,
 } from '../services/coachAdmin';
+import {getDeviceId} from '../services/device';
 import {
   isRecorderAvailable,
   startRecording,
@@ -33,86 +33,74 @@ import {
   cancelRecording,
 } from '../services/recorder';
 
-const STYLE_OPTIONS = [
-  {key: 'ENCOURAGING', label: '鼓励型'},
-  {key: 'STRICT', label: '严格型'},
-  {key: 'PLAYFUL', label: '活泼型'},
-];
-
-function linesToText(arr) {
-  return Array.isArray(arr) ? arr.join('\n') : '';
-}
-function textToLines(t) {
-  return (t || '')
-    .split('\n')
-    .map(s => s.trim())
-    .filter(Boolean);
-}
+// 人设「懒人框架」示例：一键填入，老师照着改即可。
+const PERSONA_EXAMPLE =
+  '身份：教龄15年的钢琴老师\n' +
+  '性格：温柔耐心，但对手型要求严格\n' +
+  '说话风格：轻声细语、爱用鼓励的话\n' +
+  '口头禅：我们慢慢来\n' +
+  '对学生的态度：先肯定再纠正，从不凶';
 
 function emptyDraft() {
   return {
     id: '',
     name: '新分身',
-    style: 'ENCOURAGING',
     systemPrompt: '',
     greeting: '你好，准备好练琴了吗？',
-    encouragements: '',
-    errorTemplates: '',
-    noHandReminders: '',
-    celebrations: '',
     voiceId: 0,
     avatarUrl: '',
+    visibility: 'private',
+    status: '',
+    reviewNote: '',
+    ownerId: '',
   };
 }
 
+// 把后台返回的角色转成草稿；若有「待审核修改草稿」(pending) 则优先显示草稿内容，
+// 让老师看到自己提交的是什么（学生端仍是上一版已通过的）。
 function coachToDraft(c) {
+  const p = c.pending || null; // snake_case 草稿
+  const pick = (snake, camel, dft) =>
+    p && p[snake] != null
+      ? p[snake]
+      : c[camel] != null
+      ? c[camel]
+      : dft;
   return {
     id: c.id || '',
-    name: c.name || '',
-    style: c.style || 'ENCOURAGING',
-    systemPrompt: c.systemPrompt || '',
-    greeting: c.greeting || '你好，准备好练琴了吗？',
-    encouragements: linesToText(c.encouragements),
-    errorTemplates: linesToText(c.errorTemplates),
-    noHandReminders: linesToText(c.noHandReminders),
-    celebrations: linesToText(c.celebrations),
-    voiceId: c.voiceId || 0,
-    avatarUrl: c.avatarUrl || '',
+    name: pick('name', 'name', ''),
+    systemPrompt: pick('system_prompt', 'systemPrompt', ''),
+    greeting: pick('greeting', 'greeting', '你好，准备好练琴了吗？'),
+    voiceId: pick('voice_id', 'voiceId', 0),
+    avatarUrl: pick('avatar_url', 'avatarUrl', ''),
+    visibility: pick('visibility', 'visibility', 'private'),
+    status: c.status || 'approved',
+    reviewNote: c.reviewNote || '',
+    ownerId: c.ownerId || '',
   };
 }
 
 const AISettingsScreen = ({navigation}) => {
-  const [coaches, setCoaches] = useState([]);
+  const [coaches, setCoaches] = useState([]); // 仅本人名下（可编辑）
   const [draft, setDraft] = useState(emptyDraft());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
-  // 方案A：教师只能编辑自己绑定的那一个分身；管理员可编辑全部。
-  const [authInfo, setAuthInfo] = useState({role: 'admin', coachId: ''});
-  const isTeacher = authInfo.role === 'teacher';
   const recStartRef = useRef(0);
+  const deviceId = useRef(getDeviceId()).current;
 
-  const loadCoaches = async (selectId) => {
-    const info = await getAuthInfo();
-    setAuthInfo(info);
+  const loadCoaches = async selectId => {
     const r = await listAllCoaches();
     if (r && r.ok && Array.isArray(r.coaches)) {
-      // 教师：把列表收窄到自己绑定的那一个分身。
-      const list =
-        info.role === 'teacher'
-          ? r.coaches.filter(c => c.id === info.coachId)
-          : r.coaches;
-      setCoaches(list);
-      const pick =
-        (selectId && list.find(c => c.id === selectId)) || list[0];
+      // 只保留「本设备（本老师）名下」的分身作为可编辑列表；内置/他人角色由后台管理。
+      const mine = r.coaches.filter(c => c.ownerId && c.ownerId === deviceId);
+      setCoaches(mine);
+      const pick = (selectId && mine.find(c => c.id === selectId)) || mine[0];
       if (pick) {
         setDraft(coachToDraft(pick));
-      } else if (info.role === 'teacher') {
-        Alert.alert(
-          '未找到你的分身',
-          '当前口令没有可编辑的分身，可能已被管理员调整，请联系管理员。',
-        );
+      } else {
+        setDraft(emptyDraft()); // 还没有自己的分身：直接进入「新建」
       }
     }
     setLoading(false);
@@ -126,10 +114,7 @@ const AISettingsScreen = ({navigation}) => {
   const set = (k, v) => setDraft(prev => ({...prev, [k]: v}));
 
   const selectCoach = c => setDraft(coachToDraft(c));
-  const newCoach = () => {
-    if (isTeacher) return; // 教师不能新建分身
-    setDraft(emptyDraft());
-  };
+  const newCoach = () => setDraft(emptyDraft());
 
   const onSave = async () => {
     const name = draft.name.trim();
@@ -141,22 +126,28 @@ const AISettingsScreen = ({navigation}) => {
     try {
       const payload = {
         name,
-        style: draft.style,
         systemPrompt: draft.systemPrompt.trim(),
         greeting: draft.greeting.trim(),
-        encouragements: textToLines(draft.encouragements),
-        errorTemplates: textToLines(draft.errorTemplates),
-        noHandReminders: textToLines(draft.noHandReminders),
-        celebrations: textToLines(draft.celebrations),
+        visibility: draft.visibility || 'private',
         voiceId: draft.voiceId || 0,
       };
       if (draft.id) payload.id = draft.id;
       const r = await saveCoach(payload);
       if (r && r.ok && r.coach) {
-        Alert.alert('已保存', '分身设置已保存，学生端下次进入即生效。');
+        const pending = r.coach.status === 'pending';
+        Alert.alert(
+          pending ? '已提交审核' : '已保存',
+          pending
+            ? '分身已提交，管理员审核通过后学生端才会看到（1–3 个工作日）。审核期间学生使用上一版已通过的分身。'
+            : '分身设置已保存。',
+        );
         await loadCoaches(r.coach.id);
       } else if (r && r.error === 'unauthorized') {
         Alert.alert('未授权', '教师口令已失效，请返回重新登录。');
+      } else if (r && r.error === 'not_owner') {
+        Alert.alert('无法编辑', '该分身不属于你，只能编辑自己创建的分身。');
+      } else if (r && r.error === 'cannot_edit_builtin') {
+        Alert.alert('无法编辑', '内置/系统分身不可编辑，请点「＋ 新建」创建你自己的分身。');
       } else {
         Alert.alert('保存失败', (r && r.error) || '请稍后重试');
       }
@@ -219,7 +210,6 @@ const AISettingsScreen = ({navigation}) => {
       setRecording(true);
       return;
     }
-    // 停止并复刻
     setRecording(false);
     const dur = Date.now() - recStartRef.current;
     const r = await stopRecording();
@@ -266,6 +256,12 @@ const AISettingsScreen = ({navigation}) => {
     ? {uri: absAvatarUrl(draft.avatarUrl)}
     : Images.avatarRabbit;
 
+  const statusBadge = c => {
+    if (c.status === 'pending') return '审核中';
+    if (c.status === 'rejected') return '已驳回';
+    return '';
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
@@ -291,46 +287,65 @@ const AISettingsScreen = ({navigation}) => {
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            {/* 分身选择（教师：只显示自己的那一个，不可新建/切换其它） */}
-            {isTeacher ? (
-              <Text style={styles.sectionLabel}>我的分身（仅可编辑自己的）</Text>
-            ) : (
-              <>
-                <Text style={styles.sectionLabel}>选择分身</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipRow}>
-                  {coaches.map(c => {
-                    const active = c.id === draft.id;
-                    return (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={[styles.chip, active && styles.chipActive]}
-                        onPress={() => selectCoach(c)}
-                        activeOpacity={0.85}>
-                        <Text
-                          style={[
-                            styles.chipText,
-                            active && styles.chipTextActive,
-                          ]}
-                          numberOfLines={1}>
-                          {c.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            {/* 我的分身：可建多个；新建/修改都需管理员审核通过才对学生生效 */}
+            <Text style={styles.sectionLabel}>我的分身</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}>
+              {coaches.map(c => {
+                const active = c.id === draft.id;
+                const badge = statusBadge(c);
+                return (
                   <TouchableOpacity
-                    style={[styles.chip, styles.chipNew]}
-                    onPress={newCoach}
+                    key={c.id}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => selectCoach(c)}
                     activeOpacity={0.85}>
-                    <Text style={styles.chipNewText}>＋ 新建</Text>
+                    <Text
+                      style={[styles.chipText, active && styles.chipTextActive]}
+                      numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                    {badge ? (
+                      <Text
+                        style={[
+                          styles.chipBadge,
+                          c.status === 'rejected' && styles.chipBadgeRejected,
+                          active && styles.chipBadgeActive,
+                        ]}>
+                        {badge}
+                      </Text>
+                    ) : null}
                   </TouchableOpacity>
-                </ScrollView>
-              </>
-            )}
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.chip, styles.chipNew]}
+                onPress={newCoach}
+                activeOpacity={0.85}>
+                <Text style={styles.chipNewText}>＋ 新建</Text>
+              </TouchableOpacity>
+            </ScrollView>
 
-            {/* 陪练提示设置入口（对应安卓：并入本页的「陪练提示设置」） */}
+            {/* 审核状态提示 */}
+            {draft.id && draft.status === 'pending' ? (
+              <View style={styles.statusCardPending}>
+                <Text style={styles.statusText}>
+                  审核中：管理员通过后学生端才会看到本次改动（1–3 个工作日）。审核期间学生使用上一版。
+                </Text>
+              </View>
+            ) : null}
+            {draft.id && draft.status === 'rejected' ? (
+              <View style={styles.statusCardRejected}>
+                <Text style={styles.statusTextRejected}>
+                  已驳回{draft.reviewNote ? '：' + draft.reviewNote : ''}
+                  {'\n'}请修改后重新保存提交。
+                </Text>
+              </View>
+            ) : null}
+
+            {/* 陪练提示设置入口 */}
             <TouchableOpacity
               style={styles.reminderEntry}
               activeOpacity={0.9}
@@ -364,29 +379,7 @@ const AISettingsScreen = ({navigation}) => {
                   />
                 </View>
               </View>
-
-              {/* 风格 */}
-              <Text style={[styles.fieldLabel, {marginTop: 14}]}>说话风格</Text>
-              <View style={styles.styleRow}>
-                {STYLE_OPTIONS.map(s => {
-                  const active = s.key === draft.style;
-                  return (
-                    <TouchableOpacity
-                      key={s.key}
-                      style={[styles.styleItem, active && styles.styleItemActive]}
-                      onPress={() => set('style', s.key)}
-                      activeOpacity={0.85}>
-                      <Text
-                        style={[
-                          styles.styleText,
-                          active && styles.styleTextActive,
-                        ]}>
-                        {s.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <Text style={styles.avatarHint}>点头像上传照片；先保存分身，再上传头像/录音。</Text>
             </View>
 
             {/* 声音复刻 */}
@@ -412,19 +405,39 @@ const AISettingsScreen = ({navigation}) => {
               </TouchableOpacity>
             </View>
 
-            {/* 语音生效说明 */}
-            <View style={styles.noteCard}>
-              <Text style={styles.noteText}>
-                以下文案在学生使用「智能AI陪练（会员）」练习时由 AI 主动播报；
-                免费版只有提示音。修改保存后，学生端下次进入练习即生效。
+            {/* 可见范围（公开 / 私有） */}
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>可见范围</Text>
+              <Text style={styles.fieldHint}>
+                私有：仅你自己的学生能选到；公开：所有人可选。都需审核通过后生效。
               </Text>
+              <View style={styles.styleRow}>
+                {[
+                  {key: 'private', label: '私有（仅我的学生）'},
+                  {key: 'public', label: '公开（所有人）'},
+                ].map(o => {
+                  const active = draft.visibility === o.key;
+                  return (
+                    <TouchableOpacity
+                      key={o.key}
+                      style={[styles.styleItem, active && styles.styleItemActive]}
+                      onPress={() => set('visibility', o.key)}
+                      activeOpacity={0.85}>
+                      <Text
+                        style={[styles.styleText, active && styles.styleTextActive]}>
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
-            {/* 问候语 */}
+            {/* 开场问候语 */}
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>问候语（开场白）</Text>
+              <Text style={styles.fieldLabel}>开场问候语</Text>
               <Text style={styles.fieldHint}>
-                触发：学生点「启动」开始练习时，开场播报 1 次。
+                进入「AI 陪练模式」时，AI 先用这句话跟学生打招呼。
               </Text>
               <TextInput
                 style={styles.multiline}
@@ -436,82 +449,29 @@ const AISettingsScreen = ({navigation}) => {
               />
             </View>
 
-            {/* 人设 / 说话逻辑 */}
+            {/* 人设（重点：懒人框架引导） */}
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>分身人设（思考方式）</Text>
-              <Text style={styles.fieldHint}>
-                触发：仅用于练习「结束点评」——AI 按这个人设，把本次练习时长、
-                匹配率、主要问题组织成一段个性化点评。不影响练习中的实时播报。
-              </Text>
+              <View style={styles.personaHead}>
+                <Text style={styles.fieldLabel}>分身人设（决定 AI 的性格与说话方式）</Text>
+                <TouchableOpacity
+                  onPress={() => set('systemPrompt', PERSONA_EXAMPLE)}
+                  activeOpacity={0.7}>
+                  <Text style={styles.fillExample}>填入示例</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.guideBox}>
+                <Text style={styles.guideTitle}>照着填，越具体越像真人：</Text>
+                <Text style={styles.guideLine}>· 身份：教龄15年的钢琴老师</Text>
+                <Text style={styles.guideLine}>· 性格：温柔耐心，但对手型要求严格</Text>
+                <Text style={styles.guideLine}>· 说话风格：轻声细语、爱用鼓励的话</Text>
+                <Text style={styles.guideLine}>· 口头禅：我们慢慢来</Text>
+                <Text style={styles.guideLine}>· 对学生的态度：先肯定再纠正，从不凶</Text>
+              </View>
               <TextInput
-                style={styles.multiline}
+                style={[styles.multiline, {minHeight: 130}]}
                 value={draft.systemPrompt}
                 onChangeText={t => set('systemPrompt', t)}
-                placeholder="例如：你是一位温柔耐心的钢琴老师，先肯定再指出问题，多用鼓励的话。"
-                placeholderTextColor={Colors.textSecondary}
-                multiline
-              />
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>鼓励语（每行一句）</Text>
-              <Text style={styles.fieldHint}>
-                触发：练习中手型持续正确时，约每 25 秒随机播报一句（按上方
-                「AI 播报频率」节流）。
-              </Text>
-              <TextInput
-                style={styles.multiline}
-                value={draft.encouragements}
-                onChangeText={t => set('encouragements', t)}
-                placeholder={'手型保持得不错，继续保持。\n这一段弹得很稳，很好。'}
-                placeholderTextColor={Colors.textSecondary}
-                multiline
-              />
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>纠错语（每行一句，用 %s 代表错误点）</Text>
-              <Text style={styles.fieldHint}>
-                触发：检测到手型错误（如塌掌、扁指、勾指）时播报，%s 会自动替换成
-                具体错误名称。
-              </Text>
-              <TextInput
-                style={styles.multiline}
-                value={draft.errorTemplates}
-                onChangeText={t => set('errorTemplates', t)}
-                placeholder={'注意，%s需要纠正\n%s的问题出现较多，请注意'}
-                placeholderTextColor={Colors.textSecondary}
-                multiline
-              />
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>无手提醒（每行一句）</Text>
-              <Text style={styles.fieldHint}>
-                触发：练习中镜头里超过约 10 秒检测不到手时播报，提醒学生把手放回
-                画面（避免空练）。
-              </Text>
-              <TextInput
-                style={styles.multiline}
-                value={draft.noHandReminders}
-                onChangeText={t => set('noHandReminders', t)}
-                placeholder={'手呢？快放回琴键上来～\n看不到你的手啦，对准镜头哦。'}
-                placeholderTextColor={Colors.textSecondary}
-                multiline
-              />
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.fieldLabel}>庆祝语（每行一句）</Text>
-              <Text style={styles.fieldHint}>
-                触发：一次练习结束且表现优秀（整体匹配率 ≥ 85%）时，作为结束点评的
-                开头播报一句。
-              </Text>
-              <TextInput
-                style={styles.multiline}
-                value={draft.celebrations}
-                onChangeText={t => set('celebrations', t)}
-                placeholder={'太棒了，今天手型很标准！\n这次练得真好，给你点赞！'}
+                placeholder={PERSONA_EXAMPLE}
                 placeholderTextColor={Colors.textSecondary}
                 multiline
               />
@@ -522,7 +482,9 @@ const AISettingsScreen = ({navigation}) => {
               onPress={onSave}
               activeOpacity={0.88}
               disabled={saving}>
-              <Text style={styles.saveBtnText}>{saving ? '保存中…' : '保存分身'}</Text>
+              <Text style={styles.saveBtnText}>
+                {saving ? '保存中…' : draft.id ? '保存分身' : '创建分身'}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -549,13 +511,41 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: Colors.white,
     marginRight: 8,
-    maxWidth: 140,
+    maxWidth: 160,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   chipActive: {backgroundColor: Colors.pinkPrimary},
   chipText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
   chipTextActive: {color: '#fff'},
+  chipBadge: {
+    fontSize: 10,
+    color: '#fff',
+    backgroundColor: '#F5A623',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    marginLeft: 6,
+    overflow: 'hidden',
+  },
+  chipBadgeRejected: {backgroundColor: '#E5484D'},
+  chipBadgeActive: {opacity: 0.95},
   chipNew: {backgroundColor: Colors.pinkLight},
   chipNewText: {fontSize: 13, color: Colors.pinkDark, fontWeight: '700'},
+  statusCardPending: {
+    backgroundColor: '#FFF7E6',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+  },
+  statusText: {fontSize: 12, color: '#8A6D3B', lineHeight: 18},
+  statusCardRejected: {
+    backgroundColor: '#FDECEA',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+  },
+  statusTextRejected: {fontSize: 12, color: '#B4231C', lineHeight: 18},
   card: {
     backgroundColor: Colors.white,
     borderRadius: 16,
@@ -588,6 +578,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   avatarBadgeText: {color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1},
+  avatarHint: {fontSize: 11.5, color: Colors.textSecondary, marginTop: 10},
   nameCol: {flex: 1, marginLeft: 16},
   fieldLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
   fieldHint: {
@@ -596,13 +587,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
     lineHeight: 17,
   },
-  noteCard: {
-    backgroundColor: Colors.pinkLight,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 14,
-  },
-  noteText: {fontSize: 12, color: Colors.pinkDark, lineHeight: 18},
   hint: {fontSize: 12, color: Colors.textSecondary, marginTop: 6, lineHeight: 18},
   nameInput: {
     marginTop: 6,
@@ -613,16 +597,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
   },
-  styleRow: {flexDirection: 'row', gap: 10, marginTop: 8},
+  styleRow: {flexDirection: 'row', gap: 10, marginTop: 10},
   styleItem: {
     flex: 1,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: Colors.pinkBg,
     alignItems: 'center',
   },
   styleItemActive: {backgroundColor: Colors.pinkPrimary},
-  styleText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
+  styleText: {fontSize: 12.5, color: Colors.textPrimary, fontWeight: '600'},
   styleTextActive: {color: '#fff'},
   voiceBtn: {
     marginTop: 12,
@@ -634,6 +618,20 @@ const styles = StyleSheet.create({
   },
   voiceBtnRec: {backgroundColor: '#E5484D'},
   voiceBtnText: {color: '#fff', fontSize: 15, fontWeight: '700'},
+  personaHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  fillExample: {fontSize: 12.5, color: Colors.pinkPrimary, fontWeight: '700'},
+  guideBox: {
+    backgroundColor: Colors.pinkBg,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+  },
+  guideTitle: {fontSize: 12, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4},
+  guideLine: {fontSize: 12, color: Colors.textSecondary, lineHeight: 19},
   multiline: {
     marginTop: 8,
     minHeight: 90,
@@ -661,6 +659,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
+    marginTop: 14,
     marginBottom: 4,
   },
   reminderEntryTitle: {fontSize: 15, fontWeight: '700', color: '#fff'},

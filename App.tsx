@@ -20,6 +20,7 @@ import CheckinStatsScreen from './src/screens/CheckinStatsScreen';
 import StudentEntryScreen from './src/screens/StudentEntryScreen';
 import CompanionScreen from './src/screens/CompanionScreen';
 import StudentReminderScreen from './src/screens/StudentReminderScreen';
+import LessonPlanScreen from './src/screens/LessonPlanScreen';
 
 import {Colors} from './src/utils/colors';
 import {Images} from './src/assets/images';
@@ -116,6 +117,7 @@ function App(): React.JSX.Element {
         <Stack.Screen name="AISelect" component={AISelectScreen} />
         <Stack.Screen name="AISettings" component={AISettingsScreen} />
         <Stack.Screen name="StudentReminder" component={StudentReminderScreen} />
+        <Stack.Screen name="LessonPlan" component={LessonPlanScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
       </Stack.Navigator>

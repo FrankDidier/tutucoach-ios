@@ -12,7 +12,14 @@ import {postJson, getJson} from './api';
  * @param {string} [topic] proactive 时可围绕的重点（某条重要提示语 / 曲目重点）
  * @returns {Promise<{ok:boolean,text:string}>}
  */
-export async function chat(coachId, studentName, history, mode = 'chat', topic = '') {
+export async function chat(
+  coachId,
+  studentName,
+  history,
+  mode = 'chat',
+  topic = '',
+  situation = '',
+) {
   try {
     const body = {
       coach_id: coachId || '',
@@ -21,6 +28,7 @@ export async function chat(coachId, studentName, history, mode = 'chat', topic =
     };
     if (mode) body.mode = mode;
     if (topic) body.topic = topic;
+    if (situation) body.situation = situation;
     const resp = await postJson('/api/coach/chat', body);
     const text = (resp && resp.text) || '';
     return {ok: !!text, text};
@@ -60,6 +68,25 @@ export async function fetchReminders(studentId, teacherId) {
     }
   } catch (e) {}
   return out;
+}
+
+/**
+ * #4 曲目解读 + 教案：输入曲目名 + 作曲家，AI 生成解读与教案（约需 1 分钟）。
+ * @param {string} piece 曲目名
+ * @param {string} composer 作曲家（可空）
+ * @param {string} [existingFocus] 该曲目已设置的陪练重点（可空；带上则教案会据此调整呼应）
+ * @returns {Promise<{ok:boolean,text:string}>}
+ */
+export async function generateLessonPlan(piece, composer, existingFocus = '') {
+  try {
+    const body = {piece: piece || '', composer: composer || ''};
+    if (existingFocus) body.existing_focus = existingFocus;
+    // 服务端用大模型生成较长内容，最长约 100s；给 115s 客户端超时。
+    const resp = await postJson('/api/coach/lesson_plan', body, null, 115000);
+    return {ok: !!(resp && resp.ok && resp.text), text: (resp && resp.text) || ''};
+  } catch (e) {
+    return {ok: false, text: ''};
+  }
 }
 
 /** 老师端保存某学生的「按曲目分组」重点 + 播报频率。 */

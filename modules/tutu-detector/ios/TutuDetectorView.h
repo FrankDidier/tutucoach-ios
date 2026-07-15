@@ -8,6 +8,10 @@
 // 由 JS 控制：YES 开始检测，NO 停止。
 @property(nonatomic, assign) BOOL active;
 
+// 由 JS 控制：YES 用前置摄像头（画面镜像，像照镜子），NO 用后置（默认）。
+// 切换前置时预览与送入 MediaPipe 的画面都做水平镜像，保证「左手/右手」判断正确。
+@property(nonatomic, assign) BOOL useFrontCamera;
+
 // 每帧分析结果回调：{ handDetected, hasMatch, pass, matchRate(0..100), errors:[String] }
 @property(nonatomic, copy) RCTBubblingEventBlock onResult;
 

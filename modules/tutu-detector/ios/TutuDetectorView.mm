@@ -177,15 +177,8 @@
     _session.sessionPreset = AVCaptureSessionPresetPhoto;
   }
 
-  // 与安卓一致：后置摄像头（未镜像）。
-  AVCaptureDevice *device =
-      [AVCaptureDevice defaultDeviceWithDeviceType:AVCaptureDeviceTypeBuiltInWideAngleCamera
-                                         mediaType:AVMediaTypeVideo
-                                          position:AVCaptureDevicePositionBack];
-  if (device == nil) {
-    // 退而求其次：任意可用视频设备（极少数机型/系统下后置广角枚举失败）。
-    device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
-  }
+  // 默认后置（与安卓一致，未镜像）；useFrontCamera=YES 时用前置并镜像。
+  AVCaptureDevice *device = [self cameraDevice];
   if (device == nil) {
     [self emit:@{@"handDetected": @NO, @"hasMatch": @NO, @"pass": @NO,
                  @"matchRate": @0, @"errors": @[@"未找到摄像头设备"]}];
@@ -213,12 +206,11 @@
     [_session addOutput:_videoOutput];
   }
 
-  AVCaptureConnection *conn = [_videoOutput connectionWithMediaType:AVMediaTypeVideo];
-  if (conn.isVideoOrientationSupported) {
-    conn.videoOrientation = AVCaptureVideoOrientationPortrait;
-  }
+  // 送入 MediaPipe 的取样连接：仅设竖屏，不做连接级镜像（前置镜像交给 MPPImage 朝向）。
+  [self applyConnection:[_videoOutput connectionWithMediaType:AVMediaTypeVideo] mirror:NO];
 
   // 预览层（铺满，等比裁剪）。用 weakSelf 避免“点启动后立刻返回”时在已销毁视图上操作图层而崩溃。
+  BOOL front = _useFrontCamera;
   __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     TutuDetectorView *s = weakSelf;
@@ -226,12 +218,83 @@
     s.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:s.session];
     s.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
     s.previewLayer.frame = s.bounds;
+    [s applyConnection:s.previewLayer.connection mirror:front];
     [s.layer insertSublayer:s.previewLayer atIndex:0];
   });
 
   [self setupLiveLandmarker];
   // 仅在成功配置完成后才标记，失败路径会提前 return 并保持未配置，便于下次重试。
   _configured = YES;
+}
+
+// 按当前前/后置选择相机设备。
+- (AVCaptureDevice *)cameraDevice {
+  AVCaptureDevicePosition pos =
+      _useFrontCamera ? AVCaptureDevicePositionFront : AVCaptureDevicePositionBack;
+  AVCaptureDevice *device =
+      [AVCaptureDevice defaultDeviceWithDeviceType:AVCaptureDeviceTypeBuiltInWideAngleCamera
+                                         mediaType:AVMediaTypeVideo
+                                          position:pos];
+  if (device == nil) {
+    // 退而求其次：任意可用视频设备（极少数机型/系统下枚举失败）。
+    device = [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
+  }
+  return device;
+}
+
+// 设置连接的方向（竖屏）；mirror=YES 时水平镜像。
+// 注意：只对「预览连接」镜像；送入 MediaPipe 的取样缓冲不靠连接镜像（本机型管线不生效），
+// 而是在 captureOutput 里用 MPPImage 朝向 .leftMirrored 处理，二者保持一致，避免双重镜像。
+- (void)applyConnection:(AVCaptureConnection *)conn mirror:(BOOL)mirror {
+  if (conn == nil) return;
+  if (conn.isVideoOrientationSupported) {
+    conn.videoOrientation = AVCaptureVideoOrientationPortrait;
+  }
+  if (mirror && conn.isVideoMirroringSupported) {
+    conn.automaticallyAdjustsVideoMirroring = NO;
+    conn.videoMirrored = YES;
+  }
+}
+
+// JS 切换前/后置：热切换相机输入 + 更新镜像，无需重建整个会话。
+- (void)setUseFrontCamera:(BOOL)useFrontCamera {
+  if (_useFrontCamera == useFrontCamera) return;
+  _useFrontCamera = useFrontCamera;
+  if (_tornDown || !_configured || _session == nil) return;  // 首次配置时会读取该值
+  __weak TutuDetectorView *weakSelf = self;
+  dispatch_async(_cameraQueue, ^{
+    TutuDetectorView *s = weakSelf;
+    if (s == nil || s.tornDown) return;
+    [s switchCameraInput];
+  });
+}
+
+- (void)switchCameraInput {
+  if (_session == nil) return;
+  [_session beginConfiguration];
+  for (AVCaptureInput *in in [_session.inputs copy]) {
+    if ([in isKindOfClass:[AVCaptureDeviceInput class]]) {
+      [_session removeInput:in];
+    }
+  }
+  AVCaptureDevice *device = [self cameraDevice];
+  NSError *err = nil;
+  AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&err];
+  if (input && [_session canAddInput:input]) {
+    [_session addInput:input];
+  }
+  [self applyConnection:[_videoOutput connectionWithMediaType:AVMediaTypeVideo] mirror:NO];
+  [_session commitConfiguration];
+  // 预览连接的镜像必须在主线程更新。
+  BOOL front = _useFrontCamera;
+  __weak TutuDetectorView *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    TutuDetectorView *s = weakSelf;
+    if (s == nil || s.tornDown) return;
+    [s applyConnection:s.previewLayer.connection mirror:front];
+  });
+  // 相机几何变化，重置统计（模板不受影响，仍按已设侧比对）。
+  [[TutuDetectorEngine shared] startSession];
 }
 
 - (void)setupLiveLandmarker {
@@ -263,9 +326,12 @@
   // 仅在「启动」后跑 MediaPipe 打分（对应安卓 isMonitoring）。
   if (!_active || _liveLandmarker == nil) return;
   NSError *err = nil;
-  // 后置相机竖屏：朝向 .right 让 MediaPipe 拿到正立的竖屏图像。
+  // 竖屏取像：后置 .right 得到正立画面；前置 .leftMirrored 得到「正立且水平镜像」的自拍画面，
+  // 与镜像预览一致——这样 MediaPipe 看到的左右和用户在屏幕上看到的一致，左右手判定才正确。
+  UIImageOrientation ori = _useFrontCamera ? UIImageOrientationLeftMirrored
+                                           : UIImageOrientationRight;
   MPPImage *image = [[MPPImage alloc] initWithSampleBuffer:sampleBuffer
-                                               orientation:UIImageOrientationRight
+                                               orientation:ori
                                                      error:&err];
   if (image == nil) return;
   _frameTimestampMs += 33;  // ~30fps，时间戳必须单调递增

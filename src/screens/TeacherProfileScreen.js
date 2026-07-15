@@ -117,6 +117,14 @@ const TeacherProfileScreen = ({navigation}) => {
           />
         </View>
 
+        <View style={styles.cardSingle}>
+          <MenuRow
+            icon={Images.menuAiSettings}
+            label="曲目解读 · 生成教案"
+            onPress={() => navigation.navigate('LessonPlan')}
+          />
+        </View>
+
         <View style={styles.cardGroup}>
           <MenuRow
             icon={Images.menuStudentEntry}
