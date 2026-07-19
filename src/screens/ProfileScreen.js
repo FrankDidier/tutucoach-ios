@@ -10,6 +10,7 @@ import {
   StatusBar,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Colors} from '../utils/colors';
@@ -243,6 +244,13 @@ const ProfileScreen = ({navigation}) => {
             last
           />
         </View>
+
+        {/* 工信部要求：APP 内需展示 ICP 备案号，并链接至工信部备案系统。 */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => Linking.openURL('https://beian.miit.gov.cn')}>
+          <Text style={styles.icpBeian}>ICP备案号：桂ICP备2026011230号-2A</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -264,6 +272,13 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     alignSelf: 'flex-start',
     marginBottom: 20,
+  },
+  icpBeian: {
+    textAlign: 'center',
+    color: Colors.textSecondary || '#999',
+    fontSize: 12,
+    marginTop: 24,
+    marginBottom: 8,
   },
   profileBlock: {
     alignItems: 'center',

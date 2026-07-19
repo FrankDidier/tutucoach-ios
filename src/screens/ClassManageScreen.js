@@ -11,12 +11,36 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {registerAccount} from '../services/account';
 import {fetchStudents} from '../services/teacher';
+import {listStudents} from '../services/students';
+
+const remarksKey = tid => `student_remarks:${tid}`;
+
+// 老师给学生起的名字优先级：班级名单备注名(学生录入) > 老师备注名 > 后台昵称 > id 尾号。
+// roster/remarks 的 key 可能是「学生码」（user_id 的尾段），故按 精确 / 尾号 双向匹配兜底。
+function resolveName(userId, backendNick, roster, remarks) {
+  const uid = userId || '';
+  const tryMaps = key => (roster[key] || remarks[key] || '').trim();
+  let n = tryMaps(uid);
+  if (!n) {
+    // 尾号匹配：名单里的学生码是 user_id 的后缀，或反之。
+    const keys = Object.keys(roster).concat(Object.keys(remarks));
+    for (const k of keys) {
+      if (!k) continue;
+      if (uid.endsWith(k) || k.endsWith(uid)) {
+        n = (roster[k] || remarks[k] || '').trim();
+        if (n) break;
+      }
+    }
+  }
+  return n || (backendNick || '').trim() || uid.slice(-6);
+}
 
 let Clipboard = null;
 try {
@@ -44,13 +68,28 @@ const ClassManageScreen = ({navigation}) => {
         // 确保本设备已是「老师」账号，教师统计才查得到本班学生。
         await registerAccount(tid, 'teacher');
       } catch (e) {}
+
+      // 读取老师本地设置的班级名单 + 备注名，用来把「id 码」显示成真实名字。
+      let roster = {};
+      let remarks = {};
+      try {
+        const list = (await listStudents()) || [];
+        list.forEach(s => {
+          if (s && s.studentId) roster[s.studentId] = (s.name || '').trim();
+        });
+      } catch (e) {}
+      try {
+        const raw = await AsyncStorage.getItem(remarksKey(tid));
+        remarks = raw ? JSON.parse(raw) || {} : {};
+      } catch (e) {}
+
       try {
         const r = await fetchStudents(tid);
         if (alive && r && r.ok && Array.isArray(r.students)) {
           setStudents(
             r.students.map(s => ({
               id: s.user_id,
-              name: s.nickname || s.user_id.slice(-6),
+              name: resolveName(s.user_id, s.nickname, roster, remarks),
               studentId: s.user_id.slice(-8),
               weeklyHours: fmtMinutes(s.week_minutes),
               avgRate: s.avg_match_rate,

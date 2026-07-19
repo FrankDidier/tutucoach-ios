@@ -84,9 +84,22 @@ export async function hasValidToken() {
   }
 }
 
-/** 拉取「本设备（老师）名下 + 公开内置」角色。owner 模式：能看到自己建的（含待审核/被驳回）。 */
+/** 当前口令是否为「管理员」（可编辑全部角色、免审核）。 */
+export async function isAdminRole() {
+  const {role} = await getAuthInfo();
+  return role === 'admin';
+}
+
+/**
+ * 拉取可编辑的角色列表。
+ *  · 管理员：拉「全部」角色（含内置/他人/待审核），可编辑任意角色。
+ *  · 老师：只拉「自己名下」角色（含待审核/被驳回）。
+ */
 export async function listAllCoaches() {
   try {
+    if (await isAdminRole()) {
+      return await getJson('/api/coach/list', {all: 1});
+    }
     return await getJson('/api/coach/list', {owner: getDeviceId()});
   } catch (e) {
     return {ok: false};
@@ -98,7 +111,10 @@ export async function listAllCoaches() {
  * App 端一律带 ownerId=本设备id：新建/修改都会进入「待管理员审核」，审核通过后学生端才生效。
  */
 export async function saveCoach(coach) {
-  const payload = {...coach, ownerId: getDeviceId()};
+  // 管理员：不带 ownerId → 走后台直改路径（可改任意角色、免审核）。
+  // 老师：带 ownerId → 归属 + 待审核。
+  const admin = await isAdminRole();
+  const payload = admin ? {...coach} : {...coach, ownerId: getDeviceId()};
   return postJson('/api/coach/save', payload, await authHeader());
 }
 
@@ -136,6 +152,7 @@ export default {
   getAuthInfo,
   verifyAndSaveToken,
   hasValidToken,
+  isAdminRole,
   listAllCoaches,
   saveCoach,
   deleteCoach,

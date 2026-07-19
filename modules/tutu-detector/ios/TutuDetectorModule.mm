@@ -15,6 +15,9 @@
 @property(nonatomic, strong) AVAudioPlayer *clonePlayer;
 // 播报序号：新的一句会自增；在途的克隆下载播放前会校验序号，丢弃过期请求（避免叠音/拖尾）。
 @property(nonatomic, assign) NSInteger speakSeq;
+// 期望的「不锁屏」状态。iOS 在 App 退到后台再回前台时会把 idleTimerDisabled 复位为 NO，
+// 于是「检测/陪练开着但一段时间后又锁屏」。这里记住期望值，并在回到前台时重新置上。
+@property(nonatomic, assign) BOOL wantKeepAwake;
 @end
 
 @implementation TutuDetectorModule
@@ -46,9 +49,32 @@ RCT_EXPORT_METHOD(reactivateAudioSession) {
 // 防止自动锁屏：进入「检测 / AI 陪练」模式时置 YES，退出时置 NO。
 // 平常在 App 里仍会正常按系统设置锁屏（离开这些页面会还原）。
 RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
+  self.wantKeepAwake = on;
   dispatch_async(dispatch_get_main_queue(), ^{
     [UIApplication sharedApplication].idleTimerDisabled = on;
+    if (on) {
+      // 只注册一次；回前台时若仍处于「检测/陪练」则重新禁用锁屏。
+      [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                      name:UIApplicationDidBecomeActiveNotification
+                                                    object:nil];
+      [[NSNotificationCenter defaultCenter] addObserver:self
+                                               selector:@selector(reassertKeepAwake)
+                                                   name:UIApplicationDidBecomeActiveNotification
+                                                 object:nil];
+    } else {
+      [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                      name:UIApplicationDidBecomeActiveNotification
+                                                    object:nil];
+    }
   });
+}
+
+- (void)reassertKeepAwake {
+  if (self.wantKeepAwake) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [UIApplication sharedApplication].idleTimerDisabled = YES;
+    });
+  }
 }
 
 #pragma mark - 原生语音播报（AVSpeechSynthesizer）

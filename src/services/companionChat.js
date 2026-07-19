@@ -77,10 +77,16 @@ export async function fetchReminders(studentId, teacherId) {
  * @param {string} [existingFocus] 该曲目已设置的陪练重点（可空；带上则教案会据此调整呼应）
  * @returns {Promise<{ok:boolean,text:string}>}
  */
-export async function generateLessonPlan(piece, composer, existingFocus = '') {
+export async function generateLessonPlan(
+  piece,
+  composer,
+  existingFocus = '',
+  category = 'general',
+) {
   try {
     const body = {piece: piece || '', composer: composer || ''};
     if (existingFocus) body.existing_focus = existingFocus;
+    if (category) body.category = category;
     // 服务端用大模型生成较长内容，最长约 100s；给 115s 客户端超时。
     const resp = await postJson('/api/coach/lesson_plan', body, null, 115000);
     return {ok: !!(resp && resp.ok && resp.text), text: (resp && resp.text) || ''};
