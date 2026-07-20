@@ -21,6 +21,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
+import {syncPractice} from '../services/account';
 import {chat, fetchReminders} from '../services/companionChat';
 import {
   speak,
@@ -80,6 +81,23 @@ export default function CompanionScreen({navigation}) {
   const proactiveTimer = useRef(null);
   const aliveRef = useRef(true);
   const focusCountRef = useRef(0);
+  const sessionStartRef = useRef(0); // 本次陪练开始时间，退出时计入练琴时长
+
+  // 退出陪练时，把本次时长计入练琴统计（match_rate=-1：只算时长、不参与正确率平均）。
+  const recordCompanionPractice = () => {
+    const startedAt = sessionStartRef.current;
+    if (!startedAt) return;
+    sessionStartRef.current = 0;
+    const minutes = (Date.now() - startedAt) / 60000;
+    if (minutes < 0.2) return; // 太短（<12 秒）不计
+    try {
+      syncPractice(
+        studentIdRef.current || getDeviceId(),
+        Number(minutes.toFixed(2)),
+        -1,
+      );
+    } catch (e) {}
+  };
 
   // 读取当前所选 AI 分身（名称 / 头像背景 / 音色）。初始化和「切换分身」返回后都会调用。
   const reloadCoach = async () => {
@@ -119,6 +137,7 @@ export default function CompanionScreen({navigation}) {
   // ============ 初始化 ============
   useEffect(() => {
     aliveRef.current = true;
+    sessionStartRef.current = Date.now();
     try {
       prewarmTts();
     } catch (e) {}
@@ -158,6 +177,7 @@ export default function CompanionScreen({navigation}) {
     return () => {
       aliveRef.current = false;
       pausedRef.current = true;
+      recordCompanionPractice();
       if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
       if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
       try {
