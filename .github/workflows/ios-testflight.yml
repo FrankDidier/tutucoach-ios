@@ -11,6 +11,7 @@ on:
     paths:
       - 'ios/**'
       - 'src/**'
+      - 'modules/**'
       - 'index.js'
       - 'package.json'
       - 'package-lock.json'

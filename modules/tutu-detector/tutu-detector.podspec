@@ -20,8 +20,8 @@ Pod::Spec.new do |s|
   ]
   s.public_header_files = "ios/**/*.h"
 
-  # MediaPipe 手部关键点模型随 Pod 一起打包进 App
-  s.resources = ["resources/hand_landmarker.task"]
+  # MediaPipe 手部关键点模型 + 兔子动画（APNG，原生 ImageIO 播放）随 Pod 一起打包进 App
+  s.resources = ["resources/hand_landmarker.task", "resources/*.apng"]
 
   # React Native 桥接头文件（<React/RCTBridgeModule.h> 等）
   s.dependency "React-Core"
