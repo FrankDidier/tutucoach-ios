@@ -27,6 +27,7 @@ import {
   generateLessonPlan,
   generateLessonSection,
   fetchReminders,
+  recommendPieces,
 } from '../services/companionChat';
 import {listStudents} from '../services/students';
 import {getDeviceId} from '../services/device';
@@ -70,7 +71,21 @@ const PLAN_STYLES = [
   },
 ];
 
-const SECTION_RE = /^\d+[、.．]/;
+// 8 个顶层板块的标题形如「1、曲目背景」。要点：只认「数字 + 顿号(、)」，
+// 允许前面带 Markdown 记号（###、** 等，模型偶尔会加）。板块内部的分点用
+// 「1.」「（1）」等，不带顿号，所以不会被误判成板块 → 只有 8 个板块可点详解。
+const SECTION_RE = /^#{0,6}\s*\*{0,2}\s*\d+、/;
+
+// 清掉模型偶尔输出的 Markdown 记号（#、*、` 等），让排版干净。
+function cleanMd(s) {
+  return String(s == null ? '' : s)
+    .replace(/`+/g, '')
+    .replace(/^\s*#{1,6}\s*/, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*\*/g, '')
+    .replace(/^(\s*)[-*]\s+/, '$1· ')
+    .replace(/\s+$/, '');
+}
 
 // 把教案文本解析为「开头说明 + 若干板块」。板块以「1、标题」这种行为界。
 function parseSections(text) {
@@ -82,7 +97,7 @@ function parseSections(text) {
     const t = ln.trim();
     if (SECTION_RE.test(t)) {
       if (cur) sections.push(cur);
-      cur = {title: t, body: []};
+      cur = {title: cleanMd(t), body: []};
     } else if (cur) {
       cur.body.push(ln);
     } else {
@@ -90,25 +105,29 @@ function parseSections(text) {
     }
   }
   if (cur) sections.push(cur);
-  return {preamble: preamble.join('\n').trim(), sections};
+  return {preamble: cleanMd(preamble.join('\n')).trim(), sections};
 }
 
-// 详解页里的富文本：把小标题行（数字、/ 【…】 / 短行以「：」结尾）加粗，正文正常。
+// 富文本渲染：清掉 Markdown 记号，并把小标题行（原文带 #/** / 短行以「：」结尾）加粗。
 function renderRich(text, bodyStyle) {
   const lines = String(text || '').split('\n');
   return lines.map((ln, i) => {
     const t = ln.trim();
     if (!t) return <View key={i} style={{height: 8}} />;
     const isHead =
+      /^#{1,6}\s/.test(t) ||
+      /^\*\*.+\*\*$/.test(t) ||
       SECTION_RE.test(t) ||
       /^[【（(]/.test(t) ||
       (t.length <= 18 && /[:：]$/.test(t));
+    const clean = cleanMd(ln);
+    if (!clean.trim()) return <View key={i} style={{height: 8}} />;
     return (
       <Text
         key={i}
         selectable
         style={[bodyStyle, isHead && {fontWeight: '800', marginTop: 6}]}>
-        {ln}
+        {clean}
       </Text>
     );
   });
@@ -137,6 +156,15 @@ export default function LessonPlanScreen({navigation}) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailText, setDetailText] = useState('');
 
+  // 顶部模式：plan=生成教案；recommend=曲目推荐
+  const [mode, setMode] = useState('plan');
+  // 曲目推荐输入 + 结果
+  const [recLevel, setRecLevel] = useState('');
+  const [recAge, setRecAge] = useState('');
+  const [recYears, setRecYears] = useState('');
+  const [recLoading, setRecLoading] = useState(false);
+  const [recResult, setRecResult] = useState(null); // {technique,musicality,niche,raw}
+
   const theme =
     PLAN_STYLES.find(s => s.key === styleKey) || PLAN_STYLES[0];
 
@@ -163,9 +191,46 @@ export default function LessonPlanScreen({navigation}) {
     }
   };
 
+  const onRecommend = async () => {
+    setRecLoading(true);
+    setRecResult(null);
+    try {
+      const r = await recommendPieces(
+        recLevel.trim(),
+        recAge.trim(),
+        recYears.trim(),
+        category,
+      );
+      if (r && r.ok) {
+        setRecResult(r);
+        setTimeout(() => scrollRef.current?.scrollToEnd?.({animated: true}), 300);
+      } else {
+        Alert.alert('推荐失败', '请稍后重试（生成较慢，请保持网络畅通）。');
+      }
+    } catch (e) {
+      Alert.alert('推荐失败', '网络异常，请稍后重试。');
+    } finally {
+      setRecLoading(false);
+    }
+  };
+
+  // 点某首推荐曲目 → 带入教案生成（切到「生成教案」并填好曲目/作曲家）。
+  const useRecommendedPiece = it => {
+    setPiece(it.name || '');
+    setComposer(it.composer || '');
+    setMode('plan');
+    setPlan('');
+    setTimeout(() => scrollRef.current?.scrollTo?.({y: 0, animated: true}), 200);
+    Alert.alert('已带入', `已填入《${it.name}》，可直接点「生成解读 + 教案」。`);
+  };
+
   const onCopy = () => {
     if (!plan) return;
-    Clipboard.setString(plan);
+    const clean = plan
+      .split('\n')
+      .map(cleanMd)
+      .join('\n');
+    Clipboard.setString(clean);
     Alert.alert('已复制', '教案已复制，可粘贴到「陪练提示设置」或备课笔记里。');
   };
 
@@ -256,6 +321,29 @@ export default function LessonPlanScreen({navigation}) {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
+          {/* 顶部模式切换：生成教案 / 曲目推荐 */}
+          <View style={styles.modeRow}>
+            {[
+              {k: 'plan', l: '生成教案'},
+              {k: 'recommend', l: '曲目推荐'},
+            ].map(m => {
+              const on = mode === m.k;
+              return (
+                <TouchableOpacity
+                  key={m.k}
+                  style={[styles.modeTab, on && styles.modeTabOn]}
+                  activeOpacity={0.85}
+                  onPress={() => setMode(m.k)}>
+                  <Text style={[styles.modeTabText, on && styles.modeTabTextOn]}>
+                    {m.l}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {mode === 'plan' ? (
+          <>
           <View style={styles.card}>
             <Text style={styles.fieldLabel}>教学场景</Text>
             <View style={styles.chipRow}>
@@ -387,19 +475,125 @@ export default function LessonPlanScreen({navigation}) {
                       详解 ›
                     </Text>
                   </TouchableOpacity>
-                  {sec.body.map((ln, i) =>
-                    ln.trim() ? (
-                      <Text key={i} style={[styles.body, theme.body]} selectable>
-                        {ln}
-                      </Text>
-                    ) : (
-                      <View key={i} style={{height: 6}} />
-                    ),
-                  )}
+                  {renderRich(sec.body.join('\n'), [styles.body, theme.body])}
                 </View>
               ))}
             </View>
           ) : null}
+          </>
+          ) : (
+          <>
+          {/* 曲目推荐 */}
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>教学场景</Text>
+            <View style={styles.chipRow}>
+              {CATEGORIES.map(c => {
+                const on = category === c.key;
+                return (
+                  <TouchableOpacity
+                    key={c.key}
+                    style={[styles.chip, on && styles.chipOn]}
+                    activeOpacity={0.85}
+                    onPress={() => setCategory(c.key)}>
+                    <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                      {c.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.fieldLabel, {marginTop: 14}]}>学生程度</Text>
+            <TextInput
+              style={styles.input}
+              value={recLevel}
+              onChangeText={setRecLevel}
+              placeholder="如：拜厄下册 / 车尔尼599 / 考级 4 级水平"
+              placeholderTextColor={Colors.textSecondary}
+            />
+            <Text style={[styles.fieldLabel, {marginTop: 12}]}>生理年龄</Text>
+            <TextInput
+              style={styles.input}
+              value={recAge}
+              onChangeText={setRecAge}
+              placeholder="如：7 岁 / 12 岁 / 成人"
+              placeholderTextColor={Colors.textSecondary}
+            />
+            <Text style={[styles.fieldLabel, {marginTop: 12}]}>学琴时长</Text>
+            <TextInput
+              style={styles.input}
+              value={recYears}
+              onChangeText={setRecYears}
+              placeholder="如：半年 / 2 年 / 5 年"
+              placeholderTextColor={Colors.textSecondary}
+            />
+            <Text style={[styles.fieldHint, {marginTop: 8}]}>
+              按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / 冷门」三个方向各推荐几首曲目。点某首可直接带入教案生成。
+            </Text>
+            <TouchableOpacity
+              style={styles.genBtn}
+              onPress={onRecommend}
+              activeOpacity={0.88}
+              disabled={recLoading}>
+              {recLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.genBtnText}>推荐曲目</Text>
+              )}
+            </TouchableOpacity>
+            {recLoading ? (
+              <Text style={styles.loadingHint}>
+                AI 正在挑选适合的曲目，请稍候…
+              </Text>
+            ) : null}
+          </View>
+
+          {recResult ? (
+            <View style={styles.card}>
+              {recResult.raw ? (
+                <Text style={[styles.body]} selectable>
+                  {recResult.raw}
+                </Text>
+              ) : (
+                [
+                  {key: 'technique', title: '① 偏重技术', data: recResult.technique},
+                  {key: 'musicality', title: '② 偏重乐感', data: recResult.musicality},
+                  {key: 'niche', title: '③ 冷门推荐', data: recResult.niche},
+                ].map(grp => (
+                  <View key={grp.key} style={{marginBottom: 6}}>
+                    <View style={styles.recGroupHead}>
+                      <View style={styles.recAccent} />
+                      <Text style={styles.recGroupTitle}>{grp.title}</Text>
+                    </View>
+                    {(grp.data || []).length === 0 ? (
+                      <Text style={styles.recEmpty}>暂无</Text>
+                    ) : (
+                      (grp.data || []).map((it, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          style={styles.recItem}
+                          activeOpacity={0.7}
+                          onPress={() => useRecommendedPiece(it)}>
+                          <View style={styles.recItemTop}>
+                            <Text style={styles.recName}>{it.name}</Text>
+                            {it.composer ? (
+                              <Text style={styles.recComposer}>{it.composer}</Text>
+                            ) : null}
+                          </View>
+                          {it.reason ? (
+                            <Text style={styles.recReason}>{it.reason}</Text>
+                          ) : null}
+                          <Text style={styles.recUse}>用这首生成教案 ›</Text>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+          ) : null}
+          </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -522,6 +716,54 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
   fieldHint: {fontSize: 11.5, color: Colors.pinkDark, marginTop: 4, lineHeight: 17},
+  modeRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    padding: 4,
+    marginBottom: 14,
+  },
+  modeTab: {
+    flex: 1,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeTabOn: {backgroundColor: Colors.pinkPrimary},
+  modeTabText: {fontSize: 14, fontWeight: '700', color: Colors.textSecondary},
+  modeTabTextOn: {color: '#fff'},
+  recGroupHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  recAccent: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: Colors.pinkPrimary,
+    marginRight: 8,
+  },
+  recGroupTitle: {fontSize: 15, fontWeight: '800', color: Colors.pinkDark},
+  recEmpty: {fontSize: 13, color: Colors.textSecondary, marginBottom: 6},
+  recItem: {
+    backgroundColor: Colors.pinkBg,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  recItemTop: {flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap'},
+  recName: {fontSize: 15.5, fontWeight: '800', color: Colors.textPrimary},
+  recComposer: {fontSize: 12.5, color: Colors.textSecondary, marginLeft: 8},
+  recReason: {fontSize: 13, color: Colors.textPrimary, lineHeight: 20, marginTop: 4},
+  recUse: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: Colors.pinkPrimary,
+    marginTop: 6,
+  },
   chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8},
   chip: {
     paddingHorizontal: 16,

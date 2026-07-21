@@ -122,6 +122,41 @@ export async function generateLessonSection(
   }
 }
 
+/**
+ * 教案模式·曲目推荐：按学生程度 / 生理年龄 / 学琴时长 + 场景，推荐曲目。
+ * 分三个方向：偏重技术 / 偏重乐感 / 冷门。
+ * @returns {Promise<{ok:boolean, technique:Array, musicality:Array, niche:Array, raw?:string}>}
+ */
+export async function recommendPieces(level, age, years, category = 'general') {
+  try {
+    const body = {
+      level: level || '',
+      age: age || '',
+      years: years || '',
+      category: category || 'general',
+    };
+    const resp = await postJson('/api/coach/recommend_pieces', body, null, 100000);
+    if (!resp || !resp.ok) return {ok: false};
+    const norm = a =>
+      (Array.isArray(a) ? a : [])
+        .filter(x => x && x.name)
+        .map(x => ({
+          name: String(x.name || '').trim(),
+          composer: String(x.composer || '').trim(),
+          reason: String(x.reason || '').trim(),
+        }));
+    return {
+      ok: true,
+      technique: norm(resp.technique),
+      musicality: norm(resp.musicality),
+      niche: norm(resp.niche),
+      raw: resp.raw || '',
+    };
+  } catch (e) {
+    return {ok: false};
+  }
+}
+
 /** 老师端保存某学生的「按曲目分组」重点 + 播报频率。 */
 export async function savePieces(teacherId, studentId, studentName, pieces, freqSec) {
   try {
