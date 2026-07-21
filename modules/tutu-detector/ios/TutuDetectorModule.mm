@@ -18,6 +18,10 @@
 // 期望的「不锁屏」状态。iOS 在 App 退到后台再回前台时会把 idleTimerDisabled 复位为 NO，
 // 于是「检测/陪练开着但一段时间后又锁屏」。这里记住期望值，并在回到前台时重新置上。
 @property(nonatomic, assign) BOOL wantKeepAwake;
+// 周期性「重新置上不锁屏」的定时器。相机会话、音频会话、TTS、系统权限弹窗等都可能
+// 在我们设置后把 idleTimerDisabled 悄悄复位为 NO，于是「检测/陪练开着仍会锁屏」。
+// 这里每隔几秒兜底重置一次，彻底杜绝锁屏（退出页面时停掉）。
+@property(nonatomic, strong) NSTimer *keepAwakeTimer;
 @end
 
 @implementation TutuDetectorModule
@@ -52,6 +56,9 @@ RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
   self.wantKeepAwake = on;
   dispatch_async(dispatch_get_main_queue(), ^{
     [UIApplication sharedApplication].idleTimerDisabled = on;
+    // 停掉旧定时器（幂等）。
+    [self.keepAwakeTimer invalidate];
+    self.keepAwakeTimer = nil;
     if (on) {
       // 只注册一次；回前台时若仍处于「检测/陪练」则重新禁用锁屏。
       [[NSNotificationCenter defaultCenter] removeObserver:self
@@ -61,6 +68,12 @@ RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
                                                selector:@selector(reassertKeepAwake)
                                                    name:UIApplicationDidBecomeActiveNotification
                                                  object:nil];
+      // 兜底：每 5 秒重新置上一次，防止相机/音频/权限弹窗把它复位后锁屏。
+      self.keepAwakeTimer = [NSTimer scheduledTimerWithTimeInterval:5.0
+                                                             target:self
+                                                           selector:@selector(reassertKeepAwake)
+                                                           userInfo:nil
+                                                            repeats:YES];
     } else {
       [[NSNotificationCenter defaultCenter] removeObserver:self
                                                       name:UIApplicationDidBecomeActiveNotification
@@ -72,7 +85,9 @@ RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
 - (void)reassertKeepAwake {
   if (self.wantKeepAwake) {
     dispatch_async(dispatch_get_main_queue(), ^{
-      [UIApplication sharedApplication].idleTimerDisabled = YES;
+      if (self.wantKeepAwake && ![UIApplication sharedApplication].idleTimerDisabled) {
+        [UIApplication sharedApplication].idleTimerDisabled = YES;
+      }
     });
   }
 }

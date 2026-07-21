@@ -1,6 +1,8 @@
 // #4 曲目解读 + 教案（老师端）。输入曲目名 + 作曲家，AI 生成专业解读与可上课的教案。
 // - 场景切换：启蒙 / 考级 / 比赛 / 考学，教案侧重点随之调整（用现成模板套用）。
 // - 一键选取曲目重点：从「陪练重点」里直接挑一首已设曲目的重点填进来，教案会据此调整、呼应。
+// - 内置多套排版样式（清新 / 雅致 / 简约），一键切换，无需外部 UI 设计。
+// - 点任一板块 → 弹出「板块详解」页，AI 就该板块展开更细致的讲解。
 import React, {useRef, useState} from 'react';
 import {
   View,
@@ -21,7 +23,11 @@ import {
 import Clipboard from '@react-native-clipboard/clipboard';
 import {Colors} from '../utils/colors';
 import ScreenHeader from '../components/ScreenHeader';
-import {generateLessonPlan, fetchReminders} from '../services/companionChat';
+import {
+  generateLessonPlan,
+  generateLessonSection,
+  fetchReminders,
+} from '../services/companionChat';
 import {listStudents} from '../services/students';
 import {getDeviceId} from '../services/device';
 
@@ -33,22 +39,75 @@ const CATEGORIES = [
   {key: 'kaoxue', label: '考学'},
 ];
 
-// 简单排版：给「1、标题」这种板块行加粗、放大，让教案更好读（内置排版样式，无需外部 UI）。
-function renderPlan(text) {
+// 内置排版样式（无需外部 UI）：切换后教案结果区的配色/字号/行距/标题样式随之变化。
+const PLAN_STYLES = [
+  {
+    key: 'fresh',
+    label: '清新',
+    result: {backgroundColor: Colors.white},
+    header: {color: Colors.pinkDark, fontSize: 16.5, letterSpacing: 0},
+    accent: Colors.pinkPrimary,
+    body: {color: Colors.textPrimary, fontSize: 14.5, lineHeight: 24},
+    underline: false,
+  },
+  {
+    key: 'elegant',
+    label: '雅致',
+    result: {backgroundColor: '#FBF6EE'},
+    header: {color: '#7A5B34', fontSize: 17.5, letterSpacing: 1},
+    accent: '#C9A063',
+    body: {color: '#4A4038', fontSize: 15.5, lineHeight: 28},
+    underline: false,
+  },
+  {
+    key: 'minimal',
+    label: '简约',
+    result: {backgroundColor: Colors.white},
+    header: {color: '#1C1C1E', fontSize: 15.5, letterSpacing: 0},
+    accent: '#1C1C1E',
+    body: {color: '#3A3A3C', fontSize: 14, lineHeight: 23},
+    underline: true,
+  },
+];
+
+const SECTION_RE = /^\d+[、.．]/;
+
+// 把教案文本解析为「开头说明 + 若干板块」。板块以「1、标题」这种行为界。
+function parseSections(text) {
+  const lines = String(text || '').split('\n');
+  const sections = [];
+  const preamble = [];
+  let cur = null;
+  for (const ln of lines) {
+    const t = ln.trim();
+    if (SECTION_RE.test(t)) {
+      if (cur) sections.push(cur);
+      cur = {title: t, body: []};
+    } else if (cur) {
+      cur.body.push(ln);
+    } else {
+      preamble.push(ln);
+    }
+  }
+  if (cur) sections.push(cur);
+  return {preamble: preamble.join('\n').trim(), sections};
+}
+
+// 详解页里的富文本：把小标题行（数字、/ 【…】 / 短行以「：」结尾）加粗，正文正常。
+function renderRich(text, bodyStyle) {
   const lines = String(text || '').split('\n');
   return lines.map((ln, i) => {
     const t = ln.trim();
-    const isSection = /^\d+[、.．]/.test(t); // 1、xxx / 1.xxx
-    if (isSection) {
-      return (
-        <Text key={i} style={styles.planSection}>
-          {t}
-        </Text>
-      );
-    }
-    if (!t) return <Text key={i} style={styles.planGap}>{'\n'}</Text>;
+    if (!t) return <View key={i} style={{height: 8}} />;
+    const isHead =
+      SECTION_RE.test(t) ||
+      /^[【（(]/.test(t) ||
+      (t.length <= 18 && /[:：]$/.test(t));
     return (
-      <Text key={i} style={styles.planLine} selectable>
+      <Text
+        key={i}
+        selectable
+        style={[bodyStyle, isHead && {fontWeight: '800', marginTop: 6}]}>
         {ln}
       </Text>
     );
@@ -62,6 +121,7 @@ export default function LessonPlanScreen({navigation}) {
   const [category, setCategory] = useState('general');
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState('');
+  const [styleKey, setStyleKey] = useState('fresh');
   const scrollRef = useRef(null);
 
   // 「一键选取曲目重点」弹窗状态
@@ -70,6 +130,15 @@ export default function LessonPlanScreen({navigation}) {
   const [pickerStudents, setPickerStudents] = useState([]); // [{id,name}]
   const [pickerPieces, setPickerPieces] = useState(null); // null=选学生阶段；[]=已选学生
   const teacherId = useRef(getDeviceId()).current;
+
+  // 「板块详解」页状态
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailText, setDetailText] = useState('');
+
+  const theme =
+    PLAN_STYLES.find(s => s.key === styleKey) || PLAN_STYLES[0];
 
   const onGenerate = async () => {
     const p = piece.trim();
@@ -80,12 +149,7 @@ export default function LessonPlanScreen({navigation}) {
     setLoading(true);
     setPlan('');
     try {
-      const r = await generateLessonPlan(
-        p,
-        composer.trim(),
-        focus.trim(),
-        category,
-      );
+      const r = await generateLessonPlan(p, composer.trim(), focus.trim(), category);
       if (r && r.ok && r.text) {
         setPlan(r.text);
         setTimeout(() => scrollRef.current?.scrollToEnd?.({animated: true}), 300);
@@ -103,6 +167,38 @@ export default function LessonPlanScreen({navigation}) {
     if (!plan) return;
     Clipboard.setString(plan);
     Alert.alert('已复制', '教案已复制，可粘贴到「陪练提示设置」或备课笔记里。');
+  };
+
+  // 点某个板块 → 打开详解页并向 AI 请求更详细讲解。
+  const openSectionDetail = async section => {
+    setDetailTitle(section.title);
+    setDetailText('');
+    setDetailLoading(true);
+    setDetailOpen(true);
+    try {
+      const r = await generateLessonSection(
+        piece.trim(),
+        composer.trim(),
+        section.title,
+        (section.body || []).join('\n').trim(),
+        category,
+      );
+      if (r && r.ok && r.text) {
+        setDetailText(r.text);
+      } else {
+        setDetailText('生成失败了，请返回后重试～');
+      }
+    } catch (e) {
+      setDetailText('网络异常，请返回后重试。');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const onCopyDetail = () => {
+    if (!detailText) return;
+    Clipboard.setString(detailTitle + '\n\n' + detailText);
+    Alert.alert('已复制', '本板块详解已复制。');
   };
 
   // 打开「选取曲目重点」：先列出班级学生。
@@ -126,7 +222,6 @@ export default function LessonPlanScreen({navigation}) {
     }
   };
 
-  // 选中学生 → 拉取其已设曲目重点。
   const pickStudent = async stu => {
     setPickerLoading(true);
     try {
@@ -139,7 +234,6 @@ export default function LessonPlanScreen({navigation}) {
     }
   };
 
-  // 选中某首曲目 → 填入曲目名 + 重点，关闭弹窗。
   const pickPiece = pc => {
     if (pc.name) setPiece(pc.name);
     const lines = (pc.lines || []).join('\n');
@@ -147,6 +241,8 @@ export default function LessonPlanScreen({navigation}) {
     setPickerOpen(false);
     Alert.alert('已选取', `已把《${pc.name}》的陪练重点填入，生成教案时会围绕这些重点调整。`);
   };
+
+  const parsed = plan ? parseSections(plan) : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -231,19 +327,115 @@ export default function LessonPlanScreen({navigation}) {
             ) : null}
           </View>
 
-          {plan ? (
-            <View style={styles.card}>
+          {parsed ? (
+            <View style={[styles.card, theme.result]}>
               <View style={styles.resultHead}>
                 <Text style={styles.resultTitle}>解读 + 教案</Text>
                 <TouchableOpacity onPress={onCopy} activeOpacity={0.7}>
                   <Text style={styles.copyBtn}>复制全文</Text>
                 </TouchableOpacity>
               </View>
-              <View>{renderPlan(plan)}</View>
+
+              {/* 排版样式切换 */}
+              <View style={styles.styleRow}>
+                <Text style={styles.styleLabel}>排版</Text>
+                {PLAN_STYLES.map(s => {
+                  const on = styleKey === s.key;
+                  return (
+                    <TouchableOpacity
+                      key={s.key}
+                      style={[styles.styleChip, on && styles.styleChipOn]}
+                      activeOpacity={0.85}
+                      onPress={() => setStyleKey(s.key)}>
+                      <Text
+                        style={[styles.styleChipText, on && styles.styleChipTextOn]}>
+                        {s.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.tapHint}>点任一板块可让 AI 展开更详细的讲解 ›</Text>
+
+              {parsed.preamble ? (
+                <Text style={[styles.body, theme.body, {marginBottom: 4}]} selectable>
+                  {parsed.preamble}
+                </Text>
+              ) : null}
+
+              {parsed.sections.map((sec, idx) => (
+                <View key={idx} style={styles.section}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => openSectionDetail(sec)}
+                    style={[
+                      styles.sectionHead,
+                      theme.underline && styles.sectionHeadUnderline,
+                    ]}>
+                    <View
+                      style={[styles.accentBar, {backgroundColor: theme.accent}]}
+                    />
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        {color: theme.header.color, fontSize: theme.header.fontSize,
+                          letterSpacing: theme.header.letterSpacing},
+                      ]}>
+                      {sec.title}
+                    </Text>
+                    <Text style={[styles.sectionMore, {color: theme.accent}]}>
+                      详解 ›
+                    </Text>
+                  </TouchableOpacity>
+                  {sec.body.map((ln, i) =>
+                    ln.trim() ? (
+                      <Text key={i} style={[styles.body, theme.body]} selectable>
+                        {ln}
+                      </Text>
+                    ) : (
+                      <View key={i} style={{height: 6}} />
+                    ),
+                  )}
+                </View>
+              ))}
             </View>
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* 板块详解页 */}
+      <Modal
+        visible={detailOpen}
+        animationType="slide"
+        onRequestClose={() => setDetailOpen(false)}>
+        <SafeAreaView style={styles.detailContainer}>
+          <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+          <ScreenHeader
+            title="板块详解"
+            onBack={() => setDetailOpen(false)}
+          />
+          <View style={styles.detailTitleWrap}>
+            <Text style={styles.detailTitle}>{detailTitle}</Text>
+            {!detailLoading && detailText ? (
+              <TouchableOpacity onPress={onCopyDetail} activeOpacity={0.7}>
+                <Text style={styles.copyBtn}>复制</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {detailLoading ? (
+            <View style={styles.detailLoading}>
+              <ActivityIndicator color={Colors.pinkPrimary} size="large" />
+              <Text style={styles.loadingHint}>AI 正在展开这个板块的详细讲解…</Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.detailScroll}
+              showsVerticalScrollIndicator={false}>
+              {renderRich(detailText, styles.detailBody)}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
 
       {/* 选取曲目重点弹窗 */}
       <Modal
@@ -393,16 +585,53 @@ const styles = StyleSheet.create({
   },
   resultTitle: {fontSize: 15, fontWeight: '800', color: Colors.textPrimary},
   copyBtn: {fontSize: 13.5, fontWeight: '700', color: Colors.pinkPrimary},
-  planSection: {
-    fontSize: 15.5,
-    lineHeight: 26,
-    fontWeight: '800',
-    color: Colors.pinkDark,
-    marginTop: 10,
-    marginBottom: 2,
+  styleRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 6},
+  styleLabel: {fontSize: 12.5, color: Colors.textSecondary, marginRight: 8},
+  styleChip: {
+    paddingHorizontal: 12,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.pinkBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: Colors.pinkLight,
   },
-  planLine: {fontSize: 14.5, lineHeight: 24, color: Colors.textPrimary},
-  planGap: {fontSize: 6, lineHeight: 8},
+  styleChipOn: {backgroundColor: Colors.pinkPrimary, borderColor: Colors.pinkPrimary},
+  styleChipText: {fontSize: 12.5, fontWeight: '700', color: Colors.textSecondary},
+  styleChipTextOn: {color: '#fff'},
+  tapHint: {fontSize: 11.5, color: Colors.textSecondary, marginBottom: 8},
+  section: {marginBottom: 8},
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    marginTop: 8,
+    marginBottom: 3,
+  },
+  sectionHeadUnderline: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#C6C6C8',
+  },
+  accentBar: {width: 4, height: 18, borderRadius: 2, marginRight: 8},
+  sectionTitle: {flex: 1, fontWeight: '800', lineHeight: 26},
+  sectionMore: {fontSize: 12.5, fontWeight: '700', marginLeft: 8},
+  body: {fontSize: 14.5, lineHeight: 24, color: Colors.textPrimary},
+  // 详解页
+  detailContainer: {flex: 1, backgroundColor: Colors.pinkBg},
+  detailTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  detailTitle: {flex: 1, fontSize: 17, fontWeight: '800', color: Colors.textPrimary},
+  detailLoading: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+  detailScroll: {padding: 16, paddingBottom: 40},
+  detailBody: {fontSize: 15, lineHeight: 26, color: Colors.textPrimary},
   modalMask: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

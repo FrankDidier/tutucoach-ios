@@ -95,6 +95,33 @@ export async function generateLessonPlan(
   }
 }
 
+/**
+ * 教案页点某个板块 → AI 展开更详细讲解。
+ * @param {string} piece 曲目名
+ * @param {string} composer 作曲家（可空）
+ * @param {string} section 板块标题（如「4、主要技术难点」）
+ * @param {string} [sectionContent] 该板块已生成的原文（带上让展开更贴题）
+ * @param {string} [category] 教学场景
+ * @returns {Promise<{ok:boolean,text:string}>}
+ */
+export async function generateLessonSection(
+  piece,
+  composer,
+  section,
+  sectionContent = '',
+  category = 'general',
+) {
+  try {
+    const body = {piece: piece || '', composer: composer || '', section: section || ''};
+    if (sectionContent) body.section_content = sectionContent;
+    if (category) body.category = category;
+    const resp = await postJson('/api/coach/lesson_plan/section', body, null, 90000);
+    return {ok: !!(resp && resp.ok && resp.text), text: (resp && resp.text) || ''};
+  } catch (e) {
+    return {ok: false, text: ''};
+  }
+}
+
 /** 老师端保存某学生的「按曲目分组」重点 + 播报频率。 */
 export async function savePieces(teacherId, studentId, studentName, pieces, freqSec) {
   try {
