@@ -40,6 +40,16 @@ const CATEGORIES = [
   {key: 'kaoxue', label: '考学'},
 ];
 
+// 曲目推荐的场景与教案略有不同：把「启蒙」换成「重奏」（启蒙场景在推荐里会忽略已填程度、
+// 逻辑混乱）。通用场景的第三个方向是「教材推荐」而非「冷门」。
+const REC_CATEGORIES = [
+  {key: 'general', label: '通用'},
+  {key: 'hezou', label: '重奏'},
+  {key: 'kaoji', label: '考级'},
+  {key: 'bisai', label: '比赛'},
+  {key: 'kaoxue', label: '考学'},
+];
+
 // 内置排版样式（无需外部 UI）：切换后教案结果区的配色/字号/行距/标题样式随之变化。
 const PLAN_STYLES = [
   {
@@ -159,6 +169,7 @@ export default function LessonPlanScreen({navigation}) {
   // 顶部模式：plan=生成教案；recommend=曲目推荐
   const [mode, setMode] = useState('plan');
   // 曲目推荐输入 + 结果
+  const [recCategory, setRecCategory] = useState('general');
   const [recLevel, setRecLevel] = useState('');
   const [recAge, setRecAge] = useState('');
   const [recYears, setRecYears] = useState('');
@@ -199,7 +210,7 @@ export default function LessonPlanScreen({navigation}) {
         recLevel.trim(),
         recAge.trim(),
         recYears.trim(),
-        category,
+        recCategory,
       );
       if (r && r.ok) {
         setRecResult(r);
@@ -487,14 +498,14 @@ export default function LessonPlanScreen({navigation}) {
           <View style={styles.card}>
             <Text style={styles.fieldLabel}>教学场景</Text>
             <View style={styles.chipRow}>
-              {CATEGORIES.map(c => {
-                const on = category === c.key;
+              {REC_CATEGORIES.map(c => {
+                const on = recCategory === c.key;
                 return (
                   <TouchableOpacity
                     key={c.key}
                     style={[styles.chip, on && styles.chipOn]}
                     activeOpacity={0.85}
-                    onPress={() => setCategory(c.key)}>
+                    onPress={() => setRecCategory(c.key)}>
                     <Text style={[styles.chipText, on && styles.chipTextOn]}>
                       {c.label}
                     </Text>
@@ -528,7 +539,7 @@ export default function LessonPlanScreen({navigation}) {
               placeholderTextColor={Colors.textSecondary}
             />
             <Text style={[styles.fieldHint, {marginTop: 8}]}>
-              按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / 冷门」三个方向各推荐几首曲目。点某首可直接带入教案生成。
+              按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / {recCategory === 'general' ? '教材推荐' : '冷门'}」三个方向各推荐几项。点某项可直接带入教案生成。
             </Text>
             <TouchableOpacity
               style={styles.genBtn}
@@ -558,7 +569,11 @@ export default function LessonPlanScreen({navigation}) {
                 [
                   {key: 'technique', title: '① 偏重技术', data: recResult.technique},
                   {key: 'musicality', title: '② 偏重乐感', data: recResult.musicality},
-                  {key: 'niche', title: '③ 冷门推荐', data: recResult.niche},
+                  {
+                    key: 'niche',
+                    title: recCategory === 'general' ? '③ 教材推荐' : '③ 冷门推荐',
+                    data: recResult.niche,
+                  },
                 ].map(grp => (
                   <View key={grp.key} style={{marginBottom: 6}}>
                     <View style={styles.recGroupHead}>
