@@ -40,6 +40,7 @@ import {ALARM_SOUNDS, alarmNameById} from '../utils/alarmSounds';
 import {playAlarmId, stopAlarm} from '../services/alarmPlayer';
 import {getItem, setItem} from '../services/storage';
 import {pick} from '../utils/rabbitMessages';
+import {createActiveTimer} from '../utils/activeTimer';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import MetronomeBar from '../components/MetronomeBar';
 import TutuDetector, {TutuDetectorView} from 'tutu-detector';
@@ -148,6 +149,7 @@ const DetectionScreen = ({navigation, route}) => {
   const [aiSubtitle, setAiSubtitle] = useState('');
 
   const sessionStart = useRef(0);
+  const activeTimerRef = useRef(null); // 只累计前台时间（切到别的软件不计）
   const sessionMatchRate = useRef(0);
   const tickTimer = useRef(null);
   const profileRef = useRef(profileById('coach_pro'));
@@ -288,6 +290,10 @@ const DetectionScreen = ({navigation, route}) => {
       if (tickTimer.current) clearInterval(tickTimer.current);
       if (proactiveTimer.current) clearInterval(proactiveTimer.current);
       if (aiSubtitleTimer.current) clearTimeout(aiSubtitleTimer.current);
+      if (activeTimerRef.current) {
+        activeTimerRef.current.dispose();
+        activeTimerRef.current = null;
+      }
       stopSpeak();
       stopAlarm();
       try {
@@ -558,6 +564,8 @@ const DetectionScreen = ({navigation, route}) => {
   const onToggleDetect = async () => {
     if (!detecting) {
       sessionStart.current = Date.now();
+      if (activeTimerRef.current) activeTimerRef.current.dispose();
+      activeTimerRef.current = createActiveTimer();
       setMatchRate(0);
       setElapsedSec(0);
       setErrorText('');
@@ -620,7 +628,15 @@ const DetectionScreen = ({navigation, route}) => {
     setAiSubtitle('');
     stopSpeak();
     stopAlarm();
-    const minutes = Math.max(0, (Date.now() - sessionStart.current) / 60000);
+    // 只算前台活跃时间：检测时切到别的 App、兔兔教练在后台的那段不计入。
+    const activeTimer = activeTimerRef.current;
+    const minutes = activeTimer
+      ? Math.max(0, activeTimer.elapsedMinutes())
+      : Math.max(0, (Date.now() - sessionStart.current) / 60000);
+    if (activeTimer) {
+      activeTimer.dispose();
+      activeTimerRef.current = null;
+    }
     if (minutes < 0.05) return; // 太短不计
     const rate = sessionMatchRate.current || 0;
     // 更新打卡/连续天数/积分/成就（对应 RabbitCompanion.onPracticeEnd）。
@@ -651,7 +667,7 @@ const DetectionScreen = ({navigation, route}) => {
             });
           }
           // 安卓风格总结弹窗：时长 / 正确率 / 正确·不正确用时 / 错误类型分布 / AI 点评。
-          const durSec = Math.round((Date.now() - sessionStart.current) / 1000);
+          const durSec = Math.round(minutes * 60);
           const okSec = Math.round((durSec * rate) / 100);
           const ec = errorCountsRef.current;
           const totalErr = ec.塌掌 + ec.扁指 + ec.勾指;

@@ -91,7 +91,10 @@ const ClassManageScreen = ({navigation}) => {
               id: s.user_id,
               name: resolveName(s.user_id, s.nickname, roster, remarks),
               studentId: s.user_id.slice(-8),
-              weeklyHours: fmtMinutes(s.week_minutes),
+              // 累计练习时长（后端新增 total_minutes；老后端只有 week_minutes 时兜底）。
+              totalHours: fmtMinutes(
+                s.total_minutes != null ? s.total_minutes : s.week_minutes,
+              ),
               avgRate: s.avg_match_rate,
               isVip: !!s.is_vip,
             })),
@@ -154,8 +157,8 @@ const ClassManageScreen = ({navigation}) => {
       </View>
       <View style={styles.cardRight}>
         <Text style={styles.practiceLine}>
-          <Text style={styles.practiceLabel}>本周练习：</Text>
-          <Text style={styles.practiceValue}>{item.weeklyHours}</Text>
+          <Text style={styles.practiceLabel}>累计练习：</Text>
+          <Text style={styles.practiceValue}>{item.totalHours}</Text>
         </Text>
         <Text style={styles.practiceLine}>
           <Text style={styles.practiceLabel}>平均正确率：</Text>

@@ -48,6 +48,7 @@
   CFTimeInterval _accum;             // 距上次换帧累计的时间
   CFTimeInterval _lastTs;
   NSInteger _lastShownIndex;         // 已贴到 layer 的帧号（避免重复贴同一帧）
+  BOOL _paused;                      // 不在窗口上（切到别的 Tab）时暂停，省 CPU、避免相互抢主线程
 
   NSMutableDictionary<NSString *, NSData *> *_dataCache; // 动作 -> APNG 压缩数据
 }
@@ -88,6 +89,30 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
 - (void)layoutSubviews {
   [super layoutSubviews];
   _imgLayer.frame = self.bounds;
+}
+
+// 视图离开窗口（如切到别的 Tab，React Navigation 会 detach 屏幕）时暂停动画：
+// 停掉 CADisplayLink 与后台解码，避免「首页兔子」和「练琴页兔子」同时空转、相互抢主线程
+// 造成的卡顿；回到窗口时恢复。
+- (void)didMoveToWindow {
+  [super didMoveToWindow];
+  if (self.window) {
+    if (_paused) {
+      _paused = NO;
+      _lastTs = 0; // 重置计时基准，避免暂停期间的时间差一次性补进来
+      _link.paused = NO;
+      // 自增 gen 作废暂停前可能残留的解码链（避免恢复后出现多条并行解码链），
+      // 但保留已解码好的帧缓冲（gen 只用于判定链是否过期，不清空 buffer）。
+      os_unfair_lock_lock(&_lock);
+      _gen += 1;
+      NSInteger g = _gen;
+      os_unfair_lock_unlock(&_lock);
+      [self pumpDecode:g];
+    }
+  } else {
+    _paused = YES;
+    _link.paused = YES;
+  }
 }
 
 - (NSData *)dataForAction:(NSString *)action {
@@ -174,6 +199,7 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
   dispatch_async(_decodeQueue, ^{
     TutuRabbitView *self_ = weakSelf;
     if (!self_) return;
+    if (self_->_paused) return; // 暂停时不再解码，恢复时会重新启动
 
     os_unfair_lock_lock(&self_->_lock);
     if (gen != self_->_gen) { os_unfair_lock_unlock(&self_->_lock); return; }

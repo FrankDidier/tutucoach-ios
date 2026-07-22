@@ -47,6 +47,7 @@ import {
 } from '../services/coachPrefs';
 import {fetchCoaches} from '../services/coach';
 import MetronomeBar from '../components/MetronomeBar';
+import {createActiveTimer} from '../utils/activeTimer';
 
 let bubbleKey = 1;
 
@@ -82,13 +83,17 @@ export default function CompanionScreen({navigation}) {
   const aliveRef = useRef(true);
   const focusCountRef = useRef(0);
   const sessionStartRef = useRef(0); // 本次陪练开始时间，退出时计入练琴时长
+  const activeTimerRef = useRef(null); // 只累计前台时间（切到别的软件不计）
 
   // 退出陪练时，把本次时长计入练琴统计（match_rate=-1：只算时长、不参与正确率平均）。
   const recordCompanionPractice = () => {
     const startedAt = sessionStartRef.current;
     if (!startedAt) return;
     sessionStartRef.current = 0;
-    const minutes = (Date.now() - startedAt) / 60000;
+    // 只算前台活跃时间：切到别的 App、兔兔教练在后台的那段不计入。
+    const minutes = activeTimerRef.current
+      ? activeTimerRef.current.elapsedMinutes()
+      : (Date.now() - startedAt) / 60000;
     if (minutes < 0.2) return; // 太短（<12 秒）不计
     try {
       syncPractice(
@@ -138,6 +143,7 @@ export default function CompanionScreen({navigation}) {
   useEffect(() => {
     aliveRef.current = true;
     sessionStartRef.current = Date.now();
+    activeTimerRef.current = createActiveTimer();
     try {
       prewarmTts();
     } catch (e) {}
@@ -178,6 +184,10 @@ export default function CompanionScreen({navigation}) {
       aliveRef.current = false;
       pausedRef.current = true;
       recordCompanionPractice();
+      if (activeTimerRef.current) {
+        activeTimerRef.current.dispose();
+        activeTimerRef.current = null;
+      }
       if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
       if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
       try {
