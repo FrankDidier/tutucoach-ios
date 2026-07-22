@@ -539,7 +539,11 @@ export default function LessonPlanScreen({navigation}) {
               placeholderTextColor={Colors.textSecondary}
             />
             <Text style={[styles.fieldHint, {marginTop: 8}]}>
-              按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / {recCategory === 'general' ? '教材推荐' : '冷门'}」三个方向各推荐几项。点某项可直接带入教案生成。
+              {recCategory === 'hezou'
+                ? '重奏场景按「双钢琴 / 四手联弹 / 与其他乐器重奏」三类各推荐几项。点某项可直接带入教案生成。'
+                : `按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / ${
+                    recCategory === 'general' ? '教材推荐' : '冷门'
+                  }」三个方向各推荐几项。点某项可直接带入教案生成。`}
             </Text>
             <TouchableOpacity
               style={styles.genBtn}
@@ -567,11 +571,26 @@ export default function LessonPlanScreen({navigation}) {
                 </Text>
               ) : (
                 [
-                  {key: 'technique', title: '① 偏重技术', data: recResult.technique},
-                  {key: 'musicality', title: '② 偏重乐感', data: recResult.musicality},
+                  {
+                    key: 'technique',
+                    title:
+                      recCategory === 'hezou' ? '① 双钢琴' : '① 偏重技术',
+                    data: recResult.technique,
+                  },
+                  {
+                    key: 'musicality',
+                    title:
+                      recCategory === 'hezou' ? '② 四手联弹' : '② 偏重乐感',
+                    data: recResult.musicality,
+                  },
                   {
                     key: 'niche',
-                    title: recCategory === 'general' ? '③ 教材推荐' : '③ 冷门推荐',
+                    title:
+                      recCategory === 'hezou'
+                        ? '③ 与其他乐器重奏'
+                        : recCategory === 'general'
+                        ? '③ 教材推荐'
+                        : '③ 冷门推荐',
                     data: recResult.niche,
                   },
                 ].map(grp => (
