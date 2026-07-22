@@ -48,6 +48,7 @@ import {
 import {fetchCoaches} from '../services/coach';
 import MetronomeBar from '../components/MetronomeBar';
 import {createActiveTimer} from '../utils/activeTimer';
+import {onPracticeEnd} from '../services/companion';
 
 let bubbleKey = 1;
 
@@ -101,6 +102,12 @@ export default function CompanionScreen({navigation}) {
         Number(minutes.toFixed(2)),
         -1,
       );
+    } catch (e) {}
+    // 同步更新本地练琴统计（累计分钟 / 连续天数 / 积分），否则首页与「我的」里的
+    // 练琴时间不会因陪练而增加——学生反馈「陪练完退出来练琴时间没变」。
+    // matchRate 传 0：陪练不参与正确率/心情统计。
+    try {
+      onPracticeEnd(0, Math.max(1, Math.round(minutes)));
     } catch (e) {}
   };
 

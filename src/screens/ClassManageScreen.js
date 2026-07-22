@@ -56,9 +56,17 @@ function fmtMinutes(min) {
   return `${Math.floor(m / 60)}小时${m % 60}分钟`;
 }
 
+// 老师可切换查看的练琴时长区间。
+const RANGES = [
+  {key: 'week', label: '1周', field: 'weekMinutes', title: '本周练习'},
+  {key: 'month', label: '1个月', field: 'monthMinutes', title: '本月练习'},
+  {key: 'all', label: '所有', field: 'totalMinutes', title: '累计练习'},
+];
+
 const ClassManageScreen = ({navigation}) => {
   const [students, setStudents] = useState([]);
   const [query, setQuery] = useState('');
+  const [range, setRange] = useState('all'); // 默认看「所有」
 
   useEffect(() => {
     let alive = true;
@@ -91,10 +99,12 @@ const ClassManageScreen = ({navigation}) => {
               id: s.user_id,
               name: resolveName(s.user_id, s.nickname, roster, remarks),
               studentId: s.user_id.slice(-8),
-              // 累计练习时长（后端新增 total_minutes；老后端只有 week_minutes 时兜底）。
-              totalHours: fmtMinutes(
-                s.total_minutes != null ? s.total_minutes : s.week_minutes,
-              ),
+              // 三个区间的练琴时长（老后端只有 week_minutes 时做兜底）。
+              weekMinutes: s.week_minutes || 0,
+              monthMinutes:
+                s.month_minutes != null ? s.month_minutes : s.week_minutes || 0,
+              totalMinutes:
+                s.total_minutes != null ? s.total_minutes : s.week_minutes || 0,
               avgRate: s.avg_match_rate,
               isVip: !!s.is_vip,
             })),
@@ -132,6 +142,8 @@ const ClassManageScreen = ({navigation}) => {
     );
   }, [students, query]);
 
+  const rangeCfg = RANGES.find(r => r.key === range) || RANGES[2];
+
   const renderStudent = ({item}) => (
     <TouchableOpacity
       style={styles.card}
@@ -157,8 +169,10 @@ const ClassManageScreen = ({navigation}) => {
       </View>
       <View style={styles.cardRight}>
         <Text style={styles.practiceLine}>
-          <Text style={styles.practiceLabel}>累计练习：</Text>
-          <Text style={styles.practiceValue}>{item.totalHours}</Text>
+          <Text style={styles.practiceLabel}>{rangeCfg.title}：</Text>
+          <Text style={styles.practiceValue}>
+            {fmtMinutes(item[rangeCfg.field])}
+          </Text>
         </Text>
         <Text style={styles.practiceLine}>
           <Text style={styles.practiceLabel}>平均正确率：</Text>
@@ -184,6 +198,24 @@ const ClassManageScreen = ({navigation}) => {
           value={query}
           onChangeText={setQuery}
         />
+      </View>
+
+      {/* 练琴时长区间：1周 / 1个月 / 所有 */}
+      <View style={styles.rangeRow}>
+        {RANGES.map(r => {
+          const on = r.key === range;
+          return (
+            <TouchableOpacity
+              key={r.key}
+              style={[styles.rangeChip, on && styles.rangeChipOn]}
+              activeOpacity={0.85}
+              onPress={() => setRange(r.key)}>
+              <Text style={[styles.rangeChipText, on && styles.rangeChipTextOn]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.listHeaderRow}>
@@ -230,6 +262,32 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.pinkLight,
+  },
+  rangeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  rangeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.pinkLight,
+  },
+  rangeChipOn: {
+    backgroundColor: Colors.pinkPrimary,
+    borderColor: Colors.pinkPrimary,
+  },
+  rangeChipText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  rangeChipTextOn: {
+    color: Colors.white,
   },
   listHeaderRow: {
     flexDirection: 'row',
