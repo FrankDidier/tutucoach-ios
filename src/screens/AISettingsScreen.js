@@ -24,6 +24,7 @@ import {
   uploadAvatar,
   cloneVoice,
   absAvatarUrl,
+  isAdminRole,
 } from '../services/coachAdmin';
 import {getDeviceId} from '../services/device';
 import {
@@ -81,26 +82,32 @@ function coachToDraft(c) {
 }
 
 const AISettingsScreen = ({navigation}) => {
-  const [coaches, setCoaches] = useState([]); // 仅本人名下（可编辑）
+  const [coaches, setCoaches] = useState([]); // 可编辑的分身列表
   const [draft, setDraft] = useState(emptyDraft());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // 管理员：可编辑全部角色（含内置/他人）
   const recStartRef = useRef(0);
   const deviceId = useRef(getDeviceId()).current;
 
   const loadCoaches = async selectId => {
+    // 管理员：可编辑「全部」角色（含内置/他人/待审核）；老师：只看自己名下。
+    // 之前这里对所有人都按 ownerId 过滤，导致「用管理员口令也看不到、改不了其它角色」。
+    const admin = await isAdminRole();
+    setIsAdmin(admin);
     const r = await listAllCoaches();
     if (r && r.ok && Array.isArray(r.coaches)) {
-      // 只保留「本设备（本老师）名下」的分身作为可编辑列表；内置/他人角色由后台管理。
-      const mine = r.coaches.filter(c => c.ownerId && c.ownerId === deviceId);
-      setCoaches(mine);
-      const pick = (selectId && mine.find(c => c.id === selectId)) || mine[0];
+      const list = admin
+        ? r.coaches
+        : r.coaches.filter(c => c.ownerId && c.ownerId === deviceId);
+      setCoaches(list);
+      const pick = (selectId && list.find(c => c.id === selectId)) || list[0];
       if (pick) {
         setDraft(coachToDraft(pick));
       } else {
-        setDraft(emptyDraft()); // 还没有自己的分身：直接进入「新建」
+        setDraft(emptyDraft()); // 还没有可编辑分身：直接进入「新建」
       }
     }
     setLoading(false);
@@ -287,8 +294,10 @@ const AISettingsScreen = ({navigation}) => {
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            {/* 我的分身：可建多个；新建/修改都需管理员审核通过才对学生生效 */}
-            <Text style={styles.sectionLabel}>我的分身</Text>
+            {/* 分身列表：管理员可编辑全部角色（免审核直改）；老师只见自己名下、改动需审核。 */}
+            <Text style={styles.sectionLabel}>
+              {isAdmin ? '全部分身（管理员 · 可直接编辑任意角色）' : '我的分身'}
+            </Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
