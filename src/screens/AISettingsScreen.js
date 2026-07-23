@@ -228,10 +228,15 @@ const AISettingsScreen = ({navigation}) => {
       Alert.alert('录音太短', '请连续清晰朗读 10 秒以上再生成音色。');
       return;
     }
+    // 没读到音频（bytes=0）通常是麦克风被占用/权限问题，别再走上传（否则只会报「网络异常」）。
+    if (r.base64 && r.bytes === 0) {
+      Alert.alert('没录到声音', '请确认允许了麦克风权限、周围安静，再重录一次。');
+      return;
+    }
     setVoiceBusy(true);
     try {
       const path = r.path.startsWith('file://') ? r.path : 'file://' + r.path;
-      const cv = await cloneVoice(draft.id, path);
+      const cv = await cloneVoice(draft.id, path, 'audio/mp4', r.base64);
       if (cv && cv.ok) {
         set('voiceId', cv.voiceId || draft.voiceId);
         Alert.alert('音色已生成', '专属音色已应用到该分身 ✓');

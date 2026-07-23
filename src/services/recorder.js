@@ -19,12 +19,19 @@ export async function startRecording() {
   }
 }
 
-/** 停止录音；成功返回 {ok:true, path, durationMs}。path 为本地 m4a 文件路径。 */
+/** 停止录音；成功返回 {ok:true, path, durationMs, base64, bytes}。
+ * base64 为录音内容（用于 JSON 上传，规避 file:// multipart 在部分机型发不出去的问题）。 */
 export async function stopRecording() {
   if (!Rec) return {error: 'no_module'};
   try {
     const r = (await Rec.stop()) || {};
-    return {ok: true, path: r.path, durationMs: r.durationMs};
+    return {
+      ok: true,
+      path: r.path,
+      durationMs: r.durationMs,
+      base64: r.base64 || '',
+      bytes: r.bytes || 0,
+    };
   } catch (e) {
     return {error: String(e?.message || e)};
   }

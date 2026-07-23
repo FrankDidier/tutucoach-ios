@@ -65,9 +65,17 @@ RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve
   [self.recorder stop];
   NSTimeInterval durMs = ([[NSDate date] timeIntervalSince1970] - self.startTime) * 1000.0;
   NSString *path = self.fileURL.path ?: @"";
+  // 直接把录音读成 base64 一并返回：上传走 JSON，绕开 RN 的 file:// multipart
+  // 在部分机型上「请求发不出去」的问题（也顺带能判断是否真的录到了声音）。
+  NSData *audio = [NSData dataWithContentsOfURL:self.fileURL];
+  NSString *b64 = audio ? [audio base64EncodedStringWithOptions:0] : @"";
+  NSUInteger bytes = audio ? audio.length : 0;
   self.recorder = nil;
   [self restorePlaybackSession];
-  resolve(@{@"path": path, @"durationMs": @((NSInteger)durMs)});
+  resolve(@{@"path": path,
+            @"durationMs": @((NSInteger)durMs),
+            @"base64": b64,
+            @"bytes": @((NSInteger)bytes)});
 }
 
 // 录音结束后把音频会话恢复成可播放的 Playback，否则录完音兔兔语音会没声音。
