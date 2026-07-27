@@ -49,6 +49,7 @@ function emptyDraft() {
     systemPrompt: '',
     greeting: '你好，准备好练琴了吗？',
     voiceId: 0,
+    mmVoice: '',
     avatarUrl: '',
     visibility: 'private',
     status: '',
@@ -73,6 +74,7 @@ function coachToDraft(c) {
     systemPrompt: pick('system_prompt', 'systemPrompt', ''),
     greeting: pick('greeting', 'greeting', '你好，准备好练琴了吗？'),
     voiceId: pick('voice_id', 'voiceId', 0),
+    mmVoice: pick('mm_voice', 'mmVoice', ''),
     avatarUrl: pick('avatar_url', 'avatarUrl', ''),
     visibility: pick('visibility', 'visibility', 'private'),
     status: c.status || 'approved',
@@ -238,13 +240,13 @@ const AISettingsScreen = ({navigation}) => {
       const path = r.path.startsWith('file://') ? r.path : 'file://' + r.path;
       const cv = await cloneVoice(draft.id, path, 'audio/mp4', r.base64);
       if (cv && cv.ok) {
-        set('voiceId', cv.voiceId || draft.voiceId);
-        Alert.alert('音色已生成', '专属音色已应用到该分身 ✓');
+        set('mmVoice', cv.mmVoice || cv.voiceId || draft.mmVoice);
+        Alert.alert('音色已生成', '本人专属音色已应用，支持中/英/日/韩四语言 ✓');
         loadCoaches(draft.id);
       } else if (cv && cv.error === 'voice_no_permission') {
         Alert.alert(
           '声音复刻未开通',
-          '百度「大模型声音复刻」未开通或已欠费，请在百度智能云控制台开通后重试（与录音无关）。',
+          '语音服务的「声音复刻」尚未开通或余额不足，请联系管理员处理后重试（与录音无关）。',
         );
       } else if (cv && cv.error === 'speech_not_configured') {
         Alert.alert('暂未配置', '服务器尚未配置语音密钥，请联系管理员。');
@@ -400,9 +402,9 @@ const AISettingsScreen = ({navigation}) => {
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>专属音色（声音复刻）</Text>
               <Text style={styles.hint}>
-                {draft.voiceId
-                  ? `已绑定音色 ID：${draft.voiceId}`
-                  : '点击下方按钮，朗读 10-30 秒清晰语音，自动生成本人专属音色。'}
+                {draft.mmVoice
+                  ? '✓ 已绑定本人专属音色（支持中/英/日/韩）。如需更新可重新录制。'
+                  : '点击下方按钮，用本人声音清晰朗读 10-30 秒中文，自动生成本人专属音色，可用中/英/日/韩朗读。'}
               </Text>
               <TouchableOpacity
                 style={[styles.voiceBtn, recording && styles.voiceBtnRec]}

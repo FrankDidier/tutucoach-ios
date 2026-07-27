@@ -206,6 +206,76 @@ RCT_EXPORT_METHOD(ttsSpeakCloned:(NSString *)text
   [task resume];
 }
 
+// 新版（MiniMax）：按「角色 coachId」合成。后端解析该角色音色（本人克隆优先，
+// 否则按风格用预置音色兜底），支持中/英/日/韩。拉取
+//   GET {baseUrl}/api/coach/tts?coachId=..&lang=..&text=..
+// 返回 mp3，用 AVAudioPlayer 播放（带本地缓存）；失败回退系统合成器。
+RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
+                  coachId:(NSString *)coachId
+                  rate:(double)rate
+                  pitch:(double)pitch
+                  baseUrl:(NSString *)baseUrl
+                  lang:(NSString *)lang) {
+  if (text.length == 0) return;
+  self.speakSeq += 1;
+  NSInteger seq = self.speakSeq;
+  if (coachId.length == 0 || baseUrl.length == 0) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self speakWithSynth:text rate:rate pitch:pitch];
+    });
+    return;
+  }
+  NSString *lg = (lang.length ? lang : @"auto");
+  NSString *cacheKey = [self sha1ForString:
+      [NSString stringWithFormat:@"mm:%@:%@:%@", coachId, lg, text]];
+  NSString *cacheDir = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tutu_tts"];
+  [[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
+                            withIntermediateDirectories:YES attributes:nil error:nil];
+  NSString *cachePath = [cacheDir stringByAppendingPathComponent:
+                         [cacheKey stringByAppendingString:@".mp3"]];
+
+  __weak TutuDetectorModule *weakSelf = self;
+  void (^playFile)(NSString *) = ^(NSString *path) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      TutuDetectorModule *s = weakSelf;
+      if (s == nil || seq != s.speakSeq) return;
+      [s playClonedFile:path];
+    });
+  };
+  void (^fallback)(void) = ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
+      TutuDetectorModule *s = weakSelf;
+      if (s == nil || seq != s.speakSeq) return;
+      [s speakWithSynth:text rate:rate pitch:pitch];
+    });
+  };
+  if ([[NSFileManager defaultManager] fileExistsAtPath:cachePath]) {
+    playFile(cachePath);
+    return;
+  }
+  NSCharacterSet *allowed = [NSCharacterSet URLQueryAllowedCharacterSet];
+  NSString *encText = [text stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+  NSString *encCoach = [coachId stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+  NSString *encLang = [lg stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+  NSString *urlStr = [NSString stringWithFormat:
+      @"%@/api/coach/tts?coachId=%@&lang=%@&text=%@", baseUrl, encCoach, encLang, encText];
+  NSURL *url = [NSURL URLWithString:urlStr];
+  if (url == nil) { fallback(); return; }
+  NSURLSessionDataTask *task = [[NSURLSession sharedSession]
+      dataTaskWithURL:url
+    completionHandler:^(NSData *data, NSURLResponse *resp, NSError *error) {
+      NSInteger code = [resp isKindOfClass:[NSHTTPURLResponse class]]
+                           ? ((NSHTTPURLResponse *)resp).statusCode : 0;
+      if (error != nil || code != 200 || data.length < 64) {
+        fallback();
+        return;
+      }
+      [data writeToFile:cachePath atomically:YES];
+      playFile(cachePath);
+    }];
+  [task resume];
+}
+
 - (void)playClonedFile:(NSString *)path {
   if (self.synth.isSpeaking) {
     [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];

@@ -64,8 +64,13 @@ function iosNativeTts() {
 }
 
 // rate: 语速倍率（安卓 speechRate，默认 1.0）。pitch: 音高（默认 1.0）。
-// voiceId: 百度声音复刻音色 ID（>0 用老师本人音色，0 用系统音色）。
-export function speak(text, {rate = 1.0, pitch = 1.0, voiceId = 0, flush = true} = {}) {
+// coachId: 角色 id —— 新版走 MiniMax（本人克隆音色优先，否则按风格用预置音色兜底），
+//          支持中/英/日/韩。lang 默认 'auto'（后端自动识别语种）。
+// voiceId: 旧版百度声音复刻音色 ID（仅兼容老逻辑；有 coachId 时优先走 coachId）。
+export function speak(
+  text,
+  {rate = 1.0, pitch = 1.0, voiceId = 0, coachId = '', lang = 'auto', flush = true} = {},
+) {
   if (!text) return;
   // iOS 首选原生合成器/声音复刻。
   const native = iosNativeTts();
@@ -75,7 +80,19 @@ export function speak(text, {rate = 1.0, pitch = 1.0, voiceId = 0, flush = true}
     // 回退路径保持一致）。
     reactivateAudioSessionIOS();
     try {
-      // voiceId>0：走声音复刻（后端拉老师本人音色 WAV），失败时原生侧自动回退系统音色。
+      // 新版：按角色走 MiniMax。后端拉本人克隆音色 / 预置音色的 mp3，失败原生侧回退系统音色。
+      if (coachId && typeof native.ttsSpeakCoach === 'function') {
+        native.ttsSpeakCoach(
+          String(text),
+          String(coachId),
+          rate || 1.0,
+          pitch || 1.0,
+          BASE_URL,
+          lang || 'auto',
+        );
+        return;
+      }
+      // 旧版兼容：百度整数音色。
       if (voiceId > 0 && typeof native.ttsSpeakCloned === 'function') {
         native.ttsSpeakCloned(
           String(text),

@@ -293,6 +293,7 @@ export default function CompanionScreen({navigation}) {
           speak(toSpeak, {
             rate: p.speechRate || 1.0,
             pitch: p.pitch || 1.0,
+            coachId: p.id || coachIdRef.current,
             voiceId: p.voiceId || 0,
           });
         } catch (e) {}

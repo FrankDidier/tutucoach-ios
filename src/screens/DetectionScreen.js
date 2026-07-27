@@ -330,6 +330,7 @@ const DetectionScreen = ({navigation, route}) => {
     speak(text, {
       rate: p.speechRate || 1.0,
       pitch: p.pitch || 1.0,
+      coachId: p.id || coachId,
       voiceId: p.voiceId || 0,
     });
   };
@@ -371,6 +372,7 @@ const DetectionScreen = ({navigation, route}) => {
         speak(text, {
           rate: p.speechRate || 1.0,
           pitch: p.pitch || 1.0,
+          coachId: p.id || coachId,
           voiceId: p.voiceId || 0,
         });
         setAiSubtitle(text);
@@ -663,6 +665,7 @@ const DetectionScreen = ({navigation, route}) => {
             speak(fullText, {
               rate: p.speechRate || 1.0,
               pitch: p.pitch || 1.0,
+              coachId: p.id || coachId,
               voiceId: s.voice_id || p.voiceId || 0,
             });
           }
