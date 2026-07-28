@@ -53,7 +53,11 @@
   NSMutableDictionary<NSString *, NSData *> *_dataCache; // 动作 -> APNG 压缩数据
 }
 
-static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
+static const NSUInteger kWindow = 20; // 内存兜底：超大动画时的滑动窗口大小
+// 短循环动画（兔子每个动作都是 20fps 的短序列）整段一次性解码并常驻缓存，之后循环
+// 播放「零解码」——彻底消除「每循环一圈都重解同样的帧」造成的持续 CPU 抢占 / 卡顿。
+// 仅当帧数超过该上限时才退回滑动窗口，避免个别超长动画占用过多内存。
+static const NSUInteger kDecodeAllMax = 150;
 
 - (instancetype)init {
   if (self = [super init]) {
@@ -112,6 +116,15 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
   } else {
     _paused = YES;
     _link.paused = YES;
+    // 离屏时释放整段解码缓存（只留当前帧），把内存还给系统，避免「首页+练琴页」两个
+    // 兔子各常驻一整段解码帧造成内存压力；回到窗口时 pumpDecode 会快速补齐。
+    os_unfair_lock_lock(&_lock);
+    _gen += 1;
+    id keep = _buffer[@(_displayIndex)];
+    NSUInteger keepIdx = _displayIndex;
+    [_buffer removeAllObjects];
+    if (keep) _buffer[@(keepIdx)] = keep;
+    os_unfair_lock_unlock(&_lock);
   }
 }
 
@@ -207,9 +220,12 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
     NSUInteger start = self_->_displayIndex;
     CGImageSourceRef src = self_->_source;
     if (src) CFRetain(src);
-    // 找窗口内第一个尚未解码的帧
+    // 短动画：一次性解码全部帧并常驻；超长动画：退回窗口，避免占用过多内存。
+    BOOL decodeAll = (count <= kDecodeAllMax);
+    NSUInteger span = decodeAll ? count : kWindow;
+    // 从当前显示帧向前找第一个尚未解码的帧（保证「即将播放的帧」优先就绪）。
     NSInteger want = -1;
-    for (NSUInteger off = 0; off < kWindow && off < count; off++) {
+    for (NSUInteger off = 0; off < span && off < count; off++) {
       NSUInteger idx = (start + off) % count;
       if (!self_->_buffer[@(idx)]) { want = (NSInteger)idx; break; }
     }
@@ -217,7 +233,9 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
 
     if (want < 0) {
       if (src) CFRelease(src);
-      // 窗口已填满，稍后再看（消费者推进后会腾出空位）。
+      // 整段已解码完成：短动画到此彻底停止解码（循环播放零解码，最顺）。
+      if (decodeAll) return;
+      // 窗口模式：消费者推进后会腾出空位，稍后再看。
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_MSEC)),
                      self_->_decodeQueue, ^{ [weakSelf pumpDecode:gen]; });
       return;
@@ -268,8 +286,9 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
   id frame = _buffer[@(_displayIndex)];
   NSInteger toShow = (NSInteger)_displayIndex;
 
-  // 回收：窗口外(且已过去)的帧释放掉，内存维持在一个窗口以内。
-  if (advanced && _buffer.count > kWindow) {
+  // 回收：仅超长动画(窗口模式，帧数 > 上限)才回收窗口外旧帧；短动画整段常驻不回收，
+  // 循环播放零解码，最顺。
+  if (advanced && count > kDecodeAllMax && _buffer.count > kWindow) {
     NSMutableArray<NSNumber *> *drop = [NSMutableArray array];
     for (NSNumber *k in _buffer) {
       NSUInteger idx = k.unsignedIntegerValue;
@@ -277,6 +296,8 @@ static const NSUInteger kWindow = 20; // 提前解码 / 保留的帧窗口大小
       if (ahead >= kWindow) [drop addObject:k];
     }
     [_buffer removeObjectsForKeys:drop];
+    // 被回收的帧需要重新解码，重启解码泵补齐窗口。
+    [self pumpDecode:_gen];
   }
   os_unfair_lock_unlock(&_lock);
 

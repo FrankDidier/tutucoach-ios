@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
+import {useTheme} from '../theme/ThemeContext';
 import {pickFromGallery} from '../services/imagePicker';
 import {
   listAllCoaches,
@@ -84,6 +84,8 @@ function coachToDraft(c) {
 }
 
 const AISettingsScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [coaches, setCoaches] = useState([]); // 可编辑的分身列表
   const [draft, setDraft] = useState(emptyDraft());
   const [loading, setLoading] = useState(true);
@@ -278,7 +280,7 @@ const AISettingsScreen = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader
         title="AI分身设置"
         onBack={() => navigation?.goBack?.()}
@@ -291,7 +293,7 @@ const AISettingsScreen = ({navigation}) => {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={Colors.pinkPrimary} />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
         <KeyboardAvoidingView
@@ -391,7 +393,7 @@ const AISettingsScreen = ({navigation}) => {
                     value={draft.name}
                     onChangeText={t => set('name', t)}
                     placeholder="如：兔兔老师"
-                    placeholderTextColor={Colors.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                   />
                 </View>
               </View>
@@ -460,7 +462,7 @@ const AISettingsScreen = ({navigation}) => {
                 value={draft.greeting}
                 onChangeText={t => set('greeting', t)}
                 placeholder={'同学你好，准备好开始今天的练习了吗？'}
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 multiline
               />
             </View>
@@ -488,7 +490,7 @@ const AISettingsScreen = ({navigation}) => {
                 value={draft.systemPrompt}
                 onChangeText={t => set('systemPrompt', t)}
                 placeholder={PERSONA_EXAMPLE}
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 multiline
               />
             </View>
@@ -509,182 +511,187 @@ const AISettingsScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  flex: {flex: 1},
-  center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  scroll: {padding: 16, paddingBottom: 40},
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  chipRow: {gap: 8, paddingBottom: 6, paddingRight: 8},
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: Colors.white,
-    marginRight: 8,
-    maxWidth: 160,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  chipActive: {backgroundColor: Colors.pinkPrimary},
-  chipText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
-  chipTextActive: {color: '#fff'},
-  chipBadge: {
-    fontSize: 10,
-    color: '#fff',
-    backgroundColor: '#F5A623',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    marginLeft: 6,
-    overflow: 'hidden',
-  },
-  chipBadgeRejected: {backgroundColor: '#E5484D'},
-  chipBadgeActive: {opacity: 0.95},
-  chipNew: {backgroundColor: Colors.pinkLight},
-  chipNewText: {fontSize: 13, color: Colors.pinkDark, fontWeight: '700'},
-  statusCardPending: {
-    backgroundColor: '#FFF7E6',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
-  },
-  statusText: {fontSize: 12, color: '#8A6D3B', lineHeight: 18},
-  statusCardRejected: {
-    backgroundColor: '#FDECEA',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
-  },
-  statusTextRejected: {fontSize: 12, color: '#B4231C', lineHeight: 18},
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 2,
-  },
-  row: {flexDirection: 'row', alignItems: 'center'},
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.pinkLight,
-  },
-  avatarBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  avatarBadgeText: {color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1},
-  avatarHint: {fontSize: 11.5, color: Colors.textSecondary, marginTop: 10},
-  nameCol: {flex: 1, marginLeft: 16},
-  fieldLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
-  fieldHint: {
-    fontSize: 11.5,
-    color: Colors.pinkDark,
-    marginTop: 5,
-    lineHeight: 17,
-  },
-  hint: {fontSize: 12, color: Colors.textSecondary, marginTop: 6, lineHeight: 18},
-  nameInput: {
-    marginTop: 6,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  styleRow: {flexDirection: 'row', gap: 10, marginTop: 10},
-  styleItem: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    alignItems: 'center',
-  },
-  styleItemActive: {backgroundColor: Colors.pinkPrimary},
-  styleText: {fontSize: 12.5, color: Colors.textPrimary, fontWeight: '600'},
-  styleTextActive: {color: '#fff'},
-  voiceBtn: {
-    marginTop: 12,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceBtnRec: {backgroundColor: '#E5484D'},
-  voiceBtnText: {color: '#fff', fontSize: 15, fontWeight: '700'},
-  personaHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  fillExample: {fontSize: 12.5, color: Colors.pinkPrimary, fontWeight: '700'},
-  guideBox: {
-    backgroundColor: Colors.pinkBg,
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
-  },
-  guideTitle: {fontSize: 12, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4},
-  guideLine: {fontSize: 12, color: Colors.textSecondary, lineHeight: 19},
-  multiline: {
-    marginTop: 8,
-    minHeight: 90,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    padding: 12,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    textAlignVertical: 'top',
-  },
-  saveBtn: {
-    marginTop: 20,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-  saveHeaderText: {fontSize: 15, fontWeight: '700', color: Colors.pinkPrimary},
-  reminderEntry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF5B87',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginTop: 14,
-    marginBottom: 4,
-  },
-  reminderEntryTitle: {fontSize: 15, fontWeight: '700', color: '#fff'},
-  reminderEntrySub: {
-    fontSize: 11.5,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 3,
-  },
-  reminderEntryArrow: {fontSize: 24, color: '#fff', marginLeft: 8},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    flex: {flex: 1},
+    center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+    scroll: {padding: 16, paddingBottom: 40},
+    sectionLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      marginBottom: 8,
+    },
+    chipRow: {gap: 8, paddingBottom: 6, paddingRight: 8},
+    chip: {
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      marginRight: 8,
+      maxWidth: 160,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      borderColor: colors.cardBorder,
+    },
+    chipActive: {backgroundColor: colors.primary, borderColor: colors.primary},
+    chipText: {fontSize: 13, color: colors.textPrimary, fontWeight: '600'},
+    chipTextActive: {color: '#fff'},
+    chipBadge: {
+      fontSize: 10,
+      color: '#fff',
+      backgroundColor: '#F5A623',
+      borderRadius: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      marginLeft: 6,
+      overflow: 'hidden',
+    },
+    chipBadgeRejected: {backgroundColor: '#E5484D'},
+    chipBadgeActive: {opacity: 0.95},
+    chipNew: {backgroundColor: colors.cardAlt, borderColor: colors.cardBorder},
+    chipNewText: {fontSize: 13, color: colors.primaryDark, fontWeight: '700'},
+    statusCardPending: {
+      backgroundColor: '#FFF7E6',
+      borderRadius: 12,
+      padding: 12,
+      marginTop: 4,
+    },
+    statusText: {fontSize: 12, color: '#8A6D3B', lineHeight: 18},
+    statusCardRejected: {
+      backgroundColor: '#FDECEA',
+      borderRadius: 12,
+      padding: 12,
+      marginTop: 4,
+    },
+    statusTextRejected: {fontSize: 12, color: '#B4231C', lineHeight: 18},
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 14,
+      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      borderColor: colors.cardBorder,
+      shadowColor: '#000',
+      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
+      shadowRadius: 8,
+      shadowOffset: {width: 0, height: 2},
+      elevation: 2,
+    },
+    row: {flexDirection: 'row', alignItems: 'center'},
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.cardAlt,
+    },
+    avatarBadge: {
+      position: 'absolute',
+      right: -2,
+      bottom: -2,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: colors.card,
+    },
+    avatarBadgeText: {color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1},
+    avatarHint: {fontSize: 11.5, color: colors.textSecondary, marginTop: 10},
+    nameCol: {flex: 1, marginLeft: 16},
+    fieldLabel: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+    fieldHint: {
+      fontSize: 11.5,
+      color: colors.primaryDark,
+      marginTop: 5,
+      lineHeight: 17,
+    },
+    hint: {fontSize: 12, color: colors.textSecondary, marginTop: 6, lineHeight: 18},
+    nameInput: {
+      marginTop: 6,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: colors.inputBg,
+      paddingHorizontal: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    styleRow: {flexDirection: 'row', gap: 10, marginTop: 10},
+    styleItem: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.inputBg,
+      alignItems: 'center',
+    },
+    styleItemActive: {backgroundColor: colors.primary},
+    styleText: {fontSize: 12.5, color: colors.textPrimary, fontWeight: '600'},
+    styleTextActive: {color: '#fff'},
+    voiceBtn: {
+      marginTop: 12,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    voiceBtnRec: {backgroundColor: '#E5484D'},
+    voiceBtnText: {color: '#fff', fontSize: 15, fontWeight: '700'},
+    personaHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    fillExample: {fontSize: 12.5, color: colors.accent, fontWeight: '700'},
+    guideBox: {
+      backgroundColor: colors.inputBg,
+      borderRadius: 10,
+      padding: 12,
+      marginTop: 8,
+    },
+    guideTitle: {fontSize: 12, fontWeight: '700', color: colors.textPrimary, marginBottom: 4},
+    guideLine: {fontSize: 12, color: colors.textSecondary, lineHeight: 19},
+    multiline: {
+      marginTop: 8,
+      minHeight: 90,
+      borderRadius: 10,
+      backgroundColor: colors.inputBg,
+      padding: 12,
+      fontSize: 14,
+      color: colors.textPrimary,
+      textAlignVertical: 'top',
+    },
+    saveBtn: {
+      marginTop: 20,
+      height: 50,
+      borderRadius: 25,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+    saveHeaderText: {fontSize: 15, fontWeight: '700', color: colors.accent},
+    reminderEntry: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primary,
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      marginTop: 14,
+      marginBottom: 4,
+    },
+    reminderEntryTitle: {fontSize: 15, fontWeight: '700', color: '#fff'},
+    reminderEntrySub: {
+      fontSize: 11.5,
+      color: 'rgba(255,255,255,0.9)',
+      marginTop: 3,
+    },
+    reminderEntryArrow: {fontSize: 24, color: '#fff', marginLeft: 8},
+  });
 
 export default AISettingsScreen;

@@ -13,8 +13,8 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
+import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {syncPractice, getMembership} from '../services/account';
@@ -86,6 +86,9 @@ function serverCoachToProfile(c, base) {
   const nonEmpty = a => (Array.isArray(a) && a.length ? a : null);
   return {
     ...base,
+    // 关键：自定义分身的 id 必须用后台真实 id，否则 base(内置兜底) 的 id 会覆盖它，
+    // 导致 TTS 用 coach_pro 的「预设音色」而不是老师本人的克隆音色。
+    id: c.id || base.id,
     displayName: c.name || base.displayName,
     greeting: c.greeting || base.greeting,
     speechRate: c.speechRate || base.speechRate || 1.0,
@@ -103,12 +106,19 @@ const DEFAULT_NO_HAND = ['手呢？快放回琴键上来～', '看不到你的�
 const NO_HAND_AFTER_MS = 10000; // 连续无手 10 秒后提醒
 const NO_HAND_COOLDOWN_MS = 15000; // 无手提醒间隔
 
-const BTN_START = {r: 255, g: 107, b: 138};
-const BTN_END = {r: 255, g: 138, b: 171};
 const BTN_STEPS = 28;
 
 function lerpChannel(a, b, t) {
   return Math.round(a + (b - a) * t);
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
 }
 
 function lerpRgb(from, to, t) {
@@ -120,6 +130,8 @@ function lerpRgb(from, to, t) {
 }
 
 const DetectionScreen = ({navigation, route}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const premium = !!route?.params?.premium;
   const [detecting, setDetecting] = useState(false);
   const [matchRate, setMatchRate] = useState(0);
@@ -330,7 +342,7 @@ const DetectionScreen = ({navigation, route}) => {
     speak(text, {
       rate: p.speechRate || 1.0,
       pitch: p.pitch || 1.0,
-      coachId: p.id || coachId,
+      coachId: coachId || p.id,
       voiceId: p.voiceId || 0,
     });
   };
@@ -372,7 +384,7 @@ const DetectionScreen = ({navigation, route}) => {
         speak(text, {
           rate: p.speechRate || 1.0,
           pitch: p.pitch || 1.0,
-          coachId: p.id || coachId,
+          coachId: coachId || p.id,
           voiceId: p.voiceId || 0,
         });
         setAiSubtitle(text);
@@ -665,7 +677,7 @@ const DetectionScreen = ({navigation, route}) => {
             speak(fullText, {
               rate: p.speechRate || 1.0,
               pitch: p.pitch || 1.0,
-              coachId: p.id || coachId,
+              coachId: coachId || p.id,
               voiceId: s.voice_id || p.voiceId || 0,
             });
           }
@@ -729,17 +741,17 @@ const DetectionScreen = ({navigation, route}) => {
   const correctSec = Math.round((elapsedSec * matchRate) / 100);
   const incorrectSec = Math.max(0, elapsedSec - correctSec);
 
-  const btnStripes = useMemo(
-    () =>
-      Array.from({length: BTN_STEPS}, (_, i) =>
-        lerpRgb(BTN_START, BTN_END, i / (BTN_STEPS - 1)),
-      ),
-    [],
-  );
+  const btnStripes = useMemo(() => {
+    const start = hexToRgb(colors.primaryGradientStart);
+    const end = hexToRgb(colors.primaryGradientEnd);
+    return Array.from({length: BTN_STEPS}, (_, i) =>
+      lerpRgb(start, end, i / (BTN_STEPS - 1)),
+    );
+  }, [colors]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       <ScreenHeader
         title={premium ? '智能AI陪练' : '手型检测'}
@@ -959,7 +971,7 @@ const DetectionScreen = ({navigation, route}) => {
               <Switch
                 value={voiceOn}
                 onValueChange={onToggleVoice}
-                trackColor={{true: Colors.pinkPrimary, false: '#ccc'}}
+                trackColor={{true: colors.primary, false: '#ccc'}}
               />
             </View>
             <ScrollView style={styles.alarmList}>
@@ -1136,10 +1148,11 @@ const DetectionScreen = ({navigation, route}) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = colors =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.pinkBg,
+    backgroundColor: colors.bg,
   },
   headerWrap: {
     height: 52,
@@ -1166,13 +1179,13 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontSize: 22,
-    color: Colors.white,
+    color: '#FFFFFF',
     fontWeight: '300',
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: Colors.white,
+    color: '#FFFFFF',
   },
   headerSpacer: {
     width: 40,
@@ -1189,7 +1202,7 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: colors.card,
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 10,
@@ -1208,11 +1221,11 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   actionHint: {
     fontSize: 11,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   cameraWrap: {
@@ -1230,7 +1243,7 @@ const styles = StyleSheet.create({
   },
   cameraPlaceholder: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   camFlipBtn: {
     position: 'absolute',
@@ -1256,18 +1269,18 @@ const styles = StyleSheet.create({
   permTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   permDesc: {
     fontSize: 13,
     lineHeight: 20,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
   },
   permBtn: {
-    backgroundColor: Colors.pinkPrimary,
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 22,
     borderRadius: 22,
@@ -1300,7 +1313,7 @@ const styles = StyleSheet.create({
   rabbitLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   templateRow: {
     flexDirection: 'row',
@@ -1311,16 +1324,16 @@ const styles = StyleSheet.create({
   templateText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   templateMuted: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   templateSet: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.pinkPrimary,
+    color: colors.accent,
   },
   errorBanner: {
     position: 'absolute',
@@ -1357,7 +1370,7 @@ const styles = StyleSheet.create({
   statsPink: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.pinkPrimary,
+    color: colors.accent,
     marginBottom: 8,
     flexShrink: 1,
   },
@@ -1392,7 +1405,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaLabel: {
-    color: Colors.white,
+    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
   },
@@ -1405,28 +1418,28 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '82%',
     maxHeight: '70%',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 18,
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 12,
     textAlign: 'center',
   },
   summaryCard: {
     width: '85%',
     maxHeight: '76%',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 18,
     padding: 20,
   },
   summaryTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -1441,21 +1454,21 @@ const styles = StyleSheet.create({
   summaryStatNum: {
     fontSize: 26,
     fontWeight: '800',
-    color: Colors.pinkPrimary,
+    color: colors.accent,
   },
   summaryStatLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 4,
   },
   summaryDetail: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 14,
   },
   breakdownBox: {
-    backgroundColor: Colors.pinkBg,
+    backgroundColor: colors.cardAlt,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -1464,7 +1477,7 @@ const styles = StyleSheet.create({
   breakdownTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   breakdownRow: {
@@ -1476,36 +1489,36 @@ const styles = StyleSheet.create({
     width: 40,
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   breakdownBarTrack: {
     flex: 1,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ffd9e3',
+    backgroundColor: colors.inputBg,
     marginHorizontal: 8,
     overflow: 'hidden',
   },
   breakdownBarFill: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: Colors.pinkPrimary,
+    backgroundColor: colors.primary,
   },
   breakdownVal: {
     width: 78,
     fontSize: 12,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'right',
   },
   breakdownEmpty: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 14,
   },
   summaryCommentBox: {
     maxHeight: 200,
-    backgroundColor: Colors.pinkBg,
+    backgroundColor: colors.cardAlt,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -1514,10 +1527,10 @@ const styles = StyleSheet.create({
   summaryComment: {
     fontSize: 15,
     lineHeight: 24,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   summaryBtn: {
-    backgroundColor: Colors.pinkPrimary,
+    backgroundColor: colors.primary,
     borderRadius: 24,
     paddingVertical: 12,
     alignItems: 'center',
@@ -1534,10 +1547,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.greyDivider,
+    borderBottomColor: colors.divider,
     marginBottom: 4,
   },
-  voiceLabel: {fontSize: 15, fontWeight: '600', color: Colors.textPrimary},
+  voiceLabel: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
   alarmList: {flexGrow: 0},
   alarmItem: {
     flexDirection: 'row',
@@ -1546,16 +1559,16 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.greyDivider,
+    borderBottomColor: colors.divider,
   },
-  alarmName: {fontSize: 15, color: Colors.textPrimary},
-  alarmLocked: {color: Colors.textSecondary},
-  alarmCheck: {fontSize: 16, color: Colors.pinkPrimary, fontWeight: '700'},
+  alarmName: {fontSize: 15, color: colors.textPrimary},
+  alarmLocked: {color: colors.textSecondary},
+  alarmCheck: {fontSize: 16, color: colors.accent, fontWeight: '700'},
   modalClose: {
     marginTop: 14,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.pinkPrimary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1564,7 +1577,7 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginTop: 14,
     marginBottom: 8,
   },
@@ -1580,15 +1593,15 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.pinkPrimary,
+    borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   stepBtnText: {
     fontSize: 22,
     lineHeight: 26,
-    color: Colors.pinkPrimary,
+    color: colors.accent,
     fontWeight: '700',
   },
   stepValueWrap: {
@@ -1598,7 +1611,7 @@ const styles = StyleSheet.create({
   stepValue: {
     fontSize: 22,
     fontWeight: '800',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   segRow: {flexDirection: 'row', gap: 8},
   segItem: {
@@ -1606,16 +1619,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.greyDivider,
+    borderColor: colors.divider,
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   segItemActive: {
-    backgroundColor: Colors.pinkPrimary,
-    borderColor: Colors.pinkPrimary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  segText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
+  segText: {fontSize: 13, color: colors.textPrimary, fontWeight: '600'},
   segTextActive: {color: '#fff'},
-});
+  });
 
 export default DetectionScreen;

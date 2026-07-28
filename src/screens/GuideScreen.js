@@ -1,4 +1,4 @@
-import React, {useState, useRef} from 'react';
+import React, {useMemo, useState, useRef} from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
 import {setItem} from '../services/storage';
 
@@ -43,6 +43,8 @@ const PAGES = [
 ];
 
 const GuideScreen = ({navigation, route}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const forceShow = route?.params?.forceShow;
   const [page, setPage] = useState(0);
   const scrollRef = useRef(null);
@@ -73,7 +75,7 @@ const GuideScreen = ({navigation, route}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <View style={styles.topBar}>
         <TouchableOpacity onPress={finish} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
           <Text style={styles.skip}>跳过</Text>
@@ -116,53 +118,54 @@ const GuideScreen = ({navigation, route}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  topBar: {
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: 20,
-  },
-  skip: {fontSize: 15, color: Colors.textSecondary},
-  pager: {flex: 1},
-  page: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 36,
-  },
-  icon: {width: 180, height: 180, marginBottom: 36},
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 18,
-    textAlign: 'center',
-  },
-  desc: {
-    fontSize: 15,
-    lineHeight: 26,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-  dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  dot: {width: 10, height: 10, borderRadius: 5, marginHorizontal: 5},
-  dotActive: {backgroundColor: Colors.pinkPrimary},
-  dotInactive: {backgroundColor: '#F3C6D2'},
-  footer: {paddingHorizontal: 32, paddingBottom: 28},
-  nextBtn: {
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextText: {color: '#fff', fontSize: 17, fontWeight: '700'},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    topBar: {
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'flex-end',
+      paddingHorizontal: 20,
+    },
+    skip: {fontSize: 15, color: colors.textSecondary},
+    pager: {flex: 1},
+    page: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 36,
+    },
+    icon: {width: 180, height: 180, marginBottom: 36},
+    title: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 18,
+      textAlign: 'center',
+    },
+    desc: {
+      fontSize: 15,
+      lineHeight: 26,
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    dots: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    dot: {width: 10, height: 10, borderRadius: 5, marginHorizontal: 5},
+    dotActive: {backgroundColor: colors.primary},
+    dotInactive: {backgroundColor: colors.textMuted},
+    footer: {paddingHorizontal: 32, paddingBottom: 28},
+    nextBtn: {
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    nextText: {color: '#fff', fontSize: 17, fontWeight: '700'},
+  });
 
 export default GuideScreen;

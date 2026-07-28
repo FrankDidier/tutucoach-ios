@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   StatusBar,
   Alert,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
 import {
@@ -18,22 +17,26 @@ import {
   setTeacherAvatarUri,
 } from '../services/profilePrefs';
 import {ensureTeacherUnlocked} from '../services/teacherAuth';
-
-const MenuRow = ({icon, label, onPress, divider}) => (
-  <TouchableOpacity
-    style={styles.menuRow}
-    activeOpacity={0.7}
-    onPress={onPress}>
-    <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
-    <Text style={styles.menuLabel}>{label}</Text>
-    <Text style={styles.menuArrow}>›</Text>
-    {divider ? <View style={styles.menuDivider} /> : null}
-  </TouchableOpacity>
-);
+import {useTheme} from '../theme/ThemeContext';
 
 const TeacherProfileScreen = ({navigation}) => {
+  const {colors, mode} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [avatarUri, setAvatar] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
+
+  const MenuRow = ({icon, label, onPress, divider}) => (
+    <TouchableOpacity
+      style={styles.menuRow}
+      activeOpacity={0.7}
+      onPress={onPress}>
+      <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
+      <Text style={styles.menuLabel}>{label}</Text>
+      <Text style={styles.menuArrow}>›</Text>
+      {divider ? <View style={styles.menuDivider} /> : null}
+    </TouchableOpacity>
+  );
 
   // 进入教师端先做口令校验（对应安卓 TeacherGate）。未通过则退回上一页。
   useEffect(() => {
@@ -71,12 +74,14 @@ const TeacherProfileScreen = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
-      <Image
-        source={Images.pageGradient}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+      {mode === 'light' ? (
+        <Image
+          source={Images.pageGradient}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+      ) : null}
       <View style={styles.topBar}>
         <TouchableOpacity
           style={styles.backHit}
@@ -143,136 +148,137 @@ const TeacherProfileScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.pinkBg,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 8,
-  },
-  backHit: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backText: {
-    fontSize: 30,
-    color: '#333333',
-    marginTop: -4,
-  },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginLeft: 4,
-  },
-  scroll: {
-    paddingBottom: 40,
-  },
-  profileBlock: {
-    alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 8,
-  },
-  avatarCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: Colors.pinkLight,
-    padding: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  avatarImg: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    right: 4,
-    bottom: 14,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  avatarEditText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    marginTop: -1,
-  },
-  loginText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  hintText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  cardSingle: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginTop: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  cardGroup: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginTop: 12,
-    paddingVertical: 4,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 60,
-    paddingHorizontal: 16,
-  },
-  menuIcon: {
-    width: 36,
-    height: 36,
-    marginRight: 12,
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  menuArrow: {
-    fontSize: 22,
-    color: Colors.greyMedium,
-    marginTop: -2,
-  },
-  menuDivider: {
-    position: 'absolute',
-    left: 64,
-    right: 0,
-    bottom: 0,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.greyDivider,
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    topBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingTop: 8,
+    },
+    backHit: {
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    backText: {
+      fontSize: 30,
+      color: '#333333',
+      marginTop: -4,
+    },
+    pageTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginLeft: 4,
+    },
+    scroll: {
+      paddingBottom: 40,
+    },
+    profileBlock: {
+      alignItems: 'center',
+      paddingTop: 24,
+      paddingBottom: 8,
+    },
+    avatarCircle: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.cardAlt,
+      padding: 12,
+      marginBottom: 12,
+      overflow: 'hidden',
+    },
+    avatarImg: {
+      width: '100%',
+      height: '100%',
+    },
+    avatarEditBadge: {
+      position: 'absolute',
+      right: 4,
+      bottom: 14,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: '#fff',
+    },
+    avatarEditText: {
+      color: '#fff',
+      fontSize: 17,
+      fontWeight: '700',
+      marginTop: -1,
+    },
+    loginText: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    hintText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+    cardSingle: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      marginTop: 16,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 1,
+    },
+    cardGroup: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      marginHorizontal: 16,
+      marginTop: 12,
+      paddingVertical: 4,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 1,
+    },
+    menuRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 60,
+      paddingHorizontal: 16,
+    },
+    menuIcon: {
+      width: 36,
+      height: 36,
+      marginRight: 12,
+    },
+    menuLabel: {
+      flex: 1,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    menuArrow: {
+      fontSize: 22,
+      color: colors.textMuted,
+      marginTop: -2,
+    },
+    menuDivider: {
+      position: 'absolute',
+      left: 64,
+      right: 0,
+      bottom: 0,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.divider,
+    },
+  });
 
 export default TeacherProfileScreen;

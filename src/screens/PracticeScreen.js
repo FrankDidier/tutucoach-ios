@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import {
   View,
   Text,
@@ -9,19 +9,23 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
+import {useTheme} from '../theme/ThemeContext';
 
 const PracticeScreen = ({navigation}) => {
+  const {colors, mode} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      <Image
-        source={Images.pageGradient}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      <StatusBar barStyle={colors.statusBarStyle} />
+      {mode === 'light' ? (
+        <Image
+          source={Images.pageGradient}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+      ) : null}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
@@ -100,10 +104,11 @@ const PracticeScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = colors =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.pinkBg,
+    backgroundColor: colors.bg,
   },
   scroll: {
     paddingBottom: 28,
@@ -112,7 +117,7 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginTop: 8,
     marginBottom: 20,
   },
@@ -129,12 +134,12 @@ const styles = StyleSheet.create({
   heroLine1: {
     fontSize: 28,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   heroLine2: {
     fontSize: 22,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginTop: 6,
   },
   mascot: {
@@ -142,7 +147,7 @@ const styles = StyleSheet.create({
     height: 140,
   },
   selectionCard: {
-    backgroundColor: Colors.white,
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
@@ -164,7 +169,7 @@ const styles = StyleSheet.create({
   selectionLabel: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   cardsRow: {
     flexDirection: 'row',
@@ -187,18 +192,18 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   cardSub: {
     fontSize: 12,
     marginTop: 2,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   companionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 16,
-    backgroundColor: '#FF5B87',
+    backgroundColor: colors.primary,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -208,6 +213,6 @@ const styles = StyleSheet.create({
   companionTitle: {fontSize: 16, fontWeight: '700', color: '#fff'},
   companionSub: {fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2},
   companionArrow: {fontSize: 24, color: '#fff'},
-});
+  });
 
 export default PracticeScreen;

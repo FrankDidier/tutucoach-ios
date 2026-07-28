@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Alert,
   StatusBar,
 } from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {listStudents, saveStudent, deleteStudent} from '../services/students';
 import {getDeviceId} from '../services/device';
@@ -18,6 +18,9 @@ import {registerAccount, bindTeacher} from '../services/account';
 
 // 对应安卓 StudentEntryActivity：录入表单（姓名必填 / 学号 / 备注）+ 列表（点编辑、长按删除）。
 const StudentEntryScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [name, setName] = useState('');
   const [studentId, setStudentId] = useState('');
   const [note, setNote] = useState('');
@@ -94,7 +97,7 @@ const StudentEntryScreen = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={colors.statusBarStyle} />
       <ScreenHeader title="学生信息录入" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.formCard}>
@@ -104,7 +107,7 @@ const StudentEntryScreen = ({navigation}) => {
             value={name}
             onChangeText={setName}
             placeholder="请输入学生姓名"
-            placeholderTextColor={Colors.greyMedium}
+            placeholderTextColor={colors.textMuted}
           />
           <Text style={styles.label}>学号</Text>
           <TextInput
@@ -112,7 +115,7 @@ const StudentEntryScreen = ({navigation}) => {
             value={studentId}
             onChangeText={setStudentId}
             placeholder="可选（≥12位可服务端绑定）"
-            placeholderTextColor={Colors.greyMedium}
+            placeholderTextColor={colors.textMuted}
           />
           <Text style={styles.label}>备注</Text>
           <TextInput
@@ -120,7 +123,7 @@ const StudentEntryScreen = ({navigation}) => {
             value={note}
             onChangeText={setNote}
             placeholder="可选"
-            placeholderTextColor={Colors.greyMedium}
+            placeholderTextColor={colors.textMuted}
             multiline
           />
           <TouchableOpacity style={styles.saveBtn} onPress={onSave}>
@@ -158,60 +161,61 @@ const StudentEntryScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  scroll: {padding: 16, paddingBottom: 40},
-  formCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: {width: 0, height: 3},
-    elevation: 2,
-  },
-  label: {fontSize: 13, color: Colors.textSecondary, marginBottom: 6, marginTop: 10},
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.greyDivider,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: Colors.textPrimary,
-    backgroundColor: '#FAFAFA',
-  },
-  inputMultiline: {height: 70, textAlignVertical: 'top'},
-  saveBtn: {
-    marginTop: 18,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-  listTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 10,
-  },
-  empty: {fontSize: 14, color: Colors.textSecondary, marginBottom: 10},
-  studentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-  },
-  studentName: {fontSize: 15, fontWeight: '700', color: Colors.textPrimary},
-  studentSub: {fontSize: 12, color: Colors.textSecondary, marginTop: 2},
-  editHint: {fontSize: 13, color: Colors.pinkPrimary, fontWeight: '600'},
-  tip: {fontSize: 12, color: Colors.textSecondary, marginTop: 8},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    scroll: {padding: 16, paddingBottom: 40},
+    formCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 20,
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 3},
+      elevation: 2,
+    },
+    label: {fontSize: 13, color: colors.textSecondary, marginBottom: 6, marginTop: 10},
+    input: {
+      borderWidth: 1,
+      borderColor: colors.divider,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: colors.textPrimary,
+      backgroundColor: colors.inputBg,
+    },
+    inputMultiline: {height: 70, textAlignVertical: 'top'},
+    saveBtn: {
+      marginTop: 18,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+    listTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 10,
+    },
+    empty: {fontSize: 14, color: colors.textSecondary, marginBottom: 10},
+    studentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+    },
+    studentName: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
+    studentSub: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+    editHint: {fontSize: 13, color: colors.accent, fontWeight: '600'},
+    tip: {fontSize: 12, color: colors.textSecondary, marginTop: 8},
+  });
 
 export default StudentEntryScreen;

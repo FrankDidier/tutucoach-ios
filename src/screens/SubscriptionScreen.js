@@ -10,9 +10,9 @@ import {
   Alert,
   StatusBar,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
+import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {getMembership} from '../services/account';
 import {payWithWeChat} from '../services/wechat';
@@ -48,6 +48,8 @@ function lerpRgb(from, to, t) {
 }
 
 const SubscriptionScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [selected, setSelected] = useState('yearly');
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
@@ -66,20 +68,20 @@ const SubscriptionScreen = ({navigation}) => {
   }, []);
 
   const bannerStripes = useMemo(() => {
-    const from = hexToRgb(Colors.pinkGradientStart);
-    const to = hexToRgb(Colors.pinkGradientEnd);
+    const from = hexToRgb(colors.primaryGradientStart);
+    const to = hexToRgb(colors.primaryGradientEnd);
     return Array.from({length: BANNER_STEPS}, (_, i) =>
       lerpRgb(from, to, i / (BANNER_STEPS - 1)),
     );
-  }, []);
+  }, [colors]);
 
   const btnStripes = useMemo(() => {
-    const from = hexToRgb(Colors.pinkButtonStart);
-    const to = hexToRgb(Colors.pinkButtonEnd);
+    const from = hexToRgb(colors.primaryGradientStart);
+    const to = hexToRgb(colors.primaryGradientEnd);
     return Array.from({length: BTN_STEPS}, (_, i) =>
       lerpRgb(from, to, i / (BTN_STEPS - 1)),
     );
-  }, []);
+  }, [colors]);
 
   const onPurchase = async () => {
     if (!agreed) {
@@ -105,7 +107,7 @@ const SubscriptionScreen = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       <ScreenHeader title="会员订阅" onBack={() => navigation?.goBack?.()} />
 
@@ -214,257 +216,260 @@ const SubscriptionScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.pinkBg,
-  },
-  headerWrap: {
-    position: 'relative',
-    height: 48,
-    overflow: 'hidden',
-  },
-  headerGradient: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'column',
-  },
-  headerStripe: {
-    flex: 1,
-  },
-  headerBar: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  backHit: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backChevron: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: Colors.white,
-    marginTop: -2,
-  },
-  headerTitleWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  bannerOuter: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    minHeight: 100,
-    marginBottom: 20,
-  },
-  bannerGradient: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'column',
-  },
-  bannerStripe: {
-    flex: 1,
-  },
-  bannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    paddingVertical: 18,
-  },
-  bannerTextCol: {
-    flex: 1,
-  },
-  bannerDiamond: {
-    width: 80,
-    height: 80,
-    marginLeft: 8,
-  },
-  vipBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.white,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  vipBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.pinkPrimary,
-  },
-  bannerDate: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.white,
-  },
-  sectionPink: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.pinkPrimary,
-    marginBottom: 10,
-  },
-  benefitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 2,
-  },
-  benefitIcon: {
-    width: 40,
-    height: 40,
-    marginRight: 12,
-  },
-  benefitTextCol: {
-    flex: 1,
-    gap: 4,
-  },
-  benefitLine: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    lineHeight: 22,
-  },
-  sectionPlans: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  plansRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  planCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 1,
-  },
-  planCardSelected: {
-    borderColor: Colors.pinkPrimary,
-  },
-  planName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  originalPrice: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    textDecorationLine: 'line-through',
-    marginBottom: 4,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  priceCurrency: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.pinkPrimary,
-    marginBottom: 3,
-    marginRight: 1,
-  },
-  priceValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.pinkPrimary,
-  },
-  agreementRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 22,
-    gap: 10,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: Colors.pinkPrimary,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: Colors.pinkPrimary,
-    borderColor: Colors.pinkPrimary,
-  },
-  checkboxMark: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  agreementText: {
-    flex: 1,
-    fontSize: 12,
-    color: Colors.pinkPrimary,
-    lineHeight: 18,
-  },
-  purchaseOuter: {
-    marginTop: 18,
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  btnGradientRow: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-  },
-  btnStripe: {
-    flex: 1,
-    height: '100%',
-  },
-  purchaseLabelWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  purchaseBtnText: {
-    color: Colors.white,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    headerWrap: {
+      position: 'relative',
+      height: 48,
+      overflow: 'hidden',
+    },
+    headerGradient: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'column',
+    },
+    headerStripe: {
+      flex: 1,
+    },
+    headerBar: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 4,
+    },
+    backHit: {
+      width: 44,
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    backChevron: {
+      fontSize: 22,
+      fontWeight: '600',
+      color: '#FFFFFF',
+      marginTop: -2,
+    },
+    headerTitleWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 40,
+    },
+    bannerOuter: {
+      borderRadius: 16,
+      overflow: 'hidden',
+      minHeight: 100,
+      marginBottom: 20,
+    },
+    bannerGradient: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'column',
+    },
+    bannerStripe: {
+      flex: 1,
+    },
+    bannerContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      paddingVertical: 18,
+    },
+    bannerTextCol: {
+      flex: 1,
+    },
+    bannerDiamond: {
+      width: 80,
+      height: 80,
+      marginLeft: 8,
+    },
+    vipBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#FFFFFF',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+    },
+    vipBadgeText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+    bannerDate: {
+      marginTop: 12,
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    sectionPink: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.accent,
+      marginBottom: 10,
+    },
+    benefitCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingVertical: 18,
+      paddingHorizontal: 16,
+      marginBottom: 8,
+      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      borderColor: colors.cardBorder,
+      shadowColor: '#000',
+      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 2},
+      elevation: 2,
+    },
+    benefitIcon: {
+      width: 40,
+      height: 40,
+      marginRight: 12,
+    },
+    benefitTextCol: {
+      flex: 1,
+      gap: 4,
+    },
+    benefitLine: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      lineHeight: 22,
+    },
+    sectionPlans: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 20,
+      marginBottom: 12,
+    },
+    plansRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    planCard: {
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: colors.mode === 'dark' ? colors.cardBorder : 'transparent',
+      shadowColor: '#000',
+      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
+      shadowRadius: 8,
+      shadowOffset: {width: 0, height: 2},
+      elevation: 1,
+    },
+    planCardSelected: {
+      borderColor: colors.primary,
+    },
+    planName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    originalPrice: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      textDecorationLine: 'line-through',
+      marginBottom: 4,
+    },
+    priceRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    priceCurrency: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.accent,
+      marginBottom: 3,
+      marginRight: 1,
+    },
+    priceValue: {
+      fontSize: 24,
+      fontWeight: '800',
+      color: colors.accent,
+    },
+    agreementRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 22,
+      gap: 10,
+    },
+    checkbox: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      backgroundColor: colors.card,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    checkboxChecked: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    checkboxMark: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    agreementText: {
+      flex: 1,
+      fontSize: 12,
+      color: colors.accent,
+      lineHeight: 18,
+    },
+    purchaseOuter: {
+      marginTop: 18,
+      height: 52,
+      borderRadius: 26,
+      overflow: 'hidden',
+      justifyContent: 'center',
+    },
+    btnGradientRow: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'row',
+    },
+    btnStripe: {
+      flex: 1,
+      height: '100%',
+    },
+    purchaseLabelWrap: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    purchaseBtnText: {
+      color: colors.onPrimary,
+      fontSize: 17,
+      fontWeight: '700',
+    },
+  });
 
 export default SubscriptionScreen;

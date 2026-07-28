@@ -1,6 +1,6 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {View, Text, StyleSheet, SafeAreaView, ScrollView, StatusBar} from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getStats} from '../services/companion';
 
@@ -12,14 +12,17 @@ function dayNumberOf(year, month, dom) {
   return Math.floor(new Date(year, month, dom, 12, 0, 0, 0).getTime() / DAY_MS);
 }
 
-const StatCell = ({value, label}) => (
-  <View style={styles.statCell}>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
-
 const CheckinStatsScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const StatCell = ({value, label}) => (
+    <View style={styles.statCell}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+
   const [stats, setStats] = useState({
     streak: 0,
     totalDays: 0,
@@ -56,7 +59,7 @@ const CheckinStatsScreen = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={colors.statusBarStyle} />
       <ScreenHeader title="打卡统计" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.statRow}>
@@ -110,61 +113,62 @@ const CheckinStatsScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  scroll: {padding: 16, paddingBottom: 40},
-  statRow: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingVertical: 18,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: {width: 0, height: 3},
-    elevation: 2,
-  },
-  statCell: {flex: 1, alignItems: 'center'},
-  statValue: {fontSize: 24, fontWeight: '800', color: Colors.pinkPrimary},
-  statLabel: {fontSize: 12, color: Colors.textSecondary, marginTop: 6},
-  calendarCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: {width: 0, height: 3},
-    elevation: 2,
-  },
-  monthLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 14,
-    textAlign: 'center',
-  },
-  weekRow: {flexDirection: 'row', marginBottom: 8},
-  weekday: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  dayRow: {flexDirection: 'row', marginTop: 4},
-  dayCell: {flex: 1, height: 38, alignItems: 'center', justifyContent: 'center'},
-  dayInner: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayPracticed: {backgroundColor: Colors.pinkPrimary},
-  dayText: {fontSize: 13, color: Colors.textPrimary},
-  dayTextPracticed: {color: '#fff', fontWeight: '700'},
-  dayTextToday: {color: Colors.pinkPrimary, fontWeight: '700'},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    scroll: {padding: 16, paddingBottom: 40},
+    statRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingVertical: 18,
+      marginBottom: 16,
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 3},
+      elevation: 2,
+    },
+    statCell: {flex: 1, alignItems: 'center'},
+    statValue: {fontSize: 24, fontWeight: '800', color: colors.primary},
+    statLabel: {fontSize: 12, color: colors.textSecondary, marginTop: 6},
+    calendarCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 3},
+      elevation: 2,
+    },
+    monthLabel: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 14,
+      textAlign: 'center',
+    },
+    weekRow: {flexDirection: 'row', marginBottom: 8},
+    weekday: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    dayRow: {flexDirection: 'row', marginTop: 4},
+    dayCell: {flex: 1, height: 38, alignItems: 'center', justifyContent: 'center'},
+    dayInner: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dayPracticed: {backgroundColor: colors.primary},
+    dayText: {fontSize: 13, color: colors.textPrimary},
+    dayTextPracticed: {color: '#fff', fontWeight: '700'},
+    dayTextToday: {color: colors.primary, fontWeight: '700'},
+  });
 
 export default CheckinStatsScreen;

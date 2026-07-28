@@ -9,13 +9,13 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId} from '../services/coachPrefs';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import ScreenHeader from '../components/ScreenHeader';
+import {useTheme} from '../theme/ThemeContext';
 
 // 与安卓 SettingsActivity.styleLabel 一致
 function styleLabel(style) {
@@ -42,12 +42,19 @@ function avatarSource(coach) {
   return avatarFor(coach && coach.name);
 }
 
-const BTN_START = {r: 255, g: 90, b: 127};
-const BTN_END = {r: 255, g: 138, b: 171};
 const BTN_STEPS = 28;
 
 function lerpChannel(a, b, t) {
   return Math.round(a + (b - a) * t);
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
 }
 
 function lerpRgb(from, to, t) {
@@ -59,6 +66,8 @@ function lerpRgb(from, to, t) {
 }
 
 const AISelectScreen = ({navigation, route}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [selected, setSelected] = useState('coach_pro');
   const [remoteCoaches, setRemoteCoaches] = useState(null);
 
@@ -95,13 +104,13 @@ const AISelectScreen = ({navigation, route}) => {
     }
   };
 
-  const btnStripes = useMemo(
-    () =>
-      Array.from({length: BTN_STEPS}, (_, i) =>
-        lerpRgb(BTN_START, BTN_END, i / (BTN_STEPS - 1)),
-      ),
-    [],
-  );
+  const btnStripes = useMemo(() => {
+    const start = hexToRgb(colors.primaryGradientStart);
+    const end = hexToRgb(colors.primaryGradientEnd);
+    return Array.from({length: BTN_STEPS}, (_, i) =>
+      lerpRgb(start, end, i / (BTN_STEPS - 1)),
+    );
+  }, [colors]);
 
   const gridItems = useMemo(() => {
     const source =
@@ -127,7 +136,7 @@ const AISelectScreen = ({navigation, route}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       <ScreenHeader title="AI选择" onBack={() => navigation?.goBack?.()} />
 
@@ -186,101 +195,102 @@ const AISelectScreen = ({navigation, route}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.pinkBg,
-  },
-  scroll: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  cell: {
-    width: '48.5%',
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 1,
-  },
-  cellSelected: {
-    borderColor: Colors.pinkPrimary,
-    backgroundColor: Colors.pinkLight,
-  },
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.pinkLight,
-    padding: 4,
-    overflow: 'hidden',
-  },
-  avatarImg: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 18,
-  },
-  cellTextCol: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  cellName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  cellSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    paddingTop: 10,
-    backgroundColor: Colors.pinkBg,
-  },
-  confirmOuter: {
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  confirmGradientRow: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-  },
-  confirmStripe: {
-    flex: 1,
-    height: '100%',
-  },
-  confirmLabelWrap: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  confirmLabel: {
-    color: Colors.white,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    scroll: {
+      padding: 16,
+      paddingBottom: 100,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+    },
+    cell: {
+      width: '48.5%',
+      marginBottom: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 2,
+      borderColor: colors.mode === 'dark' ? colors.cardBorder : 'transparent',
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      shadowOffset: {width: 0, height: 2},
+      elevation: 1,
+    },
+    cellSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.cardAlt,
+    },
+    avatarCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.cardAlt,
+      padding: 4,
+      overflow: 'hidden',
+    },
+    avatarImg: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 18,
+    },
+    cellTextCol: {
+      flex: 1,
+      marginLeft: 10,
+    },
+    cellName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    cellSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    footer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 20,
+      paddingBottom: 28,
+      paddingTop: 10,
+      backgroundColor: colors.bg,
+    },
+    confirmOuter: {
+      height: 52,
+      borderRadius: 26,
+      overflow: 'hidden',
+      justifyContent: 'center',
+    },
+    confirmGradientRow: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'row',
+    },
+    confirmStripe: {
+      flex: 1,
+      height: '100%',
+    },
+    confirmLabelWrap: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    confirmLabel: {
+      color: colors.onPrimary,
+      fontSize: 17,
+      fontWeight: '700',
+    },
+  });
 
 export default AISelectScreen;

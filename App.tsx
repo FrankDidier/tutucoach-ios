@@ -22,11 +22,11 @@ import CompanionScreen from './src/screens/CompanionScreen';
 import StudentReminderScreen from './src/screens/StudentReminderScreen';
 import LessonPlanScreen from './src/screens/LessonPlanScreen';
 
-import {Colors} from './src/utils/colors';
 import {Images} from './src/assets/images';
 import {getItem} from './src/services/storage';
 import {initDeviceId} from './src/services/device';
 import {registerWeChat} from './src/services/wechat';
+import {ThemeProvider, useTheme} from './src/theme/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -50,6 +50,7 @@ function TabIcon({label, color}: {label: string; focused: boolean; color: string
 }
 
 function MainTabs() {
+  const {colors} = useTheme();
   return (
     <Tab.Navigator
       screenOptions={({route}) => ({
@@ -57,18 +58,18 @@ function MainTabs() {
         tabBarIcon: ({focused, color}) => (
           <TabIcon label={route.name} focused={focused} color={color} />
         ),
-        tabBarActiveTintColor: Colors.pinkPrimary,
-        tabBarInactiveTintColor: Colors.greyMedium,
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
           height: Platform.OS === 'ios' ? 85 : 60,
           paddingBottom: Platform.OS === 'ios' ? 28 : 8,
           paddingTop: 6,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.tabBarBg,
           borderTopWidth: 0.5,
-          borderTopColor: Colors.greyDivider,
+          borderTopColor: colors.divider,
           elevation: 8,
           shadowColor: '#000',
-          shadowOpacity: 0.06,
+          shadowOpacity: colors.mode === 'dark' ? 0.3 : 0.06,
           shadowRadius: 8,
           shadowOffset: {width: 0, height: -2},
         },
@@ -81,7 +82,8 @@ function MainTabs() {
   );
 }
 
-function App(): React.JSX.Element {
+function AppInner(): React.JSX.Element {
+  const {colors} = useTheme();
   // 首次启动显示引导页（对应安卓 GuideActivity 为 LAUNCHER）。
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
@@ -97,7 +99,7 @@ function App(): React.JSX.Element {
   }, []);
 
   if (!initialRoute) {
-    return <View style={{flex: 1, backgroundColor: Colors.pinkBg}} />;
+    return <View style={{flex: 1, backgroundColor: colors.bg}} />;
   }
 
   return (
@@ -122,6 +124,14 @@ function App(): React.JSX.Element {
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+function App(): React.JSX.Element {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
   );
 }
 

@@ -10,23 +10,27 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import {speak} from '../services/voice';
 import {talkDurationMs} from '../utils/rabbitMessages';
 import {onAppOpen, onTap} from '../services/companion';
 import RabbitMascot from '../components/RabbitMascot';
-
-const BG_TOP = {r: 255, g: 232, b: 238};
-const BG_BOTTOM = {r: 255, g: 245, b: 247};
-const BTN_START = {r: 255, g: 90, b: 127};
-const BTN_END = {r: 255, g: 138, b: 171};
+import {useTheme} from '../theme/ThemeContext';
 
 const BG_STEPS = 48;
 const BTN_STEPS = 28;
 
 function lerpChannel(a, b, t) {
   return Math.round(a + (b - a) * t);
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
 }
 
 function lerpRgb(from, to, t) {
@@ -38,21 +42,24 @@ function lerpRgb(from, to, t) {
 }
 
 const WelcomeScreen = ({navigation}) => {
-  const bgStripes = useMemo(
-    () =>
-      Array.from({length: BG_STEPS}, (_, i) =>
-        lerpRgb(BG_TOP, BG_BOTTOM, i / (BG_STEPS - 1)),
-      ),
-    [],
-  );
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const btnStripes = useMemo(
-    () =>
-      Array.from({length: BTN_STEPS}, (_, i) =>
-        lerpRgb(BTN_START, BTN_END, i / (BTN_STEPS - 1)),
-      ),
-    [],
-  );
+  const bgStripes = useMemo(() => {
+    const top = hexToRgb(colors.bgGradientTop);
+    const bottom = hexToRgb(colors.bgGradientBottom);
+    return Array.from({length: BG_STEPS}, (_, i) =>
+      lerpRgb(top, bottom, i / (BG_STEPS - 1)),
+    );
+  }, [colors]);
+
+  const btnStripes = useMemo(() => {
+    const start = hexToRgb(colors.primaryGradientStart);
+    const end = hexToRgb(colors.primaryGradientEnd);
+    return Array.from({length: BTN_STEPS}, (_, i) =>
+      lerpRgb(start, end, i / (BTN_STEPS - 1)),
+    );
+  }, [colors]);
 
   // ===== 动效 =====
   // 兔子本体的呼吸/说话/随机动作全部由 RabbitMascot 逐帧播放（见组件）；
@@ -153,7 +160,7 @@ const WelcomeScreen = ({navigation}) => {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <View style={styles.gradientLayer} pointerEvents="none">
         {bgStripes.map((color, i) => (
           <View
@@ -224,10 +231,11 @@ const WelcomeScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = colors =>
+  StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.pinkBg,
+    backgroundColor: colors.bg,
   },
   gradientLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -250,7 +258,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   sparkle: {
     width: 36,
@@ -274,8 +282,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     fontSize: 96,
     fontWeight: '700',
-    color: Colors.pinkPrimary,
-    opacity: 0.07,
+    color: colors.textPrimary,
+    opacity: colors.mode === 'dark' ? 0.06 : 0.07,
     letterSpacing: 2,
   },
   bubbleWrap: {
@@ -299,7 +307,7 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: 14,
     lineHeight: 20,
-    color: Colors.textPrimary,
+    color: '#191919',
     textAlign: 'center',
   },
   bubbleTail: {
@@ -332,7 +340,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 26,
     textAlign: 'center',
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     fontWeight: '500',
   },
   footer: {
@@ -360,10 +368,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaLabel: {
-    color: Colors.white,
+    color: colors.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },
-});
+  });
 
 export default WelcomeScreen;

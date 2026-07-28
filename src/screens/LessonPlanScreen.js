@@ -3,7 +3,7 @@
 // - 一键选取曲目重点：从「陪练重点」里直接挑一首已设曲目的重点填进来，教案会据此调整、呼应。
 // - 内置多套排版样式（清新 / 雅致 / 简约），一键切换，无需外部 UI 设计。
 // - 点任一板块 → 弹出「板块详解」页，AI 就该板块展开更细致的讲解。
-import React, {useRef, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
   FlatList,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {
   generateLessonPlan,
@@ -51,14 +51,15 @@ const REC_CATEGORIES = [
 ];
 
 // 内置排版样式（无需外部 UI）：切换后教案结果区的配色/字号/行距/标题样式随之变化。
-const PLAN_STYLES = [
+// 「清新」跟随主题令牌；「雅致 / 简约」是自成一套的固定排版配色（与明暗主题无关）。
+const makePlanStyles = colors => [
   {
     key: 'fresh',
     label: '清新',
-    result: {backgroundColor: Colors.white},
-    header: {color: Colors.pinkDark, fontSize: 16.5, letterSpacing: 0},
-    accent: Colors.pinkPrimary,
-    body: {color: Colors.textPrimary, fontSize: 14.5, lineHeight: 24},
+    result: {backgroundColor: colors.card},
+    header: {color: colors.primaryDark, fontSize: 16.5, letterSpacing: 0},
+    accent: colors.accent,
+    body: {color: colors.textPrimary, fontSize: 14.5, lineHeight: 24},
     underline: false,
   },
   {
@@ -73,7 +74,7 @@ const PLAN_STYLES = [
   {
     key: 'minimal',
     label: '简约',
-    result: {backgroundColor: Colors.white},
+    result: {backgroundColor: '#FFFFFF'},
     header: {color: '#1C1C1E', fontSize: 15.5, letterSpacing: 0},
     accent: '#1C1C1E',
     body: {color: '#3A3A3C', fontSize: 14, lineHeight: 23},
@@ -144,6 +145,9 @@ function renderRich(text, bodyStyle) {
 }
 
 export default function LessonPlanScreen({navigation}) {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const PLAN_STYLES = useMemo(() => makePlanStyles(colors), [colors]);
   const [piece, setPiece] = useState('');
   const [composer, setComposer] = useState('');
   const [focus, setFocus] = useState('');
@@ -322,7 +326,7 @@ export default function LessonPlanScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="曲目解读 · 教案" onBack={() => navigation?.goBack?.()} />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -380,7 +384,7 @@ export default function LessonPlanScreen({navigation}) {
               value={piece}
               onChangeText={setPiece}
               placeholder="如：致爱丽丝 / 车尔尼599 No.1"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <Text style={[styles.fieldLabel, {marginTop: 12}]}>作曲家（可选）</Text>
             <TextInput
@@ -388,7 +392,7 @@ export default function LessonPlanScreen({navigation}) {
               value={composer}
               onChangeText={setComposer}
               placeholder="如：贝多芬"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
 
             <View style={[styles.focusHead, {marginTop: 12}]}>
@@ -405,7 +409,7 @@ export default function LessonPlanScreen({navigation}) {
               value={focus}
               onChangeText={setFocus}
               placeholder={'如：左手分解和弦要轻\n右手主旋律突出\n注意第 9 小节渐强'}
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               multiline
             />
             <TouchableOpacity
@@ -520,7 +524,7 @@ export default function LessonPlanScreen({navigation}) {
               value={recLevel}
               onChangeText={setRecLevel}
               placeholder="如：拜厄下册 / 车尔尼599 / 考级 4 级水平"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <Text style={[styles.fieldLabel, {marginTop: 12}]}>生理年龄</Text>
             <TextInput
@@ -528,7 +532,7 @@ export default function LessonPlanScreen({navigation}) {
               value={recAge}
               onChangeText={setRecAge}
               placeholder="如：7 岁 / 12 岁 / 成人"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <Text style={[styles.fieldLabel, {marginTop: 12}]}>学琴时长</Text>
             <TextInput
@@ -536,7 +540,7 @@ export default function LessonPlanScreen({navigation}) {
               value={recYears}
               onChangeText={setRecYears}
               placeholder="如：半年 / 2 年 / 5 年"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <Text style={[styles.fieldHint, {marginTop: 8}]}>
               {recCategory === 'hezou'
@@ -637,7 +641,7 @@ export default function LessonPlanScreen({navigation}) {
         animationType="slide"
         onRequestClose={() => setDetailOpen(false)}>
         <SafeAreaView style={styles.detailContainer}>
-          <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+          <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
           <ScreenHeader
             title="板块详解"
             onBack={() => setDetailOpen(false)}
@@ -652,7 +656,7 @@ export default function LessonPlanScreen({navigation}) {
           </View>
           {detailLoading ? (
             <View style={styles.detailLoading}>
-              <ActivityIndicator color={Colors.pinkPrimary} size="large" />
+              <ActivityIndicator color={colors.primary} size="large" />
               <Text style={styles.loadingHint}>AI 正在展开这个板块的详细讲解…</Text>
             </View>
           ) : (
@@ -682,7 +686,7 @@ export default function LessonPlanScreen({navigation}) {
               </TouchableOpacity>
             </View>
             {pickerLoading ? (
-              <ActivityIndicator color={Colors.pinkPrimary} style={{marginVertical: 24}} />
+              <ActivityIndicator color={colors.primary} style={{marginVertical: 24}} />
             ) : pickerPieces == null ? (
               <FlatList
                 data={pickerStudents}
@@ -733,220 +737,221 @@ export default function LessonPlanScreen({navigation}) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  flex: {flex: 1},
-  scroll: {padding: 16, paddingBottom: 40},
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 2,
-  },
-  fieldLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
-  fieldHint: {fontSize: 11.5, color: Colors.pinkDark, marginTop: 4, lineHeight: 17},
-  modeRow: {
-    flexDirection: 'row',
-    backgroundColor: Colors.white,
-    borderRadius: 22,
-    padding: 4,
-    marginBottom: 14,
-  },
-  modeTab: {
-    flex: 1,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeTabOn: {backgroundColor: Colors.pinkPrimary},
-  modeTabText: {fontSize: 14, fontWeight: '700', color: Colors.textSecondary},
-  modeTabTextOn: {color: '#fff'},
-  recGroupHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 6,
-  },
-  recAccent: {
-    width: 4,
-    height: 16,
-    borderRadius: 2,
-    backgroundColor: Colors.pinkPrimary,
-    marginRight: 8,
-  },
-  recGroupTitle: {fontSize: 15, fontWeight: '800', color: Colors.pinkDark},
-  recEmpty: {fontSize: 13, color: Colors.textSecondary, marginBottom: 6},
-  recItem: {
-    backgroundColor: Colors.pinkBg,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  recItemTop: {flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap'},
-  recName: {fontSize: 15.5, fontWeight: '800', color: Colors.textPrimary},
-  recComposer: {fontSize: 12.5, color: Colors.textSecondary, marginLeft: 8},
-  recReason: {fontSize: 13, color: Colors.textPrimary, lineHeight: 20, marginTop: 4},
-  recUse: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: Colors.pinkPrimary,
-    marginTop: 6,
-  },
-  chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8},
-  chip: {
-    paddingHorizontal: 16,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.pinkBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.pinkLight,
-  },
-  chipOn: {backgroundColor: Colors.pinkPrimary, borderColor: Colors.pinkPrimary},
-  chipText: {fontSize: 14, fontWeight: '600', color: Colors.textSecondary},
-  chipTextOn: {color: '#fff'},
-  input: {
-    marginTop: 6,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  focusHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pickBtn: {fontSize: 12.5, fontWeight: '700', color: Colors.pinkPrimary},
-  multiline: {
-    marginTop: 8,
-    minHeight: 90,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    padding: 12,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    textAlignVertical: 'top',
-  },
-  genBtn: {
-    marginTop: 16,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  genBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-  loadingHint: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 10,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  resultHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  resultTitle: {fontSize: 15, fontWeight: '800', color: Colors.textPrimary},
-  copyBtn: {fontSize: 13.5, fontWeight: '700', color: Colors.pinkPrimary},
-  styleRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 6},
-  styleLabel: {fontSize: 12.5, color: Colors.textSecondary, marginRight: 8},
-  styleChip: {
-    paddingHorizontal: 12,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.pinkBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: Colors.pinkLight,
-  },
-  styleChipOn: {backgroundColor: Colors.pinkPrimary, borderColor: Colors.pinkPrimary},
-  styleChipText: {fontSize: 12.5, fontWeight: '700', color: Colors.textSecondary},
-  styleChipTextOn: {color: '#fff'},
-  tapHint: {fontSize: 11.5, color: Colors.textSecondary, marginBottom: 8},
-  section: {marginBottom: 8},
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    marginTop: 8,
-    marginBottom: 3,
-  },
-  sectionHeadUnderline: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#C6C6C8',
-  },
-  accentBar: {width: 4, height: 18, borderRadius: 2, marginRight: 8},
-  sectionTitle: {flex: 1, fontWeight: '800', lineHeight: 26},
-  sectionMore: {fontSize: 12.5, fontWeight: '700', marginLeft: 8},
-  body: {fontSize: 14.5, lineHeight: 24, color: Colors.textPrimary},
-  // 详解页
-  detailContainer: {flex: 1, backgroundColor: Colors.pinkBg},
-  detailTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
-  detailTitle: {flex: 1, fontSize: 17, fontWeight: '800', color: Colors.textPrimary},
-  detailLoading: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  detailScroll: {padding: 16, paddingBottom: 40},
-  detailBody: {fontSize: 15, lineHeight: 26, color: Colors.textPrimary},
-  modalMask: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  modalCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-    maxHeight: '70%',
-  },
-  modalHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  modalTitle: {fontSize: 16, fontWeight: '800', color: Colors.textPrimary},
-  modalClose: {fontSize: 14, color: Colors.pinkPrimary, fontWeight: '700'},
-  modalList: {flexGrow: 0},
-  modalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.pinkLight,
-  },
-  modalRowText: {fontSize: 15, fontWeight: '600', color: Colors.textPrimary},
-  modalRowSub: {fontSize: 12, color: Colors.textSecondary, marginTop: 3},
-  modalRowArrow: {fontSize: 20, color: Colors.textSecondary},
-  modalEmpty: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 16,
-    lineHeight: 20,
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    flex: {flex: 1},
+    scroll: {padding: 16, paddingBottom: 40},
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 14,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      shadowOffset: {width: 0, height: 2},
+      elevation: 2,
+    },
+    fieldLabel: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+    fieldHint: {fontSize: 11.5, color: colors.primaryDark, marginTop: 4, lineHeight: 17},
+    modeRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      padding: 4,
+      marginBottom: 14,
+    },
+    modeTab: {
+      flex: 1,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeTabOn: {backgroundColor: colors.primary},
+    modeTabText: {fontSize: 14, fontWeight: '700', color: colors.textSecondary},
+    modeTabTextOn: {color: '#fff'},
+    recGroupHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 8,
+      marginBottom: 6,
+    },
+    recAccent: {
+      width: 4,
+      height: 16,
+      borderRadius: 2,
+      backgroundColor: colors.primary,
+      marginRight: 8,
+    },
+    recGroupTitle: {fontSize: 15, fontWeight: '800', color: colors.primaryDark},
+    recEmpty: {fontSize: 13, color: colors.textSecondary, marginBottom: 6},
+    recItem: {
+      backgroundColor: colors.bg,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+    },
+    recItemTop: {flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap'},
+    recName: {fontSize: 15.5, fontWeight: '800', color: colors.textPrimary},
+    recComposer: {fontSize: 12.5, color: colors.textSecondary, marginLeft: 8},
+    recReason: {fontSize: 13, color: colors.textPrimary, lineHeight: 20, marginTop: 4},
+    recUse: {
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: colors.accent,
+      marginTop: 6,
+    },
+    chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8},
+    chip: {
+      paddingHorizontal: 16,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: colors.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    chipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
+    chipText: {fontSize: 14, fontWeight: '600', color: colors.textSecondary},
+    chipTextOn: {color: '#fff'},
+    input: {
+      marginTop: 6,
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: colors.bg,
+      paddingHorizontal: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    focusHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    pickBtn: {fontSize: 12.5, fontWeight: '700', color: colors.accent},
+    multiline: {
+      marginTop: 8,
+      minHeight: 90,
+      borderRadius: 10,
+      backgroundColor: colors.bg,
+      padding: 12,
+      fontSize: 14,
+      color: colors.textPrimary,
+      textAlignVertical: 'top',
+    },
+    genBtn: {
+      marginTop: 16,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    genBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+    loadingHint: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 10,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    resultHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    resultTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
+    copyBtn: {fontSize: 13.5, fontWeight: '700', color: colors.accent},
+    styleRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 6},
+    styleLabel: {fontSize: 12.5, color: colors.textSecondary, marginRight: 8},
+    styleChip: {
+      paddingHorizontal: 12,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    styleChipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
+    styleChipText: {fontSize: 12.5, fontWeight: '700', color: colors.textSecondary},
+    styleChipTextOn: {color: '#fff'},
+    tapHint: {fontSize: 11.5, color: colors.textSecondary, marginBottom: 8},
+    section: {marginBottom: 8},
+    sectionHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 6,
+      marginTop: 8,
+      marginBottom: 3,
+    },
+    sectionHeadUnderline: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: '#C6C6C8',
+    },
+    accentBar: {width: 4, height: 18, borderRadius: 2, marginRight: 8},
+    sectionTitle: {flex: 1, fontWeight: '800', lineHeight: 26},
+    sectionMore: {fontSize: 12.5, fontWeight: '700', marginLeft: 8},
+    body: {fontSize: 14.5, lineHeight: 24, color: colors.textPrimary},
+    // 详解页
+    detailContainer: {flex: 1, backgroundColor: colors.bg},
+    detailTitleWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 6,
+    },
+    detailTitle: {flex: 1, fontSize: 17, fontWeight: '800', color: colors.textPrimary},
+    detailLoading: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+    detailScroll: {padding: 16, paddingBottom: 40},
+    detailBody: {fontSize: 15, lineHeight: 26, color: colors.textPrimary},
+    modalMask: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      justifyContent: 'center',
+      padding: 28,
+    },
+    modalCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 8,
+      maxHeight: '70%',
+    },
+    modalHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    modalTitle: {fontSize: 16, fontWeight: '800', color: colors.textPrimary},
+    modalClose: {fontSize: 14, color: colors.accent, fontWeight: '700'},
+    modalList: {flexGrow: 0},
+    modalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.cardBorder,
+    },
+    modalRowText: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
+    modalRowSub: {fontSize: 12, color: colors.textSecondary, marginTop: 3},
+    modalRowArrow: {fontSize: 20, color: colors.textSecondary},
+    modalEmpty: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      paddingVertical: 28,
+      paddingHorizontal: 16,
+      lineHeight: 20,
+    },
+  });

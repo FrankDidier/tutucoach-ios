@@ -37,6 +37,13 @@ export const Images = {
   // 其它
   sendBtn: require('./img/ic_send_btn.png'),
   eyeFill: require('./img/ic_eye_fill.png'),
+  // AI 陪练模式（白色图标，适配深色顶栏）
+  companionCode: require('./img/ic_companion_code.png'),
+  companionVolume: require('./img/ic_companion_volume.png'),
+  companionSend: require('./img/ic_companion_send.png'),
+  metroMinus: require('./img/ic_metro_minus.png'),
+  metroPlus: require('./img/ic_metro_plus.png'),
+  metroNote: require('./img/ic_metro_note.png'),
 };
 
 export default Images;

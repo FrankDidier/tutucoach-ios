@@ -1,10 +1,11 @@
 // AI 陪练模式 —— 对应安卓 CompanionChatActivity。
 // 独立于手型检测的「语音 + 对话」陪伴练琴：老师 AI 分身高清图为背景，微信式对话框；
 // AI 不定时主动朗读老师设置的重点（可按曲目）+ 结合对话个性陪聊；学生打字则角色扮演式回复（不朗读）。
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   ScrollView,
   ImageBackground,
@@ -46,13 +47,16 @@ import {
   isVoiceEnabled,
 } from '../services/coachPrefs';
 import {fetchCoaches} from '../services/coach';
-import MetronomeBar from '../components/MetronomeBar';
+import MetronomeCard from '../components/MetronomeCard';
 import {createActiveTimer} from '../utils/activeTimer';
 import {onPracticeEnd} from '../services/companion';
+import {useTheme} from '../theme/ThemeContext';
 
 let bubbleKey = 1;
 
 export default function CompanionScreen({navigation}) {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [coachName, setCoachName] = useState('AI 陪练');
   const [avatarUri, setAvatarUri] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -129,6 +133,8 @@ export default function CompanionScreen({navigation}) {
       if (aliveRef.current && sc) {
         profileRef.current = {
           ...base,
+          // 自定义分身必须保留后台真实 id，否则 TTS 会退回 coach_pro 的预设音色。
+          id: sc.id || id || base.id,
           displayName: sc.name || base.displayName,
           greeting: sc.greeting || base.greeting,
           speechRate: sc.speechRate || base.speechRate || 1.0,
@@ -293,7 +299,7 @@ export default function CompanionScreen({navigation}) {
           speak(toSpeak, {
             rate: p.speechRate || 1.0,
             pitch: p.pitch || 1.0,
-            coachId: p.id || coachIdRef.current,
+            coachId: coachIdRef.current || p.id,
             voiceId: p.voiceId || 0,
           });
         } catch (e) {}
@@ -482,25 +488,30 @@ export default function CompanionScreen({navigation}) {
         <KeyboardAvoidingView
           style={styles.kav}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* 顶部栏 */}
+        {/* 顶部栏：返回 + 分身头像 + 名称(可点切换) + 学生码 + 音量 */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backIcon}>‹</Text>
           </TouchableOpacity>
-          {/* 点角色名可切换 AI 分身（背景/音色随之更新），与安卓一致；▾ 提示可点击。 */}
+          {/* 点头像/角色名可切换 AI 分身（背景/音色随之更新）；▾ 提示可点击。 */}
           <TouchableOpacity
             style={styles.nameWrap}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('AISelect')}>
+            <Image source={bg} style={styles.headerAvatar} />
             <Text style={styles.coachName} numberOfLines={1}>
               {coachName} ▾
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={showMyCode} style={styles.chip}>
-            <Text style={styles.chipText}>学生码</Text>
+          <TouchableOpacity onPress={showMyCode} style={styles.iconBtn}>
+            <Image source={Images.companionCode} style={styles.headerIcon} resizeMode="contain" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleMute} style={[styles.chip, {marginLeft: 8}]}>
-            <Text style={styles.chipText}>{muted ? '🔇' : '🔊'}</Text>
+          <TouchableOpacity onPress={toggleMute} style={[styles.iconBtn, {marginLeft: 6}]}>
+            <Image
+              source={Images.companionVolume}
+              style={[styles.headerIcon, muted && {opacity: 0.35}]}
+              resizeMode="contain"
+            />
           </TouchableOpacity>
         </View>
 
@@ -528,8 +539,8 @@ export default function CompanionScreen({navigation}) {
           ))}
         </ScrollView>
 
-        {/* 迷你节拍器 */}
-        <MetronomeBar style={styles.metro} />
+        {/* 大号节拍器 */}
+        <MetronomeCard style={styles.metro} />
 
         {/* 输入区 */}
         <View style={styles.inputBar}>
@@ -547,15 +558,15 @@ export default function CompanionScreen({navigation}) {
               // 收起键盘＝此刻不在打字：立即解除，主动播报可以恢复（草稿仍保留在框里）。
               clearTyping();
             }}
-            placeholder="和 TA 聊聊天…"
-            placeholderTextColor="#999"
+            placeholder="和Ta聊天"
+            placeholderTextColor="rgba(255,255,255,0.5)"
             multiline
           />
           <TouchableOpacity
             style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
             onPress={onSend}
             disabled={sending}>
-            <Text style={styles.sendText}>{sending ? '…' : '发送'}</Text>
+            <Image source={Images.companionSend} style={styles.sendIcon} resizeMode="contain" />
           </TouchableOpacity>
         </View>
         </KeyboardAvoidingView>
@@ -564,7 +575,8 @@ export default function CompanionScreen({navigation}) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = colors =>
+  StyleSheet.create({
   root: {flex: 1, backgroundColor: '#222'},
   scrim: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)'},
   safe: {flex: 1},
@@ -576,50 +588,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
-  backBtn: {width: 40, height: 40, justifyContent: 'center'},
+  backBtn: {width: 38, height: 40, justifyContent: 'center'},
   backIcon: {color: '#fff', fontSize: 30},
-  nameWrap: {flex: 1, justifyContent: 'center', paddingVertical: 6},
-  coachName: {color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 4},
-  chip: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+  nameWrap: {flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 4},
+  headerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  chipText: {color: '#fff', fontSize: 12},
+  coachName: {color: '#fff', fontSize: 18, fontWeight: 'bold'},
+  iconBtn: {width: 36, height: 36, alignItems: 'center', justifyContent: 'center'},
+  headerIcon: {width: 22, height: 22, tintColor: '#fff'},
   pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
   pieceText: {color: '#fff', fontSize: 13},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
-  bubble: {maxWidth: '82%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 10},
-  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.92)'},
-  bubbleUser: {alignSelf: 'flex-end', backgroundColor: '#FF5B87'},
-  bubbleAiText: {color: '#222', fontSize: 15, lineHeight: 21},
-  bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 21},
-  metro: {marginBottom: 6, marginRight: 10, alignSelf: 'flex-end'},
+  bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
+  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(36,28,61,0.7)'},
+  bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
+  bubbleAiText: {color: '#fff', fontSize: 15, lineHeight: 22},
+  bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 22},
+  metro: {marginBottom: 10, marginHorizontal: 14},
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    padding: 8,
+    alignItems: 'center',
+    backgroundColor: 'rgba(10,7,24,0.8)',
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 22,
     maxHeight: 100,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    color: '#222',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    color: '#fff',
     fontSize: 15,
   },
   sendBtn: {
-    marginLeft: 8,
-    backgroundColor: '#FF5B87',
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    marginLeft: 6,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sendBtnDisabled: {opacity: 0.6},
-  sendText: {color: '#fff', fontSize: 15, fontWeight: 'bold'},
-});
+  sendBtnDisabled: {opacity: 0.4},
+  sendIcon: {width: 24, height: 24, tintColor: '#fff'},
+  });

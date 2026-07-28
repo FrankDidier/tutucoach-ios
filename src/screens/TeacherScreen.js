@@ -1,20 +1,23 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList,
   TouchableOpacity, Alert, TextInput, Modal, ScrollView,
 } from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import {builtInProfiles, CoachStyles} from '../utils/coachProfiles';
 
 const styleLabel = s =>
   s === CoachStyles.ENCOURAGING ? '鼓励型' :
   s === CoachStyles.STRICT ? '严格型' : '活泼型';
 
-const styleColor = s =>
-  s === CoachStyles.ENCOURAGING ? Colors.greenLight :
-  s === CoachStyles.STRICT ? Colors.blueBrand : Colors.goldPremium;
-
 const TeacherScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const styleColor = s =>
+    s === CoachStyles.ENCOURAGING ? colors.success :
+    s === CoachStyles.STRICT ? colors.blueBrand : colors.gold;
+
   const [profiles, setProfiles] = useState([...builtInProfiles]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -141,68 +144,69 @@ const TeacherScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.greyLight},
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16,
-    paddingVertical: 14, backgroundColor: '#fff',
-    borderBottomWidth: 0.5, borderBottomColor: Colors.greyDivider,
-  },
-  backBtn: {fontSize: 14, color: Colors.blueBrand},
-  headerTitle: {fontSize: 17, fontWeight: '700', color: Colors.textPrimary},
-  addBtn: {fontSize: 14, color: Colors.purplePrimary, fontWeight: '600'},
-  list: {padding: 16},
-  card: {
-    backgroundColor: '#fff', borderRadius: 16,
-    padding: 20, marginBottom: 12,
-    shadowColor: '#000', shadowOpacity: 0.05,
-    shadowRadius: 10, elevation: 2,
-  },
-  cardHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  cardName: {fontSize: 17, fontWeight: '700', color: Colors.textPrimary},
-  badge: {paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12},
-  badgeText: {fontSize: 12, fontWeight: '600'},
-  greeting: {
-    fontSize: 13, color: Colors.textSecondary,
-    fontStyle: 'italic', marginTop: 10,
-    padding: 10, backgroundColor: Colors.greyLight,
-    borderRadius: 8,
-  },
-  meta: {flexDirection: 'row', gap: 16, marginTop: 12},
-  metaItem: {fontSize: 12, color: Colors.textSecondary},
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  modal: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20,
-    borderTopRightRadius: 20, padding: 24,
-    maxHeight: '80%',
-  },
-  modalTitle: {fontSize: 18, fontWeight: '700', marginBottom: 20, color: Colors.textPrimary},
-  label: {fontSize: 13, fontWeight: '600', color: Colors.textSecondary, marginBottom: 6, marginTop: 12},
-  input: {
-    borderWidth: 1.5, borderColor: Colors.greyDivider,
-    borderRadius: 8, padding: 12, fontSize: 14,
-  },
-  styleRow: {flexDirection: 'row', gap: 10},
-  styleChip: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 2,
-  },
-  styleChipText: {fontSize: 13, fontWeight: '600'},
-  modalActions: {flexDirection: 'row', gap: 12, marginTop: 24},
-  cancelBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: Colors.greyLight, alignItems: 'center',
-  },
-  cancelText: {fontSize: 15, color: Colors.textPrimary, fontWeight: '600'},
-  saveBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 12,
-    backgroundColor: Colors.blueBrand, alignItems: 'center',
-  },
-  saveText: {fontSize: 15, color: '#fff', fontWeight: '600'},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.inputBg},
+    header: {
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', paddingHorizontal: 16,
+      paddingVertical: 14, backgroundColor: colors.card,
+      borderBottomWidth: 0.5, borderBottomColor: colors.divider,
+    },
+    backBtn: {fontSize: 14, color: colors.blueBrand},
+    headerTitle: {fontSize: 17, fontWeight: '700', color: colors.textPrimary},
+    addBtn: {fontSize: 14, color: colors.accent, fontWeight: '600'},
+    list: {padding: 16},
+    card: {
+      backgroundColor: colors.card, borderRadius: 16,
+      padding: 20, marginBottom: 12,
+      shadowColor: '#000', shadowOpacity: 0.05,
+      shadowRadius: 10, elevation: 2,
+    },
+    cardHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+    cardName: {fontSize: 17, fontWeight: '700', color: colors.textPrimary},
+    badge: {paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12},
+    badgeText: {fontSize: 12, fontWeight: '600'},
+    greeting: {
+      fontSize: 13, color: colors.textSecondary,
+      fontStyle: 'italic', marginTop: 10,
+      padding: 10, backgroundColor: colors.inputBg,
+      borderRadius: 8,
+    },
+    meta: {flexDirection: 'row', gap: 16, marginTop: 12},
+    metaItem: {fontSize: 12, color: colors.textSecondary},
+    modalOverlay: {
+      flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'flex-end',
+    },
+    modal: {
+      backgroundColor: colors.card, borderTopLeftRadius: 20,
+      borderTopRightRadius: 20, padding: 24,
+      maxHeight: '80%',
+    },
+    modalTitle: {fontSize: 18, fontWeight: '700', marginBottom: 20, color: colors.textPrimary},
+    label: {fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginTop: 12},
+    input: {
+      borderWidth: 1.5, borderColor: colors.divider,
+      borderRadius: 8, padding: 12, fontSize: 14,
+    },
+    styleRow: {flexDirection: 'row', gap: 10},
+    styleChip: {
+      paddingHorizontal: 16, paddingVertical: 8,
+      borderRadius: 20, borderWidth: 2,
+    },
+    styleChipText: {fontSize: 13, fontWeight: '600'},
+    modalActions: {flexDirection: 'row', gap: 12, marginTop: 24},
+    cancelBtn: {
+      flex: 1, paddingVertical: 14, borderRadius: 12,
+      backgroundColor: colors.inputBg, alignItems: 'center',
+    },
+    cancelText: {fontSize: 15, color: colors.textPrimary, fontWeight: '600'},
+    saveBtn: {
+      flex: 1, paddingVertical: 14, borderRadius: 12,
+      backgroundColor: colors.blueBrand, alignItems: 'center',
+    },
+    saveText: {fontSize: 15, color: '#fff', fontWeight: '600'},
+  });
 
 export default TeacherScreen;

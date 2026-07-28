@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {registerAccount} from '../services/account';
@@ -33,6 +33,8 @@ const FREQ_MAX = 600;
 const remarksKey = tid => `student_remarks:${tid}`;
 
 export default function StudentReminderScreen({navigation}) {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const teacherId = useRef(getDeviceId()).current;
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
@@ -274,7 +276,7 @@ export default function StudentReminderScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.pinkBg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader
         title="陪练提示设置"
         onBack={() => navigation?.goBack?.()}
@@ -289,7 +291,7 @@ export default function StudentReminderScreen({navigation}) {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={Colors.pinkPrimary} />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
         <KeyboardAvoidingView
@@ -339,7 +341,7 @@ export default function StudentReminderScreen({navigation}) {
             {sel ? (
               loadingStudent ? (
                 <View style={styles.center}>
-                  <ActivityIndicator color={Colors.pinkPrimary} />
+                  <ActivityIndicator color={colors.primary} />
                 </View>
               ) : (
                 <>
@@ -449,7 +451,7 @@ export default function StudentReminderScreen({navigation}) {
               value={editName}
               onChangeText={setEditName}
               placeholder="如：小星星 / 拜厄第 5 条"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <Text style={styles.modalFieldLabel}>重点内容（每行一条）</Text>
             <TextInput
@@ -457,7 +459,7 @@ export default function StudentReminderScreen({navigation}) {
               value={editLines}
               onChangeText={setEditLines}
               placeholder={'手腕放松，不要塌下去\n注意第二小节的节奏\n手指立起来，指尖发力'}
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               multiline
             />
             <View style={styles.modalBtnRow}>
@@ -493,7 +495,7 @@ export default function StudentReminderScreen({navigation}) {
               value={manualCode}
               onChangeText={setManualCode}
               placeholder="粘贴学生码"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoCapitalize="none"
             />
             <Text style={styles.modalFieldLabel}>备注名（可选）</Text>
@@ -502,7 +504,7 @@ export default function StudentReminderScreen({navigation}) {
               value={manualName}
               onChangeText={setManualName}
               placeholder="如：小明"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
             />
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
@@ -523,154 +525,155 @@ export default function StudentReminderScreen({navigation}) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.pinkBg},
-  flex: {flex: 1},
-  center: {paddingVertical: 40, alignItems: 'center', justifyContent: 'center'},
-  scroll: {padding: 16, paddingBottom: 40},
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  chipWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
-  stuChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: Colors.white,
-    maxWidth: 150,
-  },
-  stuChipActive: {backgroundColor: Colors.pinkPrimary},
-  stuChipText: {fontSize: 13, color: Colors.textPrimary, fontWeight: '600'},
-  stuChipTextActive: {color: '#fff'},
-  stuChipAdd: {backgroundColor: Colors.pinkLight},
-  stuChipAddText: {fontSize: 13, color: Colors.pinkDark, fontWeight: '700'},
-  emptyHint: {
-    fontSize: 12.5,
-    color: Colors.textSecondary,
-    lineHeight: 19,
-    marginTop: 6,
-    marginBottom: 6,
-  },
-  selRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 14,
-  },
-  selName: {flex: 1, fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginRight: 10},
-  renameBtn: {fontSize: 13, fontWeight: '700', color: Colors.pinkPrimary},
-  freqCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  freqLabel: {fontSize: 13, fontWeight: '700', color: Colors.textPrimary},
-  freqRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-    marginTop: 10,
-  },
-  freqBtn: {
-    width: 44,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  freqBtnText: {fontSize: 22, color: Colors.pinkPrimary, fontWeight: '700'},
-  freqValue: {fontSize: 20, fontWeight: '800', color: Colors.textPrimary, minWidth: 60, textAlign: 'center'},
-  piecesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  addPiece: {fontSize: 14, fontWeight: '700', color: Colors.pinkPrimary, marginBottom: 8},
-  pieceCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-  },
-  pieceTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  pieceName: {flex: 1, fontSize: 15, fontWeight: '700', color: Colors.textPrimary},
-  pieceActions: {flexDirection: 'row', gap: 14, marginLeft: 8},
-  pieceEdit: {fontSize: 13, color: Colors.pinkPrimary, fontWeight: '700'},
-  pieceDelete: {fontSize: 13, color: '#E5484D', fontWeight: '700'},
-  pieceLine: {fontSize: 13.5, color: Colors.textPrimary, lineHeight: 22},
-  pieceEmpty: {fontSize: 13, color: Colors.textSecondary},
-  saveBtn: {
-    marginTop: 18,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-  saveHeader: {fontSize: 15, fontWeight: '700', color: Colors.pinkPrimary},
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  modalCard: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  modalFieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  modalInput: {
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  modalMultiline: {
-    minHeight: 110,
-    borderRadius: 10,
-    backgroundColor: Colors.pinkBg,
-    padding: 12,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    textAlignVertical: 'top',
-  },
-  modalBtnRow: {flexDirection: 'row', gap: 12, marginTop: 18},
-  modalBtn: {flex: 1, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center'},
-  modalBtnGhost: {backgroundColor: Colors.pinkBg},
-  modalBtnGhostText: {fontSize: 15, fontWeight: '700', color: Colors.textSecondary},
-  modalBtnPrimary: {backgroundColor: Colors.pinkPrimary},
-  modalBtnPrimaryText: {fontSize: 15, fontWeight: '700', color: '#fff'},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    flex: {flex: 1},
+    center: {paddingVertical: 40, alignItems: 'center', justifyContent: 'center'},
+    scroll: {padding: 16, paddingBottom: 40},
+    sectionLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      marginBottom: 8,
+    },
+    chipWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
+    stuChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      maxWidth: 150,
+    },
+    stuChipActive: {backgroundColor: colors.primary},
+    stuChipText: {fontSize: 13, color: colors.textPrimary, fontWeight: '600'},
+    stuChipTextActive: {color: '#fff'},
+    stuChipAdd: {backgroundColor: colors.cardAlt},
+    stuChipAddText: {fontSize: 13, color: colors.primaryDark, fontWeight: '700'},
+    emptyHint: {
+      fontSize: 12.5,
+      color: colors.textSecondary,
+      lineHeight: 19,
+      marginTop: 6,
+      marginBottom: 6,
+    },
+    selRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 14,
+    },
+    selName: {flex: 1, fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginRight: 10},
+    renameBtn: {fontSize: 13, fontWeight: '700', color: colors.accent},
+    freqCard: {
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      padding: 14,
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    freqLabel: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+    freqRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 20,
+      marginTop: 10,
+    },
+    freqBtn: {
+      width: 44,
+      height: 40,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    freqBtnText: {fontSize: 22, color: colors.accent, fontWeight: '700'},
+    freqValue: {fontSize: 20, fontWeight: '800', color: colors.textPrimary, minWidth: 60, textAlign: 'center'},
+    piecesHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 16,
+    },
+    addPiece: {fontSize: 14, fontWeight: '700', color: colors.accent, marginBottom: 8},
+    pieceCard: {
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 10,
+    },
+    pieceTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    pieceName: {flex: 1, fontSize: 15, fontWeight: '700', color: colors.textPrimary},
+    pieceActions: {flexDirection: 'row', gap: 14, marginLeft: 8},
+    pieceEdit: {fontSize: 13, color: colors.accent, fontWeight: '700'},
+    pieceDelete: {fontSize: 13, color: '#E5484D', fontWeight: '700'},
+    pieceLine: {fontSize: 13.5, color: colors.textPrimary, lineHeight: 22},
+    pieceEmpty: {fontSize: 13, color: colors.textSecondary},
+    saveBtn: {
+      marginTop: 18,
+      height: 50,
+      borderRadius: 25,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
+    saveHeader: {fontSize: 15, fontWeight: '700', color: colors.accent},
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    modalCard: {
+      width: '100%',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 18,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      textAlign: 'center',
+      marginBottom: 12,
+    },
+    modalFieldLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    modalInput: {
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: colors.bg,
+      paddingHorizontal: 12,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    modalMultiline: {
+      minHeight: 110,
+      borderRadius: 10,
+      backgroundColor: colors.bg,
+      padding: 12,
+      fontSize: 14,
+      color: colors.textPrimary,
+      textAlignVertical: 'top',
+    },
+    modalBtnRow: {flexDirection: 'row', gap: 12, marginTop: 18},
+    modalBtn: {flex: 1, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center'},
+    modalBtnGhost: {backgroundColor: colors.bg},
+    modalBtnGhostText: {fontSize: 15, fontWeight: '700', color: colors.textSecondary},
+    modalBtnPrimary: {backgroundColor: colors.primary},
+    modalBtnPrimaryText: {fontSize: 15, fontWeight: '700', color: '#fff'},
+  });

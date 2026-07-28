@@ -1,6 +1,6 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useMemo, useRef} from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Animated} from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 
 const MESSAGES = [
   '嘿！准备好练琴了吗？',
@@ -11,6 +11,8 @@ const MESSAGES = [
 ];
 
 const RabbitCompanion = ({coachName = '专业老师'}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [message, setMessage] = useState(MESSAGES[0]);
   const [tapCount, setTapCount] = useState(0);
   const bounceAnim = useRef(new Animated.Value(1)).current;
@@ -59,27 +61,28 @@ const RabbitCompanion = ({coachName = '专业老师'}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center', marginVertical: 12,
-    paddingVertical: 16, marginHorizontal: 16,
-    backgroundColor: Colors.rabbitBg,
-    borderRadius: 16,
-    borderWidth: 0.5, borderColor: Colors.pinkLight,
-  },
-  rabbit: {fontSize: 56},
-  bubble: {
-    marginTop: 8, backgroundColor: '#fff',
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 16, maxWidth: '80%',
-    shadowColor: '#000', shadowOpacity: 0.04,
-    shadowRadius: 8, elevation: 2,
-  },
-  bubbleText: {fontSize: 14, color: Colors.textPrimary, textAlign: 'center'},
-  coachLabel: {
-    marginTop: 8, fontSize: 12,
-    color: Colors.textSecondary,
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {
+      alignItems: 'center', marginVertical: 12,
+      paddingVertical: 16, marginHorizontal: 16,
+      backgroundColor: colors.cardAlt,
+      borderRadius: 16,
+      borderWidth: 0.5, borderColor: colors.cardBorder,
+    },
+    rabbit: {fontSize: 56},
+    bubble: {
+      marginTop: 8, backgroundColor: colors.card,
+      paddingHorizontal: 16, paddingVertical: 10,
+      borderRadius: 16, maxWidth: '80%',
+      shadowColor: '#000', shadowOpacity: 0.04,
+      shadowRadius: 8, elevation: 2,
+    },
+    bubbleText: {fontSize: 14, color: colors.textPrimary, textAlign: 'center'},
+    coachLabel: {
+      marginTop: 8, fontSize: 12,
+      color: colors.textSecondary,
+    },
+  });
 
 export default RabbitCompanion;

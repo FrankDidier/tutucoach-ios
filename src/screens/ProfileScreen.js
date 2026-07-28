@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import React, {useEffect, useMemo, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import {
   Linking,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {Colors} from '../utils/colors';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
 import {
@@ -23,22 +22,10 @@ import {
   setAvatarUri,
 } from '../services/profilePrefs';
 import {getPoints} from '../services/companion';
-
-const MenuRow = ({icon, label, subtitle, onPress, last}) => (
-  <TouchableOpacity
-    style={[styles.menuItem, last && styles.menuItemLast]}
-    activeOpacity={0.7}
-    onPress={onPress}>
-    <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
-    <Text style={styles.menuLabel}>{label}</Text>
-    <Text style={subtitle ? styles.menuSubtitle : styles.menuArrow}>
-      {subtitle ? `${subtitle} ›` : '›'}
-    </Text>
-  </TouchableOpacity>
-);
 import {getDeviceId} from '../services/device';
 import {registerAccount, getMembership} from '../services/account';
 import {loginWithWeChat} from '../services/wechat';
+import {useTheme} from '../theme/ThemeContext';
 
 let Clipboard = null;
 try {
@@ -48,9 +35,41 @@ try {
   Clipboard = null;
 }
 
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
+}
+function lerp(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+function gradientStripes(from, to, n) {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  return Array.from(
+    {length: n},
+    (_, i) =>
+      `rgb(${lerp(a.r, b.r, i / (n - 1))},${lerp(a.g, b.g, i / (n - 1))},${lerp(
+        a.b,
+        b.b,
+        i / (n - 1),
+      )})`,
+  );
+}
+
 const ProfileScreen = ({navigation}) => {
+  const {colors, mode, toggle} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const pointsStripes = useMemo(
+    () => gradientStripes(colors.primaryGradientStart, colors.primaryGradientEnd, 24),
+    [colors],
+  );
+
   const [userId, setUserId] = useState('');
-  const [vip, setVip] = useState(null); // {is_vip, expire_text}
+  const [vip, setVip] = useState(null);
   const [displayName, setName] = useState('钢琴小达人');
   const [avatarUri, setAvatar] = useState(null);
   const [points, setPoints] = useState(0);
@@ -61,12 +80,10 @@ const ProfileScreen = ({navigation}) => {
       try {
         const id = getDeviceId();
         if (alive) setUserId(id);
-        await registerAccount(id); // 幂等静默注册
+        await registerAccount(id);
         const m = await getMembership(id);
         if (alive && m && m.ok) setVip(m);
-      } catch (e) {
-        // 离线时静默；UI 用占位
-      }
+      } catch (e) {}
       const [n, a] = await Promise.all([getDisplayName(), getAvatarUri()]);
       if (alive) {
         setName(n);
@@ -78,7 +95,6 @@ const ProfileScreen = ({navigation}) => {
     };
   }, []);
 
-  // 每次回到本页刷新积分（练琴后会变化）。
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -120,7 +136,6 @@ const ProfileScreen = ({navigation}) => {
         displayName,
       );
     } else {
-      // 安卓回退：简单提示（如需可换三方输入弹窗）
       Alert.alert('修改昵称', '请在 iOS 上编辑昵称');
     }
   };
@@ -153,17 +168,33 @@ const ProfileScreen = ({navigation}) => {
       : '未开通会员'
     : '';
 
+  const MenuRow = ({icon, label, subtitle, onPress, right, last}) => (
+    <TouchableOpacity
+      style={[styles.menuItem, last && styles.menuItemLast]}
+      activeOpacity={0.7}
+      onPress={onPress}>
+      {icon ? (
+        <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
+      ) : (
+        <View style={styles.menuIcon} />
+      )}
+      <Text style={styles.menuLabel}>{label}</Text>
+      <Text style={subtitle || right ? styles.menuSubtitle : styles.menuArrow}>
+        {subtitle ? `${subtitle} ›` : right ? `${right} ›` : '›'}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={Colors.pinkBg}
-      />
-      <Image
-        source={Images.pageGradient}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+      {mode === 'light' ? (
+        <Image
+          source={Images.pageGradient}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+      ) : null}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
@@ -190,23 +221,18 @@ const ProfileScreen = ({navigation}) => {
         </View>
 
         <View style={styles.pointsCardOuter}>
-          <Image
-            source={Images.pointsCard}
-            style={StyleSheet.absoluteFill}
-            resizeMode="stretch"
-          />
+          <View style={styles.pointsGradientRow} pointerEvents="none">
+            {pointsStripes.map((c, i) => (
+              <View key={`p-${i}`} style={[styles.pointsStripe, {backgroundColor: c}]} />
+            ))}
+          </View>
+          <View style={styles.pointsDiamond} pointerEvents="none" />
           <View style={styles.pointsCardInner}>
-            <View style={styles.pointsTextCol}>
-              <View style={styles.pointsLabelRow}>
-                <Text style={styles.pointsLabel}>总积分</Text>
-                <Image
-                  source={Images.eyeFill}
-                  style={styles.eyeIcon}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text style={styles.pointsValue}>{points}</Text>
+            <View style={styles.pointsLabelRow}>
+              <Text style={styles.pointsLabel}>总积分</Text>
+              <Image source={Images.eyeFill} style={styles.eyeIcon} resizeMode="contain" />
             </View>
+            <Text style={styles.pointsValue}>{points}</Text>
           </View>
         </View>
 
@@ -228,8 +254,11 @@ const ProfileScreen = ({navigation}) => {
             label="微信登录"
             subtitle="绑定账号·跨设备同步"
             onPress={onWeChatLogin}
+            last
           />
-          <View style={styles.menuDivider} />
+        </View>
+
+        <View style={styles.menuSection}>
           <MenuRow
             icon={Images.menuClassManage}
             label="教师端"
@@ -241,6 +270,13 @@ const ProfileScreen = ({navigation}) => {
             icon={Images.sparkle}
             label="使用帮助"
             onPress={() => navigation.navigate('Guide', {forceShow: true})}
+          />
+          <View style={styles.menuDivider} />
+          <MenuRow
+            icon={Images.sparkle}
+            label="切换主题"
+            right={mode === 'dark' ? '暗色' : '浅色'}
+            onPress={toggle}
             last
           />
         </View>
@@ -256,156 +292,175 @@ const ProfileScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.pinkBg,
-  },
-  scroll: {
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    alignSelf: 'flex-start',
-    marginBottom: 20,
-  },
-  icpBeian: {
-    textAlign: 'center',
-    color: Colors.textSecondary || '#999',
-    fontSize: 12,
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  profileBlock: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 12,
-    backgroundColor: '#FFE0E8',
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 12,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.pinkPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  avatarEditText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: -1,
-  },
-  userName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 4,
-  },
-  userId: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  vipText: {
-    fontSize: 12,
-    color: Colors.pinkPrimary,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  pointsCardOuter: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    height: 100,
-  },
-  pointsCardInner: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  pointsTextCol: {
-    flex: 0,
-  },
-  pointsLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  pointsLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.white,
-    opacity: 0.95,
-  },
-  eyeIcon: {
-    width: 16,
-    height: 16,
-    marginLeft: 4,
-    tintColor: '#FFFFFF',
-  },
-  pointsValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: Colors.white,
-    letterSpacing: 0.5,
-  },
-  menuSection: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    paddingVertical: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: {width: 0, height: 4},
-    elevation: 2,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    paddingHorizontal: 16,
-  },
-  menuItemLast: {},
-  menuIcon: {
-    width: 36,
-    height: 36,
-    marginRight: 12,
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.textPrimary,
-  },
-  menuArrow: {
-    fontSize: 22,
-    color: Colors.greyMedium,
-    marginTop: -2,
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    color: Colors.greyMedium,
-  },
-  menuDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 64,
-    backgroundColor: Colors.greyDivider,
-  },
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    scroll: {
+      paddingBottom: 40,
+      paddingHorizontal: 20,
+      paddingTop: 8,
+    },
+    screenTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      alignSelf: 'flex-start',
+      marginBottom: 20,
+    },
+    icpBeian: {
+      textAlign: 'center',
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 24,
+      marginBottom: 8,
+    },
+    profileBlock: {
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    avatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      marginBottom: 12,
+      backgroundColor: colors.cardAlt,
+      borderWidth: colors.mode === 'dark' ? 2 : 0,
+      borderColor: 'rgba(255,255,255,0.9)',
+    },
+    avatarEditBadge: {
+      position: 'absolute',
+      right: 0,
+      bottom: 12,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: colors.bg,
+    },
+    avatarEditText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+      marginTop: -1,
+    },
+    userName: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    userId: {
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+    vipText: {
+      fontSize: 12,
+      color: colors.accent,
+      fontWeight: '600',
+      marginTop: 4,
+    },
+    pointsCardOuter: {
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginBottom: 16,
+      height: 100,
+      justifyContent: 'center',
+    },
+    pointsGradientRow: {
+      ...StyleSheet.absoluteFillObject,
+      flexDirection: 'row',
+    },
+    pointsStripe: {
+      flex: 1,
+      height: '100%',
+    },
+    pointsDiamond: {
+      position: 'absolute',
+      right: 24,
+      width: 54,
+      height: 54,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.28)',
+      transform: [{rotate: '45deg'}],
+    },
+    pointsCardInner: {
+      paddingHorizontal: 20,
+    },
+    pointsLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    pointsLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#FFFFFF',
+      opacity: 0.95,
+    },
+    eyeIcon: {
+      width: 16,
+      height: 16,
+      marginLeft: 4,
+      tintColor: '#FFFFFF',
+    },
+    pointsValue: {
+      fontSize: 32,
+      fontWeight: '800',
+      color: '#FFFFFF',
+      letterSpacing: 0.5,
+    },
+    menuSection: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      overflow: 'hidden',
+      paddingVertical: 4,
+      marginBottom: 16,
+      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      borderColor: colors.cardBorder,
+      shadowColor: '#000',
+      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.06,
+      shadowRadius: 12,
+      shadowOffset: {width: 0, height: 4},
+      elevation: 2,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 56,
+      paddingHorizontal: 16,
+    },
+    menuItemLast: {},
+    menuIcon: {
+      width: 36,
+      height: 36,
+      marginRight: 12,
+    },
+    menuLabel: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '500',
+      color: colors.textPrimary,
+    },
+    menuArrow: {
+      fontSize: 22,
+      color: colors.textMuted,
+      marginTop: -2,
+    },
+    menuSubtitle: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    menuDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginLeft: 64,
+      backgroundColor: colors.divider,
+    },
+  });
 
 export default ProfileScreen;

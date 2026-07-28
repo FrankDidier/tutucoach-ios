@@ -1,12 +1,15 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   Switch, ScrollView,
 } from 'react-native';
-import {Colors} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 import {builtInProfiles} from '../utils/coachProfiles';
 
 const SettingsScreen = ({navigation}) => {
+  const {colors} = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [selectedCoach, setSelectedCoach] = useState('coach_pro');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticEnabled, setHapticEnabled] = useState(true);
@@ -57,7 +60,7 @@ const SettingsScreen = ({navigation}) => {
             <Switch
               value={soundEnabled}
               onValueChange={setSoundEnabled}
-              trackColor={{true: Colors.blueBrand, false: Colors.greyDivider}}
+              trackColor={{true: colors.blueBrand, false: colors.divider}}
               thumbColor="#fff"
             />
           </View>
@@ -67,7 +70,7 @@ const SettingsScreen = ({navigation}) => {
             <Switch
               value={hapticEnabled}
               onValueChange={setHapticEnabled}
-              trackColor={{true: Colors.blueBrand, false: Colors.greyDivider}}
+              trackColor={{true: colors.blueBrand, false: colors.divider}}
               thumbColor="#fff"
             />
           </View>
@@ -93,54 +96,55 @@ const SettingsScreen = ({navigation}) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: Colors.greyLight},
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16,
-    paddingVertical: 14, backgroundColor: '#fff',
-    borderBottomWidth: 0.5, borderBottomColor: Colors.greyDivider,
-  },
-  backBtn: {fontSize: 14, color: Colors.blueBrand},
-  headerTitle: {fontSize: 17, fontWeight: '700', color: Colors.textPrimary},
-  scroll: {padding: 16, paddingBottom: 40},
-  sectionTitle: {
-    fontSize: 13, fontWeight: '600', color: Colors.textSecondary,
-    marginBottom: 8, marginTop: 16, paddingLeft: 4,
-  },
-  section: {
-    backgroundColor: '#fff', borderRadius: 16,
-    shadowColor: '#000', shadowOpacity: 0.04,
-    shadowRadius: 8, elevation: 1,
-    overflow: 'hidden',
-  },
-  coachRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', padding: 16,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.greyDivider,
-  },
-  coachRowActive: {backgroundColor: Colors.blueSurface},
-  coachInfo: {flex: 1, marginRight: 12},
-  coachName: {fontSize: 15, fontWeight: '600', color: Colors.textPrimary},
-  coachGreeting: {fontSize: 12, color: Colors.textSecondary, marginTop: 2},
-  radio: {
-    width: 22, height: 22, borderRadius: 11,
-    borderWidth: 2, borderColor: Colors.greyMedium,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  radioActive: {borderColor: Colors.blueBrand},
-  radioDot: {
-    width: 12, height: 12, borderRadius: 6,
-    backgroundColor: Colors.blueBrand,
-  },
-  settingRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', padding: 16,
-  },
-  settingLabel: {fontSize: 15, color: Colors.textPrimary},
-  divider: {height: 0.5, backgroundColor: Colors.greyDivider, marginLeft: 16},
-  arrow: {fontSize: 20, color: Colors.textSecondary},
-  versionText: {fontSize: 14, color: Colors.textSecondary},
-});
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.inputBg},
+    header: {
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', paddingHorizontal: 16,
+      paddingVertical: 14, backgroundColor: colors.card,
+      borderBottomWidth: 0.5, borderBottomColor: colors.divider,
+    },
+    backBtn: {fontSize: 14, color: colors.blueBrand},
+    headerTitle: {fontSize: 17, fontWeight: '700', color: colors.textPrimary},
+    scroll: {padding: 16, paddingBottom: 40},
+    sectionTitle: {
+      fontSize: 13, fontWeight: '600', color: colors.textSecondary,
+      marginBottom: 8, marginTop: 16, paddingLeft: 4,
+    },
+    section: {
+      backgroundColor: colors.card, borderRadius: 16,
+      shadowColor: '#000', shadowOpacity: 0.04,
+      shadowRadius: 8, elevation: 1,
+      overflow: 'hidden',
+    },
+    coachRow: {
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', padding: 16,
+      borderBottomWidth: 0.5, borderBottomColor: colors.divider,
+    },
+    coachRowActive: {backgroundColor: colors.cardAlt},
+    coachInfo: {flex: 1, marginRight: 12},
+    coachName: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
+    coachGreeting: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+    radio: {
+      width: 22, height: 22, borderRadius: 11,
+      borderWidth: 2, borderColor: colors.textMuted,
+      justifyContent: 'center', alignItems: 'center',
+    },
+    radioActive: {borderColor: colors.blueBrand},
+    radioDot: {
+      width: 12, height: 12, borderRadius: 6,
+      backgroundColor: colors.blueBrand,
+    },
+    settingRow: {
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', padding: 16,
+    },
+    settingLabel: {fontSize: 15, color: colors.textPrimary},
+    divider: {height: 0.5, backgroundColor: colors.divider, marginLeft: 16},
+    arrow: {fontSize: 20, color: colors.textSecondary},
+    versionText: {fontSize: 14, color: colors.textSecondary},
+  });
 
 export default SettingsScreen;
