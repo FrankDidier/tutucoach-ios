@@ -598,7 +598,7 @@ const makeStyles = colors =>
     marginRight: 8,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  coachName: {color: '#fff', fontSize: 18, fontWeight: 'bold'},
+  coachName: {color: '#fff', fontSize: 15, fontWeight: '600'},
   iconBtn: {width: 36, height: 36, alignItems: 'center', justifyContent: 'center'},
   headerIcon: {width: 22, height: 22, tintColor: '#fff'},
   pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},

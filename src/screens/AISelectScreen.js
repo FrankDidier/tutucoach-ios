@@ -9,12 +9,12 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId} from '../services/coachPrefs';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
-import ScreenHeader from '../components/ScreenHeader';
 import {useTheme} from '../theme/ThemeContext';
 
 // 与安卓 SettingsActivity.styleLabel 一致
@@ -42,32 +42,10 @@ function avatarSource(coach) {
   return avatarFor(coach && coach.name);
 }
 
-const BTN_STEPS = 28;
-
-function lerpChannel(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  };
-}
-
-function lerpRgb(from, to, t) {
-  return `rgb(${lerpChannel(from.r, to.r, t)},${lerpChannel(
-    from.g,
-    to.g,
-    t,
-  )},${lerpChannel(from.b, to.b, t)})`;
-}
-
 const AISelectScreen = ({navigation, route}) => {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [selected, setSelected] = useState('coach_pro');
   const [remoteCoaches, setRemoteCoaches] = useState(null);
 
@@ -104,14 +82,6 @@ const AISelectScreen = ({navigation, route}) => {
     }
   };
 
-  const btnStripes = useMemo(() => {
-    const start = hexToRgb(colors.primaryGradientStart);
-    const end = hexToRgb(colors.primaryGradientEnd);
-    return Array.from({length: BTN_STEPS}, (_, i) =>
-      lerpRgb(start, end, i / (BTN_STEPS - 1)),
-    );
-  }, [colors]);
-
   const gridItems = useMemo(() => {
     const source =
       remoteCoaches && remoteCoaches.length
@@ -135,10 +105,24 @@ const AISelectScreen = ({navigation, route}) => {
   }, [remoteCoaches]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-
-      <ScreenHeader title="AI选择" onBack={() => navigation?.goBack?.()} />
+    <View style={styles.container}>
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor="transparent" translucent />
+      {/* 顶部背景（蓝湖 375x220），深/浅两版 */}
+      <Image
+        source={dark ? Images.aiselectTopDark : Images.aiselectTopLight}
+        style={styles.topBg}
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+      <SafeAreaView>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backHit} onPress={() => navigation?.goBack?.()}>
+            <Text style={styles.backChevron}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>AI选择</Text>
+          <View style={styles.backHit} />
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -178,33 +162,37 @@ const AISelectScreen = ({navigation, route}) => {
           activeOpacity={0.88}
           style={styles.confirmOuter}
           onPress={onConfirm}>
-          <View style={styles.confirmGradientRow}>
-            {btnStripes.map((color, i) => (
-              <View
-                key={`c-${i}`}
-                style={[styles.confirmStripe, {backgroundColor: color}]}
-              />
-            ))}
-          </View>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <View style={styles.confirmLabelWrap} pointerEvents="none">
             <Text style={styles.confirmLabel}>确认</Text>
           </View>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.bg,
+    container: {flex: 1, backgroundColor: colors.bg},
+    topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: 220},
+    header: {
+      height: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 8,
     },
-    scroll: {
-      padding: 16,
-      paddingBottom: 100,
-    },
+    backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
+    backChevron: {fontSize: 30, color: colors.textPrimary, marginTop: -4},
+    headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
+    scroll: {paddingHorizontal: 15, paddingTop: 8, paddingBottom: 100},
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -212,60 +200,40 @@ const makeStyles = colors =>
     },
     cell: {
       width: '48.5%',
-      marginBottom: 12,
+      marginBottom: 15,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: 16,
-      padding: 14,
+      padding: 12,
       borderWidth: 2,
-      borderColor: colors.mode === 'dark' ? colors.cardBorder : 'transparent',
+      borderColor: dark ? colors.cardBorder : 'transparent',
       shadowColor: '#000',
-      shadowOpacity: 0.05,
+      shadowOpacity: dark ? 0.2 : 0.05,
       shadowRadius: 8,
       shadowOffset: {width: 0, height: 2},
       elevation: 1,
     },
-    cellSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.cardAlt,
-    },
+    cellSelected: {borderColor: colors.primary, backgroundColor: colors.cardAlt},
     avatarCircle: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       backgroundColor: colors.cardAlt,
-      padding: 4,
       overflow: 'hidden',
     },
-    avatarImg: {
-      width: '100%',
-      height: '100%',
-      borderRadius: 18,
-    },
-    cellTextCol: {
-      flex: 1,
-      marginLeft: 10,
-    },
-    cellName: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textPrimary,
-    },
-    cellSubtitle: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
+    avatarImg: {width: '100%', height: '100%'},
+    cellTextCol: {flex: 1, marginLeft: 10},
+    cellName: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
+    cellSubtitle: {fontSize: 12, color: '#979797', marginTop: 4},
     footer: {
       position: 'absolute',
       left: 0,
       right: 0,
       bottom: 0,
-      paddingHorizontal: 20,
+      paddingHorizontal: 15,
       paddingBottom: 28,
       paddingTop: 10,
-      backgroundColor: colors.bg,
     },
     confirmOuter: {
       height: 52,
@@ -273,23 +241,15 @@ const makeStyles = colors =>
       overflow: 'hidden',
       justifyContent: 'center',
     },
-    confirmGradientRow: {
-      ...StyleSheet.absoluteFillObject,
-      flexDirection: 'row',
-    },
-    confirmStripe: {
-      flex: 1,
-      height: '100%',
-    },
     confirmLabelWrap: {
       ...StyleSheet.absoluteFillObject,
       justifyContent: 'center',
       alignItems: 'center',
     },
     confirmLabel: {
-      color: colors.onPrimary,
-      fontSize: 17,
-      fontWeight: '700',
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
     },
   });
 

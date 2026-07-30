@@ -47,8 +47,8 @@ export const lightColors = {
   // 分隔线 / tab
   divider: '#E5E5E5',
   tabBarBg: '#FFFFFF',
-  tabActive: '#FF5A7F',
-  tabInactive: '#A6A6A6',
+  tabActive: '#F03B61',
+  tabInactive: '#D9B4C0',
 
   // 蓝色辅助（历史）
   blueBrand: '#01AFF5',
@@ -87,8 +87,8 @@ export const darkColors = {
   // 分隔线 / tab
   divider: 'rgba(255,255,255,0.08)',
   tabBarBg: '#0C0820',
-  tabActive: '#8B5CF6',
-  tabInactive: '#6E6A85',
+  tabActive: '#B595FF',
+  tabInactive: '#5D4F7E',
 
   // 蓝色辅助（历史）
   blueBrand: '#4DA6FF',

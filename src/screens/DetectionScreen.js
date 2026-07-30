@@ -13,6 +13,7 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -105,29 +106,6 @@ function serverCoachToProfile(c, base) {
 const DEFAULT_NO_HAND = ['手呢？快放回琴键上来～', '看不到你的手啦，对准镜头哦。'];
 const NO_HAND_AFTER_MS = 10000; // 连续无手 10 秒后提醒
 const NO_HAND_COOLDOWN_MS = 15000; // 无手提醒间隔
-
-const BTN_STEPS = 28;
-
-function lerpChannel(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  };
-}
-
-function lerpRgb(from, to, t) {
-  return `rgb(${lerpChannel(from.r, to.r, t)},${lerpChannel(
-    from.g,
-    to.g,
-    t,
-  )},${lerpChannel(from.b, to.b, t)})`;
-}
 
 const DetectionScreen = ({navigation, route}) => {
   const {colors} = useTheme();
@@ -741,14 +719,6 @@ const DetectionScreen = ({navigation, route}) => {
   const correctSec = Math.round((elapsedSec * matchRate) / 100);
   const incorrectSec = Math.max(0, elapsedSec - correctSec);
 
-  const btnStripes = useMemo(() => {
-    const start = hexToRgb(colors.primaryGradientStart);
-    const end = hexToRgb(colors.primaryGradientEnd);
-    return Array.from({length: BTN_STEPS}, (_, i) =>
-      lerpRgb(start, end, i / (BTN_STEPS - 1)),
-    );
-  }, [colors]);
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
@@ -777,10 +747,12 @@ const DetectionScreen = ({navigation, route}) => {
               style={styles.actionIcon}
               resizeMode="contain"
             />
-            <Text style={styles.actionTitle}>拍照/选模版</Text>
-            <Text style={styles.actionHint}>
-              {hasTemplate ? '已设置' : '点击设置'}
-            </Text>
+            <View style={styles.actionTextCol}>
+              <Text style={styles.actionTitle}>拍照/选模版</Text>
+              <Text style={styles.actionHint}>
+                {hasTemplate ? '已设置' : '点击拍照'}
+              </Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionCard}
@@ -791,12 +763,14 @@ const DetectionScreen = ({navigation, route}) => {
               style={styles.actionIcon}
               resizeMode="contain"
             />
-            <Text style={styles.actionTitle}>
-              {premium ? '兔兔教练' : '铃声选择'}
-            </Text>
-            <Text style={styles.actionHint}>
-              {premium ? coachName : alarmNameById(alarmId)}
-            </Text>
+            <View style={styles.actionTextCol}>
+              <Text style={styles.actionTitle}>
+                {premium ? '兔兔教练' : '铃声选择'}
+              </Text>
+              <Text style={styles.actionHint}>
+                {premium ? coachName : alarmNameById(alarmId)}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -867,13 +841,11 @@ const DetectionScreen = ({navigation, route}) => {
           </Text>
         </View>
 
-        <View style={styles.metroRow}>
-          <Text style={styles.statsPink}>
-            正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
-            {Math.round(matchRate)}%
-          </Text>
-          <MetronomeBar />
-        </View>
+        <Text style={styles.statsPink}>
+          正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
+          {Math.round(matchRate)}%
+        </Text>
+        <MetronomeBar />
       </View>
 
       <View style={styles.footer}>
@@ -881,14 +853,13 @@ const DetectionScreen = ({navigation, route}) => {
           activeOpacity={0.88}
           style={styles.ctaOuter}
           onPress={onToggleDetect}>
-          <View style={styles.ctaGradientRow}>
-            {btnStripes.map((color, i) => (
-              <View
-                key={`b-${i}`}
-                style={[styles.btnStripe, {backgroundColor: color}]}
-              />
-            ))}
-          </View>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <View style={styles.ctaLabelWrap} pointerEvents="none">
             <Text style={styles.ctaLabel}>{detecting ? '停止' : '启动'}</Text>
           </View>
@@ -1202,10 +1173,11 @@ const makeStyles = colors =>
   },
   actionCard: {
     flex: 1,
+    flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -1214,18 +1186,21 @@ const makeStyles = colors =>
     elevation: 2,
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    marginBottom: 8,
+    width: 44,
+    height: 44,
+    marginRight: 10,
+  },
+  actionTextCol: {
+    flex: 1,
   },
   actionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.textPrimary,
   },
   actionHint: {
-    fontSize: 11,
-    color: colors.textSecondary,
+    fontSize: 12,
+    color: '#979797',
     marginTop: 2,
   },
   cameraWrap: {
@@ -1318,6 +1293,7 @@ const makeStyles = colors =>
   templateRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
     marginBottom: 8,
   },
@@ -1368,11 +1344,10 @@ const makeStyles = colors =>
     lineHeight: 20,
   },
   statsPink: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.accent,
-    marginBottom: 8,
-    flexShrink: 1,
+    color: colors.primary,
+    marginBottom: 12,
   },
   metroRow: {
     flexDirection: 'row',
@@ -1406,8 +1381,8 @@ const makeStyles = colors =>
   },
   ctaLabel: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalBackdrop: {
     flex: 1,

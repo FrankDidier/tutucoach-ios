@@ -9,47 +9,31 @@ import {
   ScrollView,
   Alert,
   StatusBar,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
-import ScreenHeader from '../components/ScreenHeader';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {getMembership} from '../services/account';
 import {payWithWeChat} from '../services/wechat';
 
-// 价格与服务端 PLANS 一致（年 599 / 月 66）；服务端是定价权威，App 只传 plan 标识。
+const {width: SCREEN_W} = Dimensions.get('window');
+const S = SCREEN_W / 375;
+const px = n => Math.round(n * S);
+
+// iOS（Apple 渠道）定价：年 888 / 季 228 / 月 88。服务端按 platform=ios 取 PLANS_IOS 下单，
+// 与此处展示一致；App 只传 plan 标识，服务端仍是定价权威。
 const plans = [
-  {id: 'yearly', name: '年卡', price: '599', original: '¥792.00'},
-  {id: 'monthly', name: '月卡', price: '66', original: '¥99.00'},
+  {id: 'yearly', name: '年卡', price: '888', original: '¥1188.00'},
+  {id: 'quarterly', name: '季卡', price: '228', original: '¥299.00'},
+  {id: 'monthly', name: '月卡', price: '88', original: '¥128.00'},
 ];
 
-const BANNER_STEPS = 32;
-const BTN_STEPS = 28;
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16),
-  };
-}
-
-function lerpChannel(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-
-function lerpRgb(from, to, t) {
-  return `rgb(${lerpChannel(from.r, to.r, t)},${lerpChannel(
-    from.g,
-    to.g,
-    t,
-  )},${lerpChannel(from.b, to.b, t)})`;
-}
-
 const SubscriptionScreen = ({navigation}) => {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [selected, setSelected] = useState('yearly');
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
@@ -67,22 +51,6 @@ const SubscriptionScreen = ({navigation}) => {
     };
   }, []);
 
-  const bannerStripes = useMemo(() => {
-    const from = hexToRgb(colors.primaryGradientStart);
-    const to = hexToRgb(colors.primaryGradientEnd);
-    return Array.from({length: BANNER_STEPS}, (_, i) =>
-      lerpRgb(from, to, i / (BANNER_STEPS - 1)),
-    );
-  }, [colors]);
-
-  const btnStripes = useMemo(() => {
-    const from = hexToRgb(colors.primaryGradientStart);
-    const to = hexToRgb(colors.primaryGradientEnd);
-    return Array.from({length: BTN_STEPS}, (_, i) =>
-      lerpRgb(from, to, i / (BTN_STEPS - 1)),
-    );
-  }, [colors]);
-
   const onPurchase = async () => {
     if (!agreed) {
       Alert.alert('提示', '请先阅读并同意《会员购买协议》');
@@ -91,7 +59,6 @@ const SubscriptionScreen = ({navigation}) => {
     try {
       const r = await payWithWeChat(selected, getDeviceId());
       if (r.ok) {
-        // 支付成功后刷新会员状态，立即更新顶部横幅（对应安卓 refreshMembership）。
         try {
           const m = await getMembership(getDeviceId());
           if (m && m.ok) setVip(m);
@@ -105,321 +72,178 @@ const SubscriptionScreen = ({navigation}) => {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+  const isVip = vip && vip.is_vip;
 
-      <ScreenHeader title="会员订阅" onBack={() => navigation?.goBack?.()} />
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor="transparent" translucent />
+      {/* 顶部背景（含电路纹理），深/浅两版 */}
+      <Image
+        source={dark ? Images.subTopDark : Images.subTopLight}
+        style={styles.topBg}
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+
+      {/* 顶部导航：返回 + 居中标题 */}
+      <SafeAreaView style={styles.headerSafe}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backHit} onPress={() => navigation?.goBack?.()}>
+            <Text style={styles.backChevron}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>会员订阅</Text>
+          <View style={styles.backHit} />
+        </View>
+      </SafeAreaView>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.bannerOuter}>
-          <View style={styles.bannerGradient} pointerEvents="none">
-            {bannerStripes.map((color, i) => (
-              <View
-                key={`b-${i}`}
-                style={[styles.bannerStripe, {backgroundColor: color}]}
-              />
-            ))}
+        {/* VIP 卡片 345x80（贴图渐变 + 钻石 + svip + 已开通 + 有效期） */}
+        <View style={styles.vipCard}>
+          <Image source={dark ? Images.subVipDark : Images.subVipLight} style={styles.vipCardBg} resizeMode="stretch" />
+          <Image source={dark ? Images.subDiamondDark : Images.subDiamondLight} style={styles.vipDiamond} resizeMode="contain" />
+          <Image source={dark ? Images.subSvipDark : Images.subSvipLight} style={styles.vipSvip} resizeMode="contain" />
+          <View style={styles.vipBadge}>
+            <Text style={styles.vipBadgeText}>{isVip ? '已开通' : '未开通'}</Text>
           </View>
-          <View style={styles.bannerContent}>
-            <View style={styles.bannerTextCol}>
-              <View style={styles.vipBadge}>
-                <Text style={styles.vipBadgeText}>
-                  {vip && vip.is_vip ? 'VIP 已开通' : '未开通会员'}
-                </Text>
-              </View>
-              <Text style={styles.bannerDate}>
-                {vip && vip.is_vip
-                  ? `会员有效期至 ${vip.expire_text}`
-                  : '开通后解锁全部 AI 训练功能'}
-              </Text>
-            </View>
-            <Image
-              source={Images.diamondLarge}
-              style={styles.bannerDiamond}
-              resizeMode="contain"
-            />
-          </View>
+          <Text style={styles.vipDate}>
+            {isVip ? `会员有效期至${vip.expire_text}` : '开通后解锁全部 AI 训练功能'}
+          </Text>
         </View>
 
-        <Text style={styles.sectionPink}>会员权益 ✨</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>会员权益</Text>
+          <Image source={dark ? Images.subStarDark : Images.subStarLight} style={styles.sectionStar} resizeMode="contain" />
+        </View>
+
         <View style={styles.benefitCard}>
-          <Image
-            source={Images.menuAiTraining}
-            style={styles.benefitIcon}
-            resizeMode="contain"
-          />
+          <Image source={dark ? Images.subAiDark : Images.subAiLight} style={styles.benefitIcon} resizeMode="contain" />
           <View style={styles.benefitTextCol}>
-            <Text style={styles.benefitLine}>解锁智能AI训练</Text>
-            <Text style={styles.benefitLine}>多种AI模型选择</Text>
+            <Text style={styles.benefitTitle}>解锁智能AI训练</Text>
+            <Text style={styles.benefitSub}>多种AI模型选择</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionPlans}>选择套餐</Text>
+        <Text style={styles.sectionTitle}>选择套餐</Text>
         <View style={styles.plansRow}>
-          {plans.map(plan => (
-            <TouchableOpacity
-              key={plan.id}
-              style={[
-                styles.planCard,
-                selected === plan.id && styles.planCardSelected,
-              ]}
-              activeOpacity={0.88}
-              onPress={() => setSelected(plan.id)}>
-              <Text style={styles.planName}>{plan.name}</Text>
-              <Text style={styles.originalPrice}>{plan.original}</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceCurrency}>¥</Text>
-                <Text style={styles.priceValue}>{plan.price}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {plans.map(plan => {
+            const on = selected === plan.id;
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                style={[styles.planCard, on && styles.planCardSelected]}
+                activeOpacity={0.88}
+                onPress={() => setSelected(plan.id)}>
+                <Text style={styles.planName}>{plan.name}</Text>
+                <Text style={styles.originalPrice}>{plan.original}</Text>
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceCurrency, on && styles.priceOn]}>¥</Text>
+                  <Text style={[styles.priceValue, on && styles.priceOn]}>{plan.price}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        <TouchableOpacity
-          style={styles.agreementRow}
-          activeOpacity={0.85}
-          onPress={() => setAgreed(a => !a)}>
-          <View
-            style={[styles.checkbox, agreed && styles.checkboxChecked]}
-            accessibilityState={{checked: agreed}}>
-            {agreed ? (
-              <Text style={styles.checkboxMark}>✓</Text>
-            ) : null}
+        <TouchableOpacity style={styles.agreementRow} activeOpacity={0.85} onPress={() => setAgreed(a => !a)}>
+          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+            {agreed ? <Text style={styles.checkboxMark}>✓</Text> : null}
           </View>
           <Text style={styles.agreementText}>
-            已阅读并同意《会员购买协议》
+            已阅读并同意<Text style={styles.agreementLink}>《会员购买协议》</Text>
           </Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.purchaseOuter}
-          activeOpacity={0.88}
-          onPress={onPurchase}>
-          <View style={styles.btnGradientRow} pointerEvents="none">
-            {btnStripes.map((color, i) => (
-              <View
-                key={`p-${i}`}
-                style={[styles.btnStripe, {backgroundColor: color}]}
-              />
-            ))}
-          </View>
-          <View style={styles.purchaseLabelWrap} pointerEvents="none">
-            <Text style={styles.purchaseBtnText}>立即开通</Text>
-          </View>
-        </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* 底部固定按钮 */}
+      <SafeAreaView style={styles.footerSafe}>
+        <TouchableOpacity style={styles.purchaseOuter} activeOpacity={0.88} onPress={onPurchase}>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <Text style={styles.purchaseBtnText}>立即开通</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    </View>
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor: colors.bg,
-    },
-    headerWrap: {
-      position: 'relative',
-      height: 48,
-      overflow: 'hidden',
-    },
-    headerGradient: {
-      ...StyleSheet.absoluteFillObject,
-      flexDirection: 'column',
-    },
-    headerStripe: {
-      flex: 1,
-    },
-    headerBar: {
-      ...StyleSheet.absoluteFillObject,
+    root: {flex: 1, backgroundColor: colors.bg},
+    topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
+    headerSafe: {},
+    header: {
+      height: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 4,
+      paddingHorizontal: 8,
     },
-    backHit: {
-      width: 44,
-      height: 44,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    backChevron: {
-      fontSize: 22,
-      fontWeight: '600',
-      color: '#FFFFFF',
-      marginTop: -2,
-    },
-    headerTitleWrap: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    headerTitle: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: '#FFFFFF',
-    },
-    scroll: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: 16,
-      paddingTop: 16,
-      paddingBottom: 40,
-    },
-    bannerOuter: {
-      borderRadius: 16,
-      overflow: 'hidden',
-      minHeight: 100,
-      marginBottom: 20,
-    },
-    bannerGradient: {
-      ...StyleSheet.absoluteFillObject,
-      flexDirection: 'column',
-    },
-    bannerStripe: {
-      flex: 1,
-    },
-    bannerContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-      paddingVertical: 18,
-    },
-    bannerTextCol: {
-      flex: 1,
-    },
-    bannerDiamond: {
-      width: 80,
-      height: 80,
-      marginLeft: 8,
-    },
+    backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
+    backChevron: {fontSize: 30, fontWeight: '400', color: colors.textPrimary, marginTop: -4},
+    headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
+    scroll: {flex: 1},
+    scrollContent: {paddingHorizontal: 15, paddingTop: px(24), paddingBottom: px(110)},
+    // VIP 卡片
+    vipCard: {height: px(80), marginBottom: px(30)},
+    vipCardBg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: px(80), borderRadius: px(12)},
+    vipDiamond: {position: 'absolute', right: px(18), top: px(2), width: px(64), height: px(64)},
+    vipSvip: {position: 'absolute', left: px(16), top: px(19), width: px(47), height: px(13), tintColor: colors.textPrimary},
     vipBadge: {
-      alignSelf: 'flex-start',
+      position: 'absolute',
+      left: px(75),
+      top: px(16),
       backgroundColor: '#FFFFFF',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
+      paddingHorizontal: px(8),
+      paddingVertical: px(2),
+      borderRadius: px(9),
     },
-    vipBadgeText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.primary,
-    },
-    bannerDate: {
-      marginTop: 12,
-      fontSize: 15,
-      fontWeight: '600',
-      color: '#FFFFFF',
-    },
-    sectionPink: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.accent,
-      marginBottom: 10,
-    },
+    vipBadgeText: {fontSize: 11, color: '#261216'},
+    vipDate: {position: 'absolute', left: px(16), top: px(44), fontSize: 12, color: colors.textPrimary},
+    sectionRow: {flexDirection: 'row', alignItems: 'center', marginBottom: px(12)},
+    sectionTitle: {fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginBottom: px(12)},
+    sectionStar: {width: 18, height: 18, marginLeft: 4, marginBottom: px(12)},
     benefitCard: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: 16,
-      paddingVertical: 18,
-      paddingHorizontal: 16,
-      marginBottom: 8,
-      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      paddingVertical: 14,
+      paddingHorizontal: 13,
+      marginBottom: px(22),
+      borderWidth: dark ? 1 : 0,
       borderColor: colors.cardBorder,
-      shadowColor: '#000',
-      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
-      shadowRadius: 10,
-      shadowOffset: {width: 0, height: 2},
-      elevation: 2,
     },
-    benefitIcon: {
-      width: 40,
-      height: 40,
-      marginRight: 12,
-    },
-    benefitTextCol: {
-      flex: 1,
-      gap: 4,
-    },
-    benefitLine: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.textPrimary,
-      lineHeight: 22,
-    },
-    sectionPlans: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginTop: 20,
-      marginBottom: 12,
-    },
-    plansRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
+    benefitIcon: {width: 44, height: 44, marginRight: 12},
+    benefitTextCol: {flex: 1},
+    benefitTitle: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
+    benefitSub: {fontSize: 11, color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(38,18,22,0.6)', marginTop: 4},
+    plansRow: {flexDirection: 'row', gap: 8},
     planCard: {
       flex: 1,
+      height: px(105),
       backgroundColor: colors.card,
-      borderRadius: 16,
-      paddingVertical: 14,
+      borderRadius: 12,
+      paddingVertical: 10,
       paddingHorizontal: 8,
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: colors.mode === 'dark' ? colors.cardBorder : 'transparent',
-      shadowColor: '#000',
-      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
-      shadowRadius: 8,
-      shadowOffset: {width: 0, height: 2},
-      elevation: 1,
+      borderWidth: 1.5,
+      borderColor: dark ? colors.cardBorder : '#EEE',
     },
-    planCardSelected: {
-      borderColor: colors.primary,
-    },
-    planName: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginBottom: 6,
-    },
-    originalPrice: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      textDecorationLine: 'line-through',
-      marginBottom: 4,
-    },
-    priceRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-    },
-    priceCurrency: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.accent,
-      marginBottom: 3,
-      marginRight: 1,
-    },
-    priceValue: {
-      fontSize: 24,
-      fontWeight: '800',
-      color: colors.accent,
-    },
-    agreementRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: 22,
-      gap: 10,
-    },
+    planCardSelected: {borderColor: colors.primary, borderWidth: 2, backgroundColor: dark ? colors.cardAlt : colors.card},
+    planName: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
+    originalPrice: {fontSize: 12, color: '#A6A6A6', textDecorationLine: 'line-through', marginTop: 4},
+    priceRow: {flexDirection: 'row', alignItems: 'flex-end', marginTop: 4},
+    priceCurrency: {fontSize: 15, fontWeight: '600', color: '#A6A6A6', marginBottom: 3},
+    priceValue: {fontSize: 22, fontWeight: '600', color: '#A6A6A6'},
+    priceOn: {color: colors.primary},
+    agreementRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(22)},
     checkbox: {
       width: 18,
       height: 18,
@@ -429,47 +253,15 @@ const makeStyles = colors =>
       backgroundColor: colors.card,
       justifyContent: 'center',
       alignItems: 'center',
+      marginRight: 8,
     },
-    checkboxChecked: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    checkboxMark: {
-      color: '#FFFFFF',
-      fontSize: 12,
-      fontWeight: '800',
-    },
-    agreementText: {
-      flex: 1,
-      fontSize: 12,
-      color: colors.accent,
-      lineHeight: 18,
-    },
-    purchaseOuter: {
-      marginTop: 18,
-      height: 52,
-      borderRadius: 26,
-      overflow: 'hidden',
-      justifyContent: 'center',
-    },
-    btnGradientRow: {
-      ...StyleSheet.absoluteFillObject,
-      flexDirection: 'row',
-    },
-    btnStripe: {
-      flex: 1,
-      height: '100%',
-    },
-    purchaseLabelWrap: {
-      ...StyleSheet.absoluteFillObject,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    purchaseBtnText: {
-      color: colors.onPrimary,
-      fontSize: 17,
-      fontWeight: '700',
-    },
+    checkboxChecked: {backgroundColor: colors.primary, borderColor: colors.primary},
+    checkboxMark: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
+    agreementText: {flex: 1, fontSize: 12, color: colors.textPrimary},
+    agreementLink: {color: colors.primary},
+    footerSafe: {position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 15, paddingBottom: 8},
+    purchaseOuter: {height: 52, borderRadius: 26, overflow: 'hidden', justifyContent: 'center', alignItems: 'center'},
+    purchaseBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   });
 
 export default SubscriptionScreen;

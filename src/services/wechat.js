@@ -42,7 +42,12 @@ export async function loginWithWeChat(deviceId) {
 
 /** 微信支付：后端统一下单(/api/pay/wechat/create_order) → 唤起微信。plan=yearly/monthly。 */
 export async function payWithWeChat(plan, userId) {
-  const order = await postJson('/api/pay/wechat/create_order', {plan, user_id: userId});
+  // platform 决定后端价目表：iOS 走 88/228/888，安卓走 66/168/666。
+  const order = await postJson('/api/pay/wechat/create_order', {
+    plan,
+    user_id: userId,
+    platform: Platform.OS,
+  });
   if (!order || !order.ok) {
     if (order && order.error === 'wechat_pay_not_configured') {
       return {ok: false, message: '微信支付暂未开通（待配置 APIv3 密钥）'};

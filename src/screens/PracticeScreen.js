@@ -4,215 +4,252 @@ import {
   Text,
   StyleSheet,
   SafeAreaView,
-  ScrollView,
   TouchableOpacity,
   StatusBar,
   Image,
+  Dimensions,
 } from 'react-native';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
 
+// 蓝湖设计稿基准宽度 375pt；按屏宽等比缩放，保证与设计稿 1:1 的相对尺寸/间距。
+const {width: SCREEN_W} = Dimensions.get('window');
+const S = SCREEN_W / 375;
+const px = n => Math.round(n * S);
+
+// 卡片（含缺口）设计尺寸 345x305，内部元素按「卡片内相对坐标」绝对定位，做到 1:1。
+const CARD_W = 345;
+const CARD_H = 305;
+
 const PracticeScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  // MUSIC / CHAT 大字水印：暗色低透明白、浅色更弱的白（在粉底上呈淡粉）。
+  const watermark = dark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)';
+  // 磁贴内 VIP/FREE 水印已烘焙进贴图，这里文案水印仅用于 CHAT 行。
+  const innerRow = dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,120,150,0.08)';
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} />
-      {mode === 'light' ? (
-        <Image
-          source={Images.pageGradient}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-      ) : null}
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}>
+      {/* 背景：暗色整屏渐变；浅色为顶部渐变 + 页面浅粉底 */}
+      <Image
+        source={dark ? Images.practiceBgDark : Images.practiceBgLight}
+        style={
+          dark
+            ? StyleSheet.absoluteFill
+            : {position: 'absolute', top: 0, left: 0, right: 0, height: px(400)}
+        }
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+
+      <SafeAreaView style={styles.safe}>
+        {/* 导航标题 练琴：18/600，左边距 30 */}
         <Text style={styles.screenTitle}>练琴</Text>
 
+        {/* 顶部问候区：左文案 + 右上角兔子（216x217，压住卡片顶部缺口） */}
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
-            <Text style={styles.heroLine1}>HI~ ✨</Text>
+            <View style={styles.heroLine1Row}>
+              <Text style={styles.heroLine1}>HI~</Text>
+              <Image source={dark ? Images.sparkleDark : Images.sparkle} style={styles.heroSparkle} resizeMode="contain" />
+            </View>
             <Text style={styles.heroLine2}>我是你的兔兔教练</Text>
           </View>
-          {/* 「练琴」页兔子播庆祝动作（与安卓一致，用户很喜欢这个动作）。 */}
           <RabbitMascot loopAction="celebrate" style={styles.mascot} />
         </View>
 
-        <View style={styles.selectionCard}>
-          <View style={styles.selectionLabelRow}>
+        {/* MUSIC 大字水印（衔接处，压在卡片之后只露上沿） */}
+        <View style={styles.cardOuter}>
+          <Text style={[styles.musicWatermark, {color: watermark}]} numberOfLines={1}>
+            MUSIC
+          </Text>
+
+          {/* 主卡片：带缺口的容器贴图 + 内部绝对定位 */}
+          <View style={styles.card}>
             <Image
-              source={Images.sparkle}
-              style={styles.selectionSparkle}
-              resizeMode="contain"
+              source={dark ? Images.practiceCardDark : Images.practiceCardLight}
+              style={StyleSheet.absoluteFill}
+              resizeMode="stretch"
+              pointerEvents="none"
             />
-            <Text style={styles.selectionLabel}>选择您的模型进行练习</Text>
-          </View>
 
-          <View style={styles.cardsRow}>
-            <TouchableOpacity
-              style={styles.featureCard}
-              activeOpacity={0.85}
-              onPress={() =>
-                navigation.navigate('Detection', {premium: true})
-              }>
-              <Image
-                source={Images.cardVipPractice}
-                style={styles.cardArt}
-                resizeMode="cover"
-              />
-              <View style={styles.cardTextWrap}>
-                <Text style={styles.cardTitle}>智能AI陪练</Text>
-                <Text style={styles.cardSub}>会员专属</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.featureCard}
-              activeOpacity={0.85}
-              onPress={() =>
-                navigation.navigate('Detection', {premium: false})
-              }>
-              <Image
-                source={Images.cardFreeDetect}
-                style={styles.cardArt}
-                resizeMode="cover"
-              />
-              <View style={styles.cardTextWrap}>
-                <Text style={styles.cardTitle}>智能手型检测</Text>
-                <Text style={styles.cardSub}>免费检测</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* AI 陪练模式：语音 + 对话陪伴练琴（对应安卓 CompanionChatActivity） */}
-          <TouchableOpacity
-            style={styles.companionBtn}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('Companion')}>
-            <Text style={styles.companionIcon}>🎹</Text>
-            <View style={styles.companionCopy}>
-              <Text style={styles.companionTitle}>AI 陪练模式</Text>
-              <Text style={styles.companionSub}>AI 分身语音陪伴 + 对话 · 会员专属</Text>
+            {/* 选择您的模型进行练习 (56,278) → 卡内 (41,10) */}
+            <View style={styles.selLabelRow}>
+              <Image source={dark ? Images.sparkleDark : Images.sparkle} style={styles.selIcon} resizeMode="contain" />
+              <Text style={styles.selLabel}>选择您的模型进行练习</Text>
             </View>
-            <Text style={styles.companionArrow}>›</Text>
-          </TouchableOpacity>
+
+            {/* VIP 磁贴 (30,316)150x125 → 卡内 (15,48) */}
+            <TouchableOpacity
+              style={[styles.tile, {left: px(15)}]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Detection', {premium: true})}>
+              <Image source={dark ? Images.practiceTileVipDark : Images.practiceTileVipLight} style={styles.tileImg} resizeMode="stretch" />
+              <Text style={styles.tileTitle}>智能AI陪练</Text>
+              <Text style={styles.tileSub}>会员专属</Text>
+            </TouchableOpacity>
+
+            {/* 免费磁贴 (195,316) → 卡内 (180,48) */}
+            <TouchableOpacity
+              style={[styles.tile, {left: px(180)}]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Detection', {premium: false})}>
+              <Image source={dark ? Images.practiceTileFreeDark : Images.practiceTileFreeLight} style={styles.tileImg} resizeMode="stretch" />
+              <Text style={styles.tileTitle}>智能手型检测</Text>
+              <Text style={styles.tileSub}>免费检测</Text>
+            </TouchableOpacity>
+
+            {/* AI陪练模式 行 (卡内下部) */}
+            <TouchableOpacity
+              style={[styles.companionRow, {backgroundColor: innerRow}]}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Companion')}>
+              <Text style={[styles.chatWatermark, {color: watermark}]} numberOfLines={1}>
+                CHAT
+              </Text>
+              <View style={styles.chatBlob} />
+              <Text style={styles.companionTitle}>AI陪练模式</Text>
+              <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scroll: {
-    paddingBottom: 28,
-    paddingHorizontal: 20,
-  },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  hero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  heroCopy: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  heroLine1: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  heroLine2: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginTop: 6,
-  },
-  mascot: {
-    width: 140,
-    height: 140,
-  },
-  selectionCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: {width: 0, height: 4},
-    elevation: 3,
-  },
-  selectionLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  selectionSparkle: {
-    width: 20,
-    height: 20,
-    marginRight: 6,
-  },
-  selectionLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  cardsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  featureCard: {
-    flex: 1,
-    height: 160,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  cardArt: {
-    ...StyleSheet.absoluteFillObject,
-    width: undefined,
-    height: undefined,
-  },
-  cardTextWrap: {
-    padding: 14,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  cardSub: {
-    fontSize: 12,
-    marginTop: 2,
-    color: colors.textSecondary,
-  },
-  companionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  companionIcon: {fontSize: 26, marginRight: 12},
-  companionCopy: {flex: 1},
-  companionTitle: {fontSize: 16, fontWeight: '700', color: '#fff'},
-  companionSub: {fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2},
-  companionArrow: {fontSize: 24, color: '#fff'},
+    root: {flex: 1, backgroundColor: colors.bg},
+    safe: {flex: 1},
+    screenTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginTop: 8,
+      marginLeft: 30,
+      marginBottom: 4,
+    },
+    // 兔子 216x217 在 (159,89)；hero 高度容纳兔子并让文案居左。
+    hero: {
+      position: 'relative',
+      height: px(200),
+      paddingLeft: 24,
+    },
+    heroCopy: {marginTop: px(52), maxWidth: px(200)},
+    heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
+    heroLine1: {fontSize: 24, fontWeight: '600', color: colors.textPrimary},
+    heroSparkle: {width: 22, height: 22, marginLeft: 8},
+    heroLine2: {fontSize: 20, fontWeight: '600', color: colors.textPrimary, marginTop: 6},
+    mascot: {
+      position: 'absolute',
+      top: px(-8),
+      right: 0,
+      width: px(216),
+      height: px(217),
+    },
+    cardOuter: {position: 'relative', alignItems: 'center'},
+    musicWatermark: {
+      position: 'absolute',
+      top: px(-40),
+      left: px(16),
+      textAlign: 'left',
+      fontSize: px(96),
+      fontWeight: '900',
+      letterSpacing: 4,
+      zIndex: 0,
+    },
+    card: {
+      width: px(CARD_W),
+      height: px(CARD_H),
+      zIndex: 1,
+    },
+    selLabelRow: {
+      position: 'absolute',
+      left: px(26),
+      top: px(8),
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    selIcon: {width: px(18), height: px(18), marginRight: px(6)},
+    selLabel: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
+    tile: {
+      position: 'absolute',
+      top: px(48),
+      width: px(150),
+      height: px(125),
+    },
+    tileImg: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: px(150),
+      height: px(125),
+    },
+    tileTitle: {
+      position: 'absolute',
+      left: px(12),
+      top: px(10),
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    tileSub: {
+      position: 'absolute',
+      left: px(12),
+      top: px(36),
+      fontSize: 12,
+      fontWeight: '400',
+      color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
+    },
+    // AI陪练模式 内行：卡内 (12,187)~(333,300)
+    companionRow: {
+      position: 'absolute',
+      left: px(12),
+      right: px(12),
+      top: px(187),
+      height: px(103),
+      borderRadius: px(16),
+      overflow: 'hidden',
+    },
+    companionTitle: {
+      position: 'absolute',
+      left: px(15),
+      top: px(15),
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    companionSub: {
+      position: 'absolute',
+      left: px(15),
+      top: px(41),
+      fontSize: 12,
+      fontWeight: '400',
+      color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
+    },
+    chatWatermark: {
+      position: 'absolute',
+      left: px(15),
+      top: px(52),
+      fontSize: px(44),
+      fontWeight: '900',
+      letterSpacing: 2,
+    },
+    // 右下角紫色对话团（设计中为紫色渐变块，这里用圆角紫块近似）
+    chatBlob: {
+      position: 'absolute',
+      right: px(14),
+      bottom: px(10),
+      width: px(74),
+      height: px(64),
+      borderRadius: px(32),
+      backgroundColor: dark ? 'rgba(150,110,255,0.55)' : 'rgba(170,130,255,0.6)',
+    },
   });
 
 export default PracticeScreen;

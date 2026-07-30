@@ -87,3 +87,4 @@ signing.env
 ios/build_device/
 build_signing/
 ios/build_verify/
+ios/build_sim/

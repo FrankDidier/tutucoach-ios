@@ -194,7 +194,7 @@ const ClassManageScreen = ({navigation}) => {
       style={styles.card}
       activeOpacity={0.85}
       onPress={() => onStudentPress(item)}>
-      <View style={styles.cardLeft}>
+      <View style={styles.cardTopRow}>
         <Image
           source={Images.avatarRabbit}
           style={styles.avatar}
@@ -217,26 +217,27 @@ const ClassManageScreen = ({navigation}) => {
           <Text style={styles.studentId}>ID:{item.studentId}</Text>
         </View>
       </View>
-      <View style={styles.cardRight}>
-        {item.pending ? (
-          <Text style={styles.pendingHint}>未入班{'\n'}练习数据待同步</Text>
-        ) : (
-          <>
-            <Text style={styles.practiceLine}>
-              <Text style={styles.practiceLabel}>{rangeCfg.title}：</Text>
-              <Text style={styles.practiceValue}>
-                {fmtMinutes(item[rangeCfg.field])}
-              </Text>
+
+      {item.pending ? (
+        <View style={styles.practiceBar}>
+          <Text style={styles.pendingHint}>未入班 · 练习数据待同步</Text>
+        </View>
+      ) : (
+        <View style={styles.practiceBar}>
+          <Text style={styles.practiceLine}>
+            <Text style={styles.practiceLabel}>{rangeCfg.title}时长：</Text>
+            <Text style={styles.practiceValue}>
+              {fmtMinutes(item[rangeCfg.field])}
             </Text>
-            <Text style={styles.practiceLine}>
-              <Text style={styles.practiceLabel}>平均正确率：</Text>
-              <Text style={styles.practiceValue}>
-                {item.avgRate != null ? `${item.avgRate}%` : '—'}
+            {item.avgRate != null ? (
+              <Text style={styles.practiceLabel}>
+                {'   '}正确率：
+                <Text style={styles.practiceValue}>{item.avgRate}%</Text>
               </Text>
-            </Text>
-          </>
-        )}
-      </View>
+            ) : null}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -377,11 +378,8 @@ const makeStyles = colors =>
     card: {
       backgroundColor: colors.card,
       borderRadius: 16,
-      padding: 16,
+      padding: 14,
       marginBottom: 10,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
       borderWidth: colors.mode === 'dark' ? 1 : 0,
       borderColor: colors.cardBorder,
       shadowColor: '#000',
@@ -390,16 +388,15 @@ const makeStyles = colors =>
       shadowOffset: {width: 0, height: 2},
       elevation: 2,
     },
-    cardLeft: {
+    cardTopRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      flex: 1,
       gap: 12,
     },
     avatar: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: colors.cardAlt,
     },
     nameBlock: {
@@ -443,31 +440,34 @@ const makeStyles = colors =>
       fontWeight: '700',
     },
     pendingHint: {
-      fontSize: 11,
+      fontSize: 13,
       color: colors.textSecondary,
-      textAlign: 'right',
-      lineHeight: 16,
+      lineHeight: 18,
     },
     studentId: {
       fontSize: 12,
       color: colors.textSecondary,
       marginTop: 4,
     },
-    cardRight: {
-      marginLeft: 8,
-      maxWidth: '46%',
+    practiceBar: {
+      marginTop: 12,
+      backgroundColor: colors.inputBg,
+      borderRadius: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
     },
     practiceLine: {
-      textAlign: 'right',
+      fontSize: 13,
     },
     practiceLabel: {
-      fontSize: 11,
-      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textPrimary,
     },
     practiceValue: {
       fontSize: 13,
-      fontWeight: '700',
-      color: colors.accent,
+      fontWeight: '600',
+      color: colors.primary,
     },
   });
 

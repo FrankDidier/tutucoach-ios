@@ -21,6 +21,7 @@ import {pickFromGallery} from '../services/imagePicker';
 import {
   listAllCoaches,
   saveCoach,
+  deleteCoach,
   uploadAvatar,
   cloneVoice,
   absAvatarUrl,
@@ -169,6 +170,35 @@ const AISettingsScreen = ({navigation}) => {
     }
   };
 
+  const onDelete = () => {
+    if (!draft.id) return;
+    Alert.alert('删除分身', `确定删除「${draft.name}」吗？此操作不可恢复。`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            const r = await deleteCoach(draft.id);
+            if (r && r.ok) {
+              Alert.alert('已删除');
+              await loadCoaches();
+            } else if (r && r.error === 'cannot_delete_builtin') {
+              Alert.alert('无法删除', '内置/系统分身不可删除。');
+            } else {
+              Alert.alert('删除失败', (r && r.error) || '请稍后重试');
+            }
+          } catch (e) {
+            Alert.alert('删除失败', '网络异常，请重试');
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const requireSaved = () => {
     if (!draft.id) {
       Alert.alert('请先保存', '请先点「保存」创建分身，再上传头像或复刻声音。');
@@ -281,15 +311,7 @@ const AISettingsScreen = ({navigation}) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <ScreenHeader
-        title="AI分身设置"
-        onBack={() => navigation?.goBack?.()}
-        right={
-          <TouchableOpacity onPress={onSave} activeOpacity={0.7} disabled={saving}>
-            <Text style={styles.saveHeaderText}>{saving ? '...' : '保存'}</Text>
-          </TouchableOpacity>
-        }
-      />
+      <ScreenHeader title="AI分身设置" onBack={() => navigation?.goBack?.()} />
 
       {loading ? (
         <View style={styles.center}>
@@ -377,27 +399,30 @@ const AISettingsScreen = ({navigation}) => {
               <Text style={styles.reminderEntryArrow}>›</Text>
             </TouchableOpacity>
 
-            {/* 头像 + 名称 */}
-            <View style={styles.card}>
-              <View style={styles.row}>
-                <TouchableOpacity onPress={onChangeAvatar} activeOpacity={0.85}>
-                  <Image source={avatarSrc} style={styles.avatar} resizeMode="cover" />
-                  <View style={styles.avatarBadge}>
-                    <Text style={styles.avatarBadgeText}>＋</Text>
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.nameCol}>
-                  <Text style={styles.fieldLabel}>分身名称</Text>
-                  <TextInput
-                    style={styles.nameInput}
-                    value={draft.name}
-                    onChangeText={t => set('name', t)}
-                    placeholder="如：兔兔老师"
-                    placeholderTextColor={colors.textSecondary}
-                  />
+            {/* 头像（居中置顶 + 相机角标，对齐蓝湖「AI分身设置」） */}
+            <View style={styles.avatarWrap}>
+              <TouchableOpacity onPress={onChangeAvatar} activeOpacity={0.85}>
+                <Image source={avatarSrc} style={styles.avatarTop} resizeMode="cover" />
+                <View style={styles.avatarCam}>
+                  <Text style={styles.avatarCamText}>📷</Text>
                 </View>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.avatarHint}>点头像上传照片；先保存分身，再上传头像/录音。</Text>
+
+            {/* 分身名称（行样式：左标题 + 右输入） */}
+            <View style={styles.card}>
+              <View style={styles.fieldRow}>
+                <Text style={styles.fieldLabel}>分身名称</Text>
+                <TextInput
+                  style={styles.rowInput}
+                  value={draft.name}
+                  onChangeText={t => set('name', t)}
+                  placeholder="请输入"
+                  placeholderTextColor={colors.textSecondary}
+                  textAlign="right"
+                />
               </View>
-              <Text style={styles.avatarHint}>点头像上传照片；先保存分身，再上传头像/录音。</Text>
             </View>
 
             {/* 声音复刻 */}
@@ -495,15 +520,24 @@ const AISettingsScreen = ({navigation}) => {
               />
             </View>
 
-            <TouchableOpacity
-              style={styles.saveBtn}
-              onPress={onSave}
-              activeOpacity={0.88}
-              disabled={saving}>
-              <Text style={styles.saveBtnText}>
-                {saving ? '保存中…' : draft.id ? '保存分身' : '创建分身'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.footerRow}>
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={onDelete}
+                activeOpacity={0.85}
+                disabled={saving || !draft.id}>
+                <Text style={styles.deleteBtnText}>删除</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={onSave}
+                activeOpacity={0.88}
+                disabled={saving}>
+                <Text style={styles.saveBtnText}>
+                  {saving ? '保存中…' : draft.id ? '保存提交' : '创建分身'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -581,28 +615,46 @@ const makeStyles = colors =>
       elevation: 2,
     },
     row: {flexDirection: 'row', alignItems: 'center'},
-    avatar: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+    avatarWrap: {alignItems: 'center', marginTop: 8, marginBottom: 6},
+    avatarTop: {
+      width: 92,
+      height: 92,
+      borderRadius: 46,
       backgroundColor: colors.cardAlt,
     },
-    avatarBadge: {
+    avatarCam: {
       position: 'absolute',
       right: -2,
       bottom: -2,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
-      borderColor: colors.card,
+      borderColor: colors.bg,
     },
-    avatarBadgeText: {color: '#fff', fontSize: 14, fontWeight: '700', marginTop: -1},
-    avatarHint: {fontSize: 11.5, color: colors.textSecondary, marginTop: 10},
-    nameCol: {flex: 1, marginLeft: 16},
+    avatarCamText: {fontSize: 13},
+    avatarHint: {
+      fontSize: 11.5,
+      color: colors.textSecondary,
+      marginTop: 2,
+      marginBottom: 4,
+      textAlign: 'center',
+    },
+    fieldRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    rowInput: {
+      flex: 1,
+      marginLeft: 12,
+      height: 32,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
     fieldLabel: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
     fieldHint: {
       fontSize: 11.5,
@@ -665,8 +717,20 @@ const makeStyles = colors =>
       color: colors.textPrimary,
       textAlignVertical: 'top',
     },
+    footerRow: {flexDirection: 'row', gap: 12, marginTop: 22},
+    deleteBtn: {
+      width: 110,
+      height: 50,
+      borderRadius: 25,
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    deleteBtnText: {color: colors.textPrimary, fontSize: 16, fontWeight: '600'},
     saveBtn: {
-      marginTop: 20,
+      flex: 1,
       height: 50,
       borderRadius: 25,
       backgroundColor: colors.primary,
@@ -674,7 +738,6 @@ const makeStyles = colors =>
       justifyContent: 'center',
     },
     saveBtnText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-    saveHeaderText: {fontSize: 15, fontWeight: '700', color: colors.accent},
     reminderEntry: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -11,7 +11,10 @@ import {
   Alert,
   Platform,
   Linking,
+  Dimensions,
 } from 'react-native';
+
+const {width: SCREEN_W} = Dimensions.get('window');
 import {useFocusEffect} from '@react-navigation/native';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
@@ -35,38 +38,10 @@ try {
   Clipboard = null;
 }
 
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  };
-}
-function lerp(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-function gradientStripes(from, to, n) {
-  const a = hexToRgb(from);
-  const b = hexToRgb(to);
-  return Array.from(
-    {length: n},
-    (_, i) =>
-      `rgb(${lerp(a.r, b.r, i / (n - 1))},${lerp(a.g, b.g, i / (n - 1))},${lerp(
-        a.b,
-        b.b,
-        i / (n - 1),
-      )})`,
-  );
-}
-
 const ProfileScreen = ({navigation}) => {
   const {colors, mode, toggle} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const pointsStripes = useMemo(
-    () => gradientStripes(colors.primaryGradientStart, colors.primaryGradientEnd, 24),
-    [colors],
-  );
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
 
   const [userId, setUserId] = useState('');
   const [vip, setVip] = useState(null);
@@ -162,13 +137,8 @@ const ProfileScreen = ({navigation}) => {
   };
 
   const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
-  const vipText = vip
-    ? vip.is_vip
-      ? `VIP 有效期至 ${vip.expire_text}`
-      : '未开通会员'
-    : '';
 
-  const MenuRow = ({icon, label, subtitle, onPress, right, last}) => (
+  const MenuRow = ({icon, label, onPress, last}) => (
     <TouchableOpacity
       style={[styles.menuItem, last && styles.menuItemLast]}
       activeOpacity={0.7}
@@ -179,22 +149,25 @@ const ProfileScreen = ({navigation}) => {
         <View style={styles.menuIcon} />
       )}
       <Text style={styles.menuLabel}>{label}</Text>
-      <Text style={subtitle || right ? styles.menuSubtitle : styles.menuArrow}>
-        {subtitle ? `${subtitle} ›` : right ? `${right} ›` : '›'}
-      </Text>
+      <Text style={styles.menuArrow}>›</Text>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {mode === 'light' ? (
-        <Image
-          source={Images.pageGradient}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-      ) : null}
+      {/* 背景：蓝湖导出（暗色整屏 / 浅色顶部渐变） */}
+      <Image
+        source={dark ? Images.profileBgDark : Images.profileBgLight}
+        style={
+          dark
+            ? StyleSheet.absoluteFill
+            : {position: 'absolute', top: 0, left: 0, right: 0, height: 400}
+        }
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+      <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
@@ -203,34 +176,31 @@ const ProfileScreen = ({navigation}) => {
         <View style={styles.profileBlock}>
           <TouchableOpacity activeOpacity={0.85} onPress={onChangeAvatar}>
             <Image
-              source={avatarUri ? {uri: avatarUri} : Images.avatarUser}
+              source={avatarUri ? {uri: avatarUri} : Images.pfAvatar}
               style={styles.avatar}
               resizeMode="cover"
             />
-            <View style={styles.avatarEditBadge}>
-              <Text style={styles.avatarEditText}>＋</Text>
-            </View>
           </TouchableOpacity>
           <TouchableOpacity activeOpacity={0.7} onPress={onEditName}>
-            <Text style={styles.userName}>{displayName} ✎</Text>
+            <Text style={styles.userName}>{displayName}</Text>
           </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7} onPress={onCopyId}>
-            <Text style={styles.userId}>{idText} 复制</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={onCopyId} style={styles.idRow}>
+            <Text style={styles.userId}>{idText}</Text>
+            <Image source={Images.pfCopy} style={styles.copyIcon} resizeMode="contain" />
           </TouchableOpacity>
-          {vipText ? <Text style={styles.vipText}>{vipText}</Text> : null}
         </View>
 
         <View style={styles.pointsCardOuter}>
-          <View style={styles.pointsGradientRow} pointerEvents="none">
-            {pointsStripes.map((c, i) => (
-              <View key={`p-${i}`} style={[styles.pointsStripe, {backgroundColor: c}]} />
-            ))}
-          </View>
-          <View style={styles.pointsDiamond} pointerEvents="none" />
+          <Image
+            source={dark ? Images.pointsCardDark : Images.pointsCardLight}
+            style={styles.pointsCardImg}
+            resizeMode="stretch"
+            pointerEvents="none"
+          />
           <View style={styles.pointsCardInner}>
             <View style={styles.pointsLabelRow}>
               <Text style={styles.pointsLabel}>总积分</Text>
-              <Image source={Images.eyeFill} style={styles.eyeIcon} resizeMode="contain" />
+              <Image source={Images.pfEye} style={styles.eyeIcon} resizeMode="contain" />
             </View>
             <Text style={styles.pointsValue}>{points}</Text>
           </View>
@@ -238,21 +208,20 @@ const ProfileScreen = ({navigation}) => {
 
         <View style={styles.menuSection}>
           <MenuRow
-            icon={Images.menuSubscription}
+            icon={Images.pfSub}
             label="会员订阅"
             onPress={() => navigation.navigate('Subscription')}
           />
           <View style={styles.menuDivider} />
           <MenuRow
-            icon={Images.menuCheckin}
+            icon={Images.pfCheckin}
             label="打卡统计"
             onPress={() => navigation.navigate('CheckinStats')}
           />
           <View style={styles.menuDivider} />
           <MenuRow
-            icon={Images.menuClassManage}
+            icon={Images.pfWechat}
             label="微信登录"
-            subtitle="绑定账号·跨设备同步"
             onPress={onWeChatLogin}
             last
           />
@@ -260,22 +229,20 @@ const ProfileScreen = ({navigation}) => {
 
         <View style={styles.menuSection}>
           <MenuRow
-            icon={Images.menuClassManage}
+            icon={Images.pfTeacher}
             label="教师端"
-            subtitle="学生录入·班级管理"
             onPress={() => navigation.navigate('TeacherProfile')}
           />
           <View style={styles.menuDivider} />
           <MenuRow
-            icon={Images.sparkle}
+            icon={Images.pfHelp}
             label="使用帮助"
             onPress={() => navigation.navigate('Guide', {forceShow: true})}
           />
           <View style={styles.menuDivider} />
           <MenuRow
-            icon={Images.sparkle}
+            icon={Images.pfTheme}
             label="切换主题"
-            right={mode === 'dark' ? '暗色' : '浅色'}
             onPress={toggle}
             last
           />
@@ -288,27 +255,28 @@ const ProfileScreen = ({navigation}) => {
           <Text style={styles.icpBeian}>ICP备案号：桂ICP备2026011230号-2A</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.bg,
-    },
+    container: {flex: 1, backgroundColor: colors.bg},
+    safe: {flex: 1},
     scroll: {
       paddingBottom: 40,
-      paddingHorizontal: 20,
+      paddingHorizontal: 15,
       paddingTop: 8,
     },
+    // 标题 我的 18/600，左边距 30（页边距 15 + 15）
     screenTitle: {
-      fontSize: 24,
-      fontWeight: '700',
+      fontSize: 18,
+      fontWeight: '600',
       color: colors.textPrimary,
       alignSelf: 'flex-start',
-      marginBottom: 20,
+      marginLeft: 15,
+      marginBottom: 16,
     },
     icpBeian: {
       textAlign: 'center',
@@ -317,148 +285,72 @@ const makeStyles = colors =>
       marginTop: 24,
       marginBottom: 8,
     },
-    profileBlock: {
-      alignItems: 'center',
-      marginBottom: 24,
-    },
+    profileBlock: {alignItems: 'center', marginBottom: 20},
+    // 头像 80x80 圆形，暗色白圈
     avatar: {
       width: 80,
       height: 80,
       borderRadius: 40,
       marginBottom: 12,
       backgroundColor: colors.cardAlt,
-      borderWidth: colors.mode === 'dark' ? 2 : 0,
+      borderWidth: dark ? 2 : 0,
       borderColor: 'rgba(255,255,255,0.9)',
     },
-    avatarEditBadge: {
-      position: 'absolute',
-      right: 0,
-      bottom: 12,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: colors.bg,
-    },
-    avatarEditText: {
-      color: '#fff',
-      fontSize: 15,
-      fontWeight: '700',
-      marginTop: -1,
-    },
     userName: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginBottom: 4,
-    },
-    userId: {
-      fontSize: 14,
-      color: colors.textSecondary,
-    },
-    vipText: {
-      fontSize: 12,
-      color: colors.accent,
+      fontSize: 18,
       fontWeight: '600',
-      marginTop: 4,
-    },
-    pointsCardOuter: {
-      borderRadius: 16,
-      overflow: 'hidden',
-      marginBottom: 16,
-      height: 100,
-      justifyContent: 'center',
-    },
-    pointsGradientRow: {
-      ...StyleSheet.absoluteFillObject,
-      flexDirection: 'row',
-    },
-    pointsStripe: {
-      flex: 1,
-      height: '100%',
-    },
-    pointsDiamond: {
-      position: 'absolute',
-      right: 24,
-      width: 54,
-      height: 54,
-      borderRadius: 12,
-      backgroundColor: 'rgba(255,255,255,0.28)',
-      transform: [{rotate: '45deg'}],
-    },
-    pointsCardInner: {
-      paddingHorizontal: 20,
-    },
-    pointsLabelRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      color: colors.textPrimary,
       marginBottom: 6,
     },
-    pointsLabel: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#FFFFFF',
-      opacity: 0.95,
+    idRow: {flexDirection: 'row', alignItems: 'center'},
+    userId: {fontSize: 12, color: '#979797'},
+    copyIcon: {width: 14, height: 14, marginLeft: 4, tintColor: '#979797'},
+    // 积分卡 345x80（贴图含渐变 + 钻石），叠加文字
+    pointsCardOuter: {
+      height: 80,
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginBottom: 20,
+      justifyContent: 'center',
     },
-    eyeIcon: {
-      width: 16,
-      height: 16,
-      marginLeft: 4,
-      tintColor: '#FFFFFF',
-    },
-    pointsValue: {
-      fontSize: 32,
-      fontWeight: '800',
-      color: '#FFFFFF',
-      letterSpacing: 0.5,
-    },
+    pointsCardImg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: 80},
+    pointsCardInner: {paddingHorizontal: 19},
+    pointsLabelRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 2},
+    pointsLabel: {fontSize: 13, fontWeight: '400', color: '#FFFFFF'},
+    eyeIcon: {width: 16, height: 16, marginLeft: 6, tintColor: '#FFFFFF'},
+    pointsValue: {fontSize: 24, fontWeight: '600', color: '#FFFFFF'},
     menuSection: {
       backgroundColor: colors.card,
       borderRadius: 16,
       overflow: 'hidden',
-      paddingVertical: 4,
       marginBottom: 16,
-      borderWidth: colors.mode === 'dark' ? 1 : 0,
+      borderWidth: dark ? 1 : 0,
       borderColor: colors.cardBorder,
       shadowColor: '#000',
-      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.06,
+      shadowOpacity: dark ? 0.25 : 0.05,
       shadowRadius: 12,
       shadowOffset: {width: 0, height: 4},
       elevation: 2,
     },
+    // 行高 55（设计稿行距），图标 28x28，左边距 15
     menuItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      height: 56,
-      paddingHorizontal: 16,
+      height: 55,
+      paddingHorizontal: 15,
     },
     menuItemLast: {},
-    menuIcon: {
-      width: 36,
-      height: 36,
-      marginRight: 12,
-    },
+    menuIcon: {width: 28, height: 28, marginRight: 10},
     menuLabel: {
       flex: 1,
-      fontSize: 15,
-      fontWeight: '500',
+      fontSize: 14,
+      fontWeight: '600',
       color: colors.textPrimary,
     },
-    menuArrow: {
-      fontSize: 22,
-      color: colors.textMuted,
-      marginTop: -2,
-    },
-    menuSubtitle: {
-      fontSize: 12,
-      color: colors.textMuted,
-    },
+    menuArrow: {fontSize: 20, color: colors.textMuted, marginTop: -2},
     menuDivider: {
       height: StyleSheet.hairlineWidth,
-      marginLeft: 64,
+      marginLeft: 53,
       backgroundColor: colors.divider,
     },
   });

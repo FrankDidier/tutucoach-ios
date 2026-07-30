@@ -21,6 +21,31 @@
 - (void)tick:(CADisplayLink *)link;
 @end
 
+// 把 ImageIO 解出的帧「预渲染」为 Core Animation 友好的位图（premultiplied-first BGRA，
+// 设备 RGB 色彩空间）。ImageIO 直接产出的 CGImage 往往不是显示就绪格式，贴到 layer.contents
+// 时 Core Animation 会在主线程做一次拷贝/格式转换/色彩匹配 —— 这正是 iOS 兔子偶发卡顿的
+// 隐藏成本。这里在后台解码队列上一次性转成显示就绪位图，主线程贴图即纯 GPU 上传，零转换。
+static CGImageRef TutuCreateDisplayReadyImage(CGImageRef src) CF_RETURNS_RETAINED;
+static CGImageRef TutuCreateDisplayReadyImage(CGImageRef src) {
+  if (!src) return NULL;
+  size_t w = CGImageGetWidth(src);
+  size_t h = CGImageGetHeight(src);
+  if (w == 0 || h == 0) return NULL;
+  CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+  CGBitmapInfo info = (CGBitmapInfo)(kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+  // bytesPerRow 对齐到 64 字节：Core Animation / Metal 上传纹理时，行距非 64 对齐会强制
+  // 再拷贝一次做对齐 —— 这里预先按 64 对齐补齐行距，主线程贴图就是「纯 GPU 上传、零拷贝」。
+  size_t bytesPerRow = ((w * 4) + 63) & ~(size_t)63;
+  CGContextRef ctx = CGBitmapContextCreate(NULL, w, h, 8, bytesPerRow, cs, info);
+  CGColorSpaceRelease(cs);
+  if (!ctx) return NULL;
+  CGContextSetBlendMode(ctx, kCGBlendModeCopy);
+  CGContextDrawImage(ctx, CGRectMake(0, 0, (CGFloat)w, (CGFloat)h), src);
+  CGImageRef out = CGBitmapContextCreateImage(ctx);
+  CGContextRelease(ctx);
+  return out;
+}
+
 // CADisplayLink 会强引用 target，用弱代理打破循环，保证视图能正常释放。
 @interface TutuRabbitWeakProxy : NSObject
 @property (nonatomic, weak) TutuRabbitView *target;
@@ -177,7 +202,9 @@ static const NSUInteger kDecodeAllMax = 150;
 
   // 立刻同步解码第 0 帧，切换动作时无空白/闪烁（仅一帧，开销很小）。
   NSDictionary *cacheOpt = @{(id)kCGImageSourceShouldCacheImmediately: @YES};
-  CGImageRef first = CGImageSourceCreateImageAtIndex(src, 0, (__bridge CFDictionaryRef)cacheOpt);
+  CGImageRef firstRaw = CGImageSourceCreateImageAtIndex(src, 0, (__bridge CFDictionaryRef)cacheOpt);
+  CGImageRef first = TutuCreateDisplayReadyImage(firstRaw);
+  if (firstRaw) CGImageRelease(firstRaw);
 
   os_unfair_lock_lock(&_lock);
   _gen += 1;
@@ -244,8 +271,13 @@ static const NSUInteger kDecodeAllMax = 150;
     CGImageRef img = NULL;
     if (src) {
       NSDictionary *opt = @{(id)kCGImageSourceShouldCacheImmediately: @YES};
-      img = CGImageSourceCreateImageAtIndex(src, (size_t)want, (__bridge CFDictionaryRef)opt);
+      CGImageRef raw = CGImageSourceCreateImageAtIndex(src, (size_t)want, (__bridge CFDictionaryRef)opt);
       CFRelease(src);
+      if (raw) {
+        // 后台线程上转为显示就绪位图，主线程贴图零转换（消除偶发卡顿）。
+        img = TutuCreateDisplayReadyImage(raw);
+        CGImageRelease(raw);
+      }
     }
 
     if (img) {

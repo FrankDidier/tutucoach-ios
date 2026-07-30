@@ -21,7 +21,8 @@ import {useTheme} from '../theme/ThemeContext';
 
 const TeacherProfileScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
 
   const [avatarUri, setAvatar] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
@@ -73,15 +74,20 @@ const TeacherProfileScreen = ({navigation}) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {mode === 'light' ? (
-        <Image
-          source={Images.pageGradient}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-      ) : null}
+      {/* 背景：与「我的（学生端）」一致（暗色整屏 / 浅色顶部渐变） */}
+      <Image
+        source={dark ? Images.profileBgDark : Images.profileBgLight}
+        style={
+          dark
+            ? StyleSheet.absoluteFill
+            : {position: 'absolute', top: 0, left: 0, right: 0, height: 400}
+        }
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+      <SafeAreaView style={styles.safe}>
       <View style={styles.topBar}>
         <TouchableOpacity
           style={styles.backHit}
@@ -99,181 +105,89 @@ const TeacherProfileScreen = ({navigation}) => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.profileBlock}>
           <TouchableOpacity activeOpacity={0.85} onPress={onChangeAvatar}>
-            <View style={styles.avatarCircle}>
-              <Image
-                source={avatarUri ? {uri: avatarUri} : Images.avatarRabbit}
-                style={styles.avatarImg}
-                resizeMode={avatarUri ? 'cover' : 'contain'}
-              />
-            </View>
-            <View style={styles.avatarEditBadge}>
-              <Text style={styles.avatarEditText}>＋</Text>
-            </View>
+            <Image
+              source={avatarUri ? {uri: avatarUri} : Images.teacherAvatar}
+              style={styles.avatar}
+              resizeMode="cover"
+            />
           </TouchableOpacity>
           <Text style={styles.loginText}>登录/注册</Text>
           <Text style={styles.hintText}>立即注册体验完整功能</Text>
         </View>
 
-        <View style={styles.cardSingle}>
+        <View style={styles.cardGroup}>
           <MenuRow
-            icon={Images.menuAiSettings}
+            icon={Images.tAi}
             label="AI分身｜陪练设置"
             onPress={() => navigation.navigate('AISettings')}
+            divider
           />
-        </View>
-
-        <View style={styles.cardSingle}>
           <MenuRow
-            icon={Images.menuAiSettings}
-            label="曲目解读 · 生成教案"
+            icon={Images.tLesson}
+            label="曲目解读｜生成教案"
             onPress={() => navigation.navigate('LessonPlan')}
           />
         </View>
 
         <View style={styles.cardGroup}>
           <MenuRow
-            icon={Images.menuStudentEntry}
+            icon={Images.tStudent}
             label="学生信息录入"
             onPress={() => navigation.navigate('StudentEntry')}
             divider
           />
           <MenuRow
-            icon={Images.menuClassManage}
+            icon={Images.tClass}
             label="班级管理"
             onPress={() => navigation.navigate('ClassManage')}
           />
         </View>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.bg,
-    },
+    container: {flex: 1, backgroundColor: colors.bg},
+    safe: {flex: 1},
     topBar: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 12,
       paddingTop: 8,
     },
-    backHit: {
-      width: 40,
-      height: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    backText: {
-      fontSize: 30,
-      color: '#333333',
-      marginTop: -4,
-    },
-    pageTitle: {
-      fontSize: 24,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginLeft: 4,
-    },
-    scroll: {
-      paddingBottom: 40,
-    },
-    profileBlock: {
-      alignItems: 'center',
-      paddingTop: 24,
-      paddingBottom: 8,
-    },
-    avatarCircle: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: colors.cardAlt,
-      padding: 12,
-      marginBottom: 12,
-      overflow: 'hidden',
-    },
-    avatarImg: {
-      width: '100%',
-      height: '100%',
-    },
-    avatarEditBadge: {
-      position: 'absolute',
-      right: 4,
-      bottom: 14,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: '#fff',
-    },
-    avatarEditText: {
-      color: '#fff',
-      fontSize: 17,
-      fontWeight: '700',
-      marginTop: -1,
-    },
-    loginText: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.textPrimary,
-    },
-    hintText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-      marginTop: 4,
-    },
-    cardSingle: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      marginHorizontal: 16,
-      marginTop: 16,
-      overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOpacity: 0.04,
-      shadowRadius: 8,
-      elevation: 1,
-    },
+    backHit: {width: 40, height: 40, justifyContent: 'center', alignItems: 'center'},
+    backText: {fontSize: 30, color: colors.textPrimary, marginTop: -4},
+    // 标题「我的」18/600（教师端沿用同一导航样式）
+    pageTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginLeft: 4},
+    scroll: {paddingBottom: 40, paddingHorizontal: 15},
+    profileBlock: {alignItems: 'center', paddingTop: 20, paddingBottom: 8},
+    avatar: {width: 80, height: 80, borderRadius: 40, marginBottom: 12},
+    loginText: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
+    hintText: {fontSize: 12, color: '#979797', marginTop: 6},
     cardGroup: {
       backgroundColor: colors.card,
       borderRadius: 16,
-      marginHorizontal: 16,
-      marginTop: 12,
+      marginTop: 16,
       paddingVertical: 4,
       overflow: 'hidden',
+      borderWidth: dark ? 1 : 0,
+      borderColor: colors.cardBorder,
       shadowColor: '#000',
-      shadowOpacity: 0.04,
-      shadowRadius: 8,
+      shadowOpacity: dark ? 0.25 : 0.05,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 2},
       elevation: 1,
     },
-    menuRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      height: 60,
-      paddingHorizontal: 16,
-    },
-    menuIcon: {
-      width: 36,
-      height: 36,
-      marginRight: 12,
-    },
-    menuLabel: {
-      flex: 1,
-      fontSize: 15,
-      color: colors.textPrimary,
-    },
-    menuArrow: {
-      fontSize: 22,
-      color: colors.textMuted,
-      marginTop: -2,
-    },
+    menuRow: {flexDirection: 'row', alignItems: 'center', height: 55, paddingHorizontal: 15},
+    menuIcon: {width: 28, height: 28, marginRight: 10},
+    menuLabel: {flex: 1, fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    menuArrow: {fontSize: 20, color: colors.textMuted, marginTop: -2},
     menuDivider: {
       position: 'absolute',
-      left: 64,
+      left: 53,
       right: 0,
       bottom: 0,
       height: StyleSheet.hairlineWidth,

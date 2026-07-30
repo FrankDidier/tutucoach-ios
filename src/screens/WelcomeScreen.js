@@ -9,7 +9,9 @@ import {
   StatusBar,
   Animated,
   Easing,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import {speak} from '../services/voice';
 import {talkDurationMs} from '../utils/rabbitMessages';
@@ -17,49 +19,14 @@ import {onAppOpen, onTap} from '../services/companion';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
 
-const BG_STEPS = 48;
-const BTN_STEPS = 28;
-
-function lerpChannel(a, b, t) {
-  return Math.round(a + (b - a) * t);
-}
-
-function hexToRgb(hex) {
-  const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.substring(0, 2), 16),
-    g: parseInt(h.substring(2, 4), 16),
-    b: parseInt(h.substring(4, 6), 16),
-  };
-}
-
-function lerpRgb(from, to, t) {
-  return `rgb(${lerpChannel(from.r, to.r, t)},${lerpChannel(
-    from.g,
-    to.g,
-    t,
-  )},${lerpChannel(from.b, to.b, t)})`;
-}
+// 蓝湖设计稿基准宽 375pt；按屏宽等比缩放，保证与设计稿 1:1 的尺寸/间距。
+const {width: SCREEN_W} = Dimensions.get('window');
+const S = SCREEN_W / 375;
+const px = n => Math.round(n * S);
 
 const WelcomeScreen = ({navigation}) => {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const bgStripes = useMemo(() => {
-    const top = hexToRgb(colors.bgGradientTop);
-    const bottom = hexToRgb(colors.bgGradientBottom);
-    return Array.from({length: BG_STEPS}, (_, i) =>
-      lerpRgb(top, bottom, i / (BG_STEPS - 1)),
-    );
-  }, [colors]);
-
-  const btnStripes = useMemo(() => {
-    const start = hexToRgb(colors.primaryGradientStart);
-    const end = hexToRgb(colors.primaryGradientEnd);
-    return Array.from({length: BTN_STEPS}, (_, i) =>
-      lerpRgb(start, end, i / (BTN_STEPS - 1)),
-    );
-  }, [colors]);
+  const {colors, mode} = useTheme();
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
 
   // ===== 动效 =====
   // 兔子本体的呼吸/说话/随机动作全部由 RabbitMascot 逐帧播放（见组件）；
@@ -161,28 +128,22 @@ const WelcomeScreen = ({navigation}) => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <View style={styles.gradientLayer} pointerEvents="none">
-        {bgStripes.map((color, i) => (
-          <View
-            key={`bg-${i}`}
-            style={[styles.bgStripe, {backgroundColor: color}]}
-          />
-        ))}
-      </View>
+      {/* 整屏背景：蓝湖导出图（含右上角星光 + 光晕），深/浅两版 1:1 还原 */}
+      <Image
+        source={mode === 'dark' ? Images.homeBgDark : Images.homeBgLight}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+        pointerEvents="none"
+      />
 
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <Text style={styles.pageTitle}>首页</Text>
-          <Image
-            source={Images.sparkle}
-            style={styles.sparkle}
-            resizeMode="contain"
-          />
         </View>
 
         <View style={styles.center}>
           <View style={styles.mascotBlock}>
-            <Text style={styles.musicWatermark}>Music</Text>
+            <Text style={styles.musicWatermark}>MUSIC</Text>
 
             <Animated.View
               pointerEvents="none"
@@ -213,14 +174,12 @@ const WelcomeScreen = ({navigation}) => {
             activeOpacity={0.88}
             onPress={() => navigation.navigate('练琴')}
             style={styles.ctaOuter}>
-            <View style={styles.ctaGradientRow}>
-              {btnStripes.map((color, i) => (
-                <View
-                  key={`btn-${i}`}
-                  style={[styles.btnStripe, {backgroundColor: color}]}
-                />
-              ))}
-            </View>
+            <LinearGradient
+              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 0}}
+              style={StyleSheet.absoluteFill}
+            />
             <View style={styles.ctaLabelWrap} pointerEvents="none">
               <Text style={styles.ctaLabel}>立即体验</Text>
             </View>
@@ -231,40 +190,24 @@ const WelcomeScreen = ({navigation}) => {
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, mode) =>
   StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-  gradientLayer: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'column',
-  },
-  bgStripe: {
-    flex: 1,
-  },
   safe: {
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24, // 设计稿：标题左 30（安全区内约 24）
     paddingTop: 8,
     paddingBottom: 4,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
   },
   pageTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: colors.textPrimary,
-  },
-  sparkle: {
-    width: 36,
-    height: 36,
-    marginTop: 2,
-    marginRight: 4,
   },
   center: {
     flex: 1,
@@ -274,17 +217,17 @@ const makeStyles = colors =>
   },
   mascotBlock: {
     width: '100%',
-    minHeight: 452,
+    minHeight: px(400),
     alignItems: 'center',
     justifyContent: 'center',
   },
   musicWatermark: {
     position: 'absolute',
-    fontSize: 96,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    opacity: colors.mode === 'dark' ? 0.06 : 0.07,
-    letterSpacing: 2,
+    fontSize: px(96),
+    fontWeight: '900',
+    color: '#FFFFFF',
+    opacity: mode === 'dark' ? 0.05 : 0.45,
+    letterSpacing: 4,
   },
   bubbleWrap: {
     position: 'absolute',
@@ -329,38 +272,31 @@ const makeStyles = colors =>
     alignSelf: 'center',
   },
   rabbitImg: {
-    // 画面比例与帧一致(480x552=0.87)，contain 正好铺满、不留边；放大到接近安卓的满宽观感。
-    width: 372,
-    height: 428,
+    // 设计稿兔子 342x343（近正方、居中）；帧比例 480x552，用容器尺寸 + aspect 适配。
+    width: px(342),
+    height: px(343),
     zIndex: 1,
     alignSelf: 'center',
   },
   welcomeCaption: {
-    marginTop: 28,
+    marginTop: px(24),
     fontSize: 18,
     lineHeight: 26,
     textAlign: 'center',
     color: colors.textPrimary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   footer: {
-    paddingHorizontal: 24,
+    alignItems: 'center',
     paddingBottom: 20,
     paddingTop: 8,
   },
   ctaOuter: {
-    height: 52,
-    borderRadius: 26,
+    width: px(210),
+    height: px(44),
+    borderRadius: px(22),
     overflow: 'hidden',
     justifyContent: 'center',
-  },
-  ctaGradientRow: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-  },
-  btnStripe: {
-    flex: 1,
-    height: '100%',
   },
   ctaLabelWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -369,8 +305,8 @@ const makeStyles = colors =>
   },
   ctaLabel: {
     color: colors.onPrimary,
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
   });
 
