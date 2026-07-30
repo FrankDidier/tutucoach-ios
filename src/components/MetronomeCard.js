@@ -15,7 +15,10 @@ import {
 import {Metronome} from '../services/metronome';
 import {Images} from '../assets/images';
 
-export default function MetronomeCard({style}) {
+// variant: 'companion'（陪练模式，白色开始 + 半透明圆按钮 + 白色符号，压在人像上）
+//          'detect'（手型检测/智能AI陪练，紫色开始 + 实心白圆 + 紫色符号，1:1 对齐蓝湖）
+export default function MetronomeCard({style, variant = 'companion'}) {
+  const detect = variant === 'detect';
   const engineRef = useRef(null);
   const dot = useRef(new Animated.Value(0.25)).current;
   const holdTimer = useRef(null);
@@ -93,21 +96,30 @@ export default function MetronomeCard({style}) {
         <Image source={Images.metroNote} style={styles.note} resizeMode="contain" />
         <Text style={styles.title}>节拍器</Text>
         <View style={{flex: 1}} />
-        <TouchableOpacity onPress={toggle} activeOpacity={0.85} style={styles.startBtn}>
-          <Text style={styles.startText}>{running ? '停止' : '开始'}</Text>
+        <TouchableOpacity
+          onPress={toggle}
+          activeOpacity={0.85}
+          style={[styles.startBtn, detect && styles.startBtnDetect]}>
+          <Text style={[styles.startText, detect && styles.startTextDetect]}>
+            {running ? '停止' : '开始'}
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* 下行 */}
       <View style={[styles.row, {marginTop: 14}]}>
         <TouchableOpacity
-          style={styles.circle}
+          style={[styles.circle, detect && styles.circleDetect]}
           onPress={() => step(-1)}
           onLongPress={() => startHold(-1)}
           onPressOut={endHold}
           delayLongPress={300}
           activeOpacity={0.6}>
-          <Image source={Images.metroMinus} style={styles.stepIcon} resizeMode="contain" />
+          <Image
+            source={Images.metroMinus}
+            style={[styles.stepIcon, detect && styles.stepIconDetect]}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
 
         <View style={{flex: 1}} />
@@ -138,13 +150,17 @@ export default function MetronomeCard({style}) {
         <View style={{flex: 1}} />
 
         <TouchableOpacity
-          style={styles.circle}
+          style={[styles.circle, detect && styles.circleDetect]}
           onPress={() => step(1)}
           onLongPress={() => startHold(1)}
           onPressOut={endHold}
           delayLongPress={300}
           activeOpacity={0.6}>
-          <Image source={Images.metroPlus} style={styles.stepIcon} resizeMode="contain" />
+          <Image
+            source={Images.metroPlus}
+            style={[styles.stepIcon, detect && styles.stepIconDetect]}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -172,6 +188,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startText: {fontSize: 15, fontWeight: 'bold', color: '#17122E'},
+  // detect 变体：紫色开始按钮 + 白色文字
+  startBtnDetect: {backgroundColor: '#8B5CF6'},
+  startTextDetect: {color: '#fff'},
   circle: {
     width: 40,
     height: 40,
@@ -182,7 +201,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // detect 变体：实心白圆 + 紫色加减符号
+  circleDetect: {
+    backgroundColor: '#fff',
+    borderWidth: 0,
+  },
   stepIcon: {width: 16, height: 16, tintColor: '#fff'},
+  stepIconDetect: {tintColor: '#8B5CF6'},
   dot: {
     width: 12,
     height: 12,

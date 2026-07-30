@@ -88,3 +88,5 @@ ios/build_device/
 build_signing/
 ios/build_verify/
 ios/build_sim/
+ios/build2/
+ios/build_rel/

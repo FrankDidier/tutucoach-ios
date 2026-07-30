@@ -43,7 +43,7 @@ import {getItem, setItem} from '../services/storage';
 import {pick} from '../utils/rabbitMessages';
 import {createActiveTimer} from '../utils/activeTimer';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
-import MetronomeBar from '../components/MetronomeBar';
+import MetronomeCard from '../components/MetronomeCard';
 import TutuDetector, {TutuDetectorView} from 'tutu-detector';
 
 const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
@@ -845,7 +845,7 @@ const DetectionScreen = ({navigation, route}) => {
           正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
           {Math.round(matchRate)}%
         </Text>
-        <MetronomeBar />
+        <MetronomeCard variant="detect" style={styles.metroDetect} />
       </View>
 
       <View style={styles.footer}>
@@ -1354,6 +1354,9 @@ const makeStyles = colors =>
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  metroDetect: {
+    marginTop: 2,
   },
   footer: {
     paddingHorizontal: 20,

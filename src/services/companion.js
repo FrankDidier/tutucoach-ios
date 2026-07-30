@@ -176,22 +176,38 @@ function unlockedAccessoryCount() {
   return state.accessories.split(',').filter(s => s.trim()).length;
 }
 
-// 积分公式：每分钟10 + 每连续天50 + 每装扮100（与安卓一致）。
-export async function getPoints() {
+// 积分公式：每分钟10 + 每连续天50 + 每装扮100（与安卓一致）。分钟取整，避免小数抖动。
+function rawPoints() {
+  return (
+    Math.round(state.minutes) * 10 +
+    state.streak * 50 +
+    unlockedAccessoryCount() * 100
+  );
+}
+
+// 积分是「奖励分」，只增不减：连续天数因中断清零时（load() 里会把 streak 归零），
+// 不能让已经拿到的积分「无缘无故变少」。用一个持久化的下限值兜底，返回历史最高值。
+async function monotonicPoints() {
   await ensureLoaded();
-  return state.minutes * 10 + state.streak * 50 + unlockedAccessoryCount() * 100;
+  const computed = rawPoints();
+  let floor = Number(await getItem('rc_points_floor'));
+  if (Number.isNaN(floor)) floor = 0;
+  const points = Math.max(computed, floor);
+  if (points !== floor) await setItem('rc_points_floor', points);
+  return points;
+}
+
+export async function getPoints() {
+  return monotonicPoints();
 }
 
 export async function getStats() {
-  await ensureLoaded();
+  const points = await monotonicPoints();
   return {
     streak: state.streak,
     totalDays: state.days.length,
     totalMinutes: state.minutes,
-    points:
-      state.minutes * 10 +
-      state.streak * 50 +
-      unlockedAccessoryCount() * 100,
+    points,
     days: [...state.days],
     today: currentDayNumber(),
   };

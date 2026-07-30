@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -70,101 +70,162 @@ const ClassManageScreen = ({navigation}) => {
   const [query, setQuery] = useState('');
   const [range, setRange] = useState('all'); // 默认看「所有」
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const tid = getDeviceId();
-      try {
-        // 确保本设备已是「老师」账号，教师统计才查得到本班学生。
-        await registerAccount(tid, 'teacher');
-      } catch (e) {}
+  const load = useCallback(async () => {
+    const tid = getDeviceId();
+    try {
+      // 确保本设备已是「老师」账号，教师统计才查得到本班学生。
+      await registerAccount(tid, 'teacher');
+    } catch (e) {}
 
-      // 读取老师本地设置的班级名单 + 备注名，用来把「id 码」显示成真实名字。
-      let roster = {};
-      let remarks = {};
-      let rosterList = [];
-      try {
-        rosterList = (await listStudents()) || [];
-        rosterList.forEach(s => {
-          if (s && s.studentId) roster[s.studentId] = (s.name || '').trim();
-        });
-      } catch (e) {}
-      try {
-        const raw = await AsyncStorage.getItem(remarksKey(tid));
-        remarks = raw ? JSON.parse(raw) || {} : {};
-      } catch (e) {}
-
-      // 一个录入学生（studentId）是否已经出现在服务端「已入班」名单里（精确 / 尾号双向匹配）。
-      const matchesServer = (sid, serverStudents) => {
-        const k = (sid || '').trim();
-        if (!k) return false;
-        return serverStudents.some(u => {
-          const uid = u.user_id || '';
-          return uid === k || uid.endsWith(k) || k.endsWith(uid);
-        });
-      };
-
-      let serverStudents = [];
-      try {
-        const r = await fetchStudents(tid);
-        if (r && r.ok && Array.isArray(r.students)) serverStudents = r.students;
-      } catch (e) {
-        // 离线：serverStudents 为空，仍能展示本地录入名单
-      }
-
-      const merged = serverStudents.map(s => ({
-        id: s.user_id,
-        name: resolveName(s.user_id, s.nickname, roster, remarks),
-        studentId: s.user_id.slice(-8),
-        // 三个区间的练琴时长（老后端只有 week_minutes 时做兜底）。
-        weekMinutes: s.week_minutes || 0,
-        monthMinutes:
-          s.month_minutes != null ? s.month_minutes : s.week_minutes || 0,
-        totalMinutes:
-          s.total_minutes != null ? s.total_minutes : s.week_minutes || 0,
-        avgRate: s.avg_match_rate,
-        isVip: !!s.is_vip,
-        pending: false,
-      }));
-
-      // 合并本机「学生录入」里、服务端还没入班的学生（少了些人 → 一并列出）。
-      // 同时对填了完整 ID(≥12) 的学生自动重试入班绑定，下次刷新即可显示练习数据。
-      const rebindIds = [];
+    // 读取老师本地设置的班级名单 + 备注名，用来把「id 码」显示成真实名字。
+    let roster = {};
+    let remarks = {};
+    let rosterList = [];
+    try {
+      rosterList = (await listStudents()) || [];
       rosterList.forEach(s => {
-        const sid = (s && s.studentId ? s.studentId : '').trim();
-        const nm = (s && s.name ? s.name : '').trim();
-        if (!nm) return;
-        if (sid && matchesServer(sid, serverStudents)) return; // 已入班，跳过
-        merged.push({
-          id: sid || `local_${s.localId || nm}`,
-          name: nm,
-          studentId: sid ? sid.slice(-8) : '—',
-          weekMinutes: 0,
-          monthMinutes: 0,
-          totalMinutes: 0,
-          avgRate: null,
-          isVip: false,
-          pending: true, // 未入班：显示「待入班」，练习数据入班后才有
-        });
-        if (sid.length >= 12) rebindIds.push(sid);
+        if (s && s.studentId) roster[s.studentId] = (s.name || '').trim();
       });
+    } catch (e) {}
+    try {
+      const raw = await AsyncStorage.getItem(remarksKey(tid));
+      remarks = raw ? JSON.parse(raw) || {} : {};
+    } catch (e) {}
 
-      if (alive) setStudents(merged);
-
-      // 后台自动重试绑定（不阻塞 UI）；成功的学生下次进入即从服务端拿到练习数据。
-      for (const sid of rebindIds) {
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await bindTeacher(tid, sid);
-        } catch (e) {}
-      }
-    })();
-    return () => {
-      alive = false;
+    // 一个录入学生（studentId）是否已经出现在服务端「已入班」名单里（精确 / 尾号双向匹配）。
+    const matchesServer = (sid, serverStudents) => {
+      const k = (sid || '').trim();
+      if (!k) return false;
+      return serverStudents.some(u => {
+        const uid = u.user_id || '';
+        return uid === k || uid.endsWith(k) || k.endsWith(uid);
+      });
     };
+
+    let serverStudents = [];
+    try {
+      const r = await fetchStudents(tid);
+      if (r && r.ok && Array.isArray(r.students)) serverStudents = r.students;
+    } catch (e) {
+      // 离线：serverStudents 为空，仍能展示本地录入名单
+    }
+
+    const merged = serverStudents.map(s => ({
+      id: s.user_id,
+      name: resolveName(s.user_id, s.nickname, roster, remarks),
+      studentId: s.user_id.slice(-8),
+      fullId: s.user_id,
+      // 三个区间的练琴时长（老后端只有 week_minutes 时做兜底）。
+      weekMinutes: s.week_minutes || 0,
+      monthMinutes:
+        s.month_minutes != null ? s.month_minutes : s.week_minutes || 0,
+      totalMinutes:
+        s.total_minutes != null ? s.total_minutes : s.week_minutes || 0,
+      avgRate: s.avg_match_rate,
+      isVip: !!s.is_vip,
+      pending: false,
+    }));
+
+    // 合并本机「学生录入」里、服务端还没入班的学生（少了些人 → 一并列出）。
+    // 同时对填了完整 ID(≥12) 的学生自动重试入班绑定，下次刷新即可显示练习数据。
+    const rebindIds = [];
+    rosterList.forEach(s => {
+      const sid = (s && s.studentId ? s.studentId : '').trim();
+      const nm = (s && s.name ? s.name : '').trim();
+      if (!nm) return;
+      if (sid && matchesServer(sid, serverStudents)) return; // 已入班，跳过
+      merged.push({
+        id: sid || `local_${s.localId || nm}`,
+        name: nm,
+        studentId: sid ? sid.slice(-8) : '—',
+        fullId: sid,
+        canBind: sid.length >= 12, // 有完整 ID 才能真正入班
+        weekMinutes: 0,
+        monthMinutes: 0,
+        totalMinutes: 0,
+        avgRate: null,
+        isVip: false,
+        pending: true, // 未入班：显示「待入班」，练习数据入班后才有
+      });
+      if (sid.length >= 12) rebindIds.push(sid);
+    });
+
+    // 去重：同一个学生（服务端 user_id / 录入学号 / 姓名 尾号双向匹配）只保留一条，
+    // 已入班的优先于「待入班」。修复：名单里出现重复学生（如两个同 ID 的「雷欧」）。
+    const deduped = [];
+    const sameStudent = (a, b) => {
+      const ka = (a.fullId || a.id || '').trim();
+      const kb = (b.fullId || b.id || '').trim();
+      if (ka && kb && (ka === kb || ka.endsWith(kb) || kb.endsWith(ka)))
+        return true;
+      // 都没完整 ID 时按姓名判重（避免同一个人被录两遍）。
+      if (!a.fullId && !b.fullId)
+        return (a.name || '').trim() === (b.name || '').trim();
+      return false;
+    };
+    merged.forEach(row => {
+      const hitIdx = deduped.findIndex(d => sameStudent(d, row));
+      if (hitIdx < 0) {
+        deduped.push(row);
+      } else if (deduped[hitIdx].pending && !row.pending) {
+        // 已入班的记录信息更全，替换掉之前的「待入班」占位。
+        deduped[hitIdx] = row;
+      }
+    });
+
+    setStudents(deduped);
+
+    // 后台自动重试绑定（不阻塞 UI）；成功的学生下次进入即从服务端拿到练习数据。
+    for (const sid of rebindIds) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await bindTeacher(tid, sid);
+      } catch (e) {}
+    }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 手动把「待入班」的学生加入正式班级（点一下学生卡片即可）。
+  const joinClass = async item => {
+    const full = (item.fullId || '').trim();
+    if (full.length < 12) {
+      Alert.alert(
+        '无法入班',
+        '该学生还没有填写完整 ID。请让学生在「我的」页复制完整 ID，老师在「学生信息录入」里补全学号后再入班。',
+      );
+      return;
+    }
+    try {
+      const tid = getDeviceId();
+      await registerAccount(tid, 'teacher');
+      const r = await bindTeacher(tid, full);
+      if (r && r.ok) {
+        Alert.alert('已入班', `「${item.name}」已加入你的班级。`);
+        load(); // 刷新，拿到练习数据
+        return;
+      }
+      if (r && r.error === 'not_found') {
+        Alert.alert('入班失败', '该 ID 在服务端未找到，请确认学生已打开过 App 并复制了正确的完整 ID。');
+        return;
+      }
+      Alert.alert('入班失败', '请稍后重试。');
+    } catch (e) {
+      Alert.alert('入班失败', '网络异常，请稍后重试。');
+    }
+  };
+
   const onStudentPress = item => {
+    if (item.pending) {
+      // 待入班：主操作就是「加入班级」。
+      Alert.alert(item.name, '该学生尚未入班，是否现在加入正式班级名单？', [
+        {text: '取消', style: 'cancel'},
+        {text: '加入班级', onPress: () => joinClass(item)},
+      ]);
+      return;
+    }
     Alert.alert(item.name, `完整 ID：${item.id}`, [
       {text: '关闭', style: 'cancel'},
       {
@@ -220,7 +281,9 @@ const ClassManageScreen = ({navigation}) => {
 
       {item.pending ? (
         <View style={styles.practiceBar}>
-          <Text style={styles.pendingHint}>未入班 · 练习数据待同步</Text>
+          <Text style={styles.pendingHint}>
+            {item.canBind ? '未入班 · 点此加入班级' : '未入班 · 补全完整 ID 后可入班'}
+          </Text>
         </View>
       ) : (
         <View style={styles.practiceBar}>
