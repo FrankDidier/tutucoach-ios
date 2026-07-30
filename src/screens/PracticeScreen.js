@@ -77,9 +77,9 @@ const PracticeScreen = ({navigation}) => {
               pointerEvents="none"
             />
 
-            {/* 选择您的模型进行练习 (56,278) → 卡内 (41,10) */}
+            {/* 选择您的模型进行练习 (56,278) → 卡内 (41,10)；图标为紫色小兔子(tuzi)，非闪光 */}
             <View style={styles.selLabelRow}>
-              <Image source={dark ? Images.sparkleDark : Images.sparkle} style={styles.selIcon} resizeMode="contain" />
+              <Image source={Images.modelRabbit} style={styles.selIcon} resizeMode="contain" />
               <Text style={styles.selLabel}>选择您的模型进行练习</Text>
             </View>
 
@@ -111,7 +111,7 @@ const PracticeScreen = ({navigation}) => {
               <Text style={[styles.chatWatermark, {color: watermark}]} numberOfLines={1}>
                 CHAT
               </Text>
-              <View style={styles.chatBlob} />
+              <Image source={Images.companionHeart} style={styles.chatHeart} resizeMode="contain" />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
             </TouchableOpacity>
@@ -240,15 +240,13 @@ const makeStyles = (colors, dark) =>
       fontWeight: '900',
       letterSpacing: 2,
     },
-    // 右下角紫色对话团（设计中为紫色渐变块，这里用圆角紫块近似）
-    chatBlob: {
+    // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖，卡内右下贴边）
+    chatHeart: {
       position: 'absolute',
-      right: px(14),
-      bottom: px(10),
-      width: px(74),
-      height: px(64),
-      borderRadius: px(32),
-      backgroundColor: dark ? 'rgba(150,110,255,0.55)' : 'rgba(170,130,255,0.6)',
+      right: px(6),
+      bottom: px(2),
+      width: px(92),
+      height: px(80),
     },
   });
 

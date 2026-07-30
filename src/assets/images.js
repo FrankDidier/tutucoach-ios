@@ -61,6 +61,11 @@ export const Images = {
   // 装饰 / 徽标
   sparkle: require('./img/ic_bard_sparkle.png'),
   sparkleDark: require('./img/ic_bard_sparkle_dark.png'),
+  // 练琴：「选择您的模型」小兔子图标 + AI陪练模式玻璃爱心（1:1 蓝湖）
+  modelRabbit: require('./img/ic_model_rabbit.png'),
+  companionHeart: require('./img/ic_companion_heart.png'),
+  // 班级管理：学生列表紫色学士帽图标（1:1 蓝湖）
+  studentListCap: require('./img/ic_student_list_cap.png'),
   diamondLarge: require('./img/ic_diamond_large.png'),
   vipText: require('./img/ic_vip_text.png'),
   vipBanner: require('./img/bg_vip_banner.png'),

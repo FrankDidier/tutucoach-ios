@@ -340,7 +340,7 @@ const ClassManageScreen = ({navigation}) => {
 
       <View style={styles.listHeaderRow}>
         <Image
-          source={Images.menuStudentEntry}
+          source={Images.studentListCap}
           style={styles.listHeaderIcon}
           resizeMode="contain"
         />
