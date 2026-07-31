@@ -28,6 +28,8 @@ const PracticeScreen = ({navigation}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   // MUSIC / CHAT 大字水印：暗色低透明白、浅色更弱的白（在粉底上呈淡粉）。
   const watermark = dark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)';
+  // CHAT 水印比背景 MUSIC 更醒目（1:1 蓝湖：卡内 CHAT 清晰可读）
+  const chatWm = dark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.6)';
   // 磁贴内 VIP/FREE 水印已烘焙进贴图，这里文案水印仅用于 CHAT 行。
   const innerRow = dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,120,150,0.08)';
 
@@ -108,7 +110,7 @@ const PracticeScreen = ({navigation}) => {
               style={[styles.companionRow, {backgroundColor: innerRow}]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Companion')}>
-              <Text style={[styles.chatWatermark, {color: watermark}]} numberOfLines={1}>
+              <Text style={[styles.chatWatermark, {color: chatWm}]} numberOfLines={1}>
                 CHAT
               </Text>
               <Image source={Images.companionHeart} style={styles.chatHeart} resizeMode="contain" />
@@ -240,13 +242,14 @@ const makeStyles = (colors, dark) =>
       fontWeight: '900',
       letterSpacing: 2,
     },
-    // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖，卡内右下贴边）
+    // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖）：贴右下角、按 85x63 比例放大，
+    // 圆角溢出裁切（与蓝湖一致：浅紫副心被卡片右下圆角裁掉一角）。
     chatHeart: {
       position: 'absolute',
-      right: px(6),
-      bottom: px(2),
-      width: px(92),
-      height: px(80),
+      right: 0,
+      bottom: 0,
+      width: px(104),
+      height: px(72),
     },
   });
 
