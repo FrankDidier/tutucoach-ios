@@ -66,6 +66,12 @@ export const Images = {
   companionHeart: require('./img/ic_companion_heart.png'),
   // 班级管理：学生列表紫色学士帽图标（1:1 蓝湖）
   studentListCap: require('./img/ic_student_list_cap.png'),
+  // 练琴大字水印（1:1 蓝湖，Arial Black + 精确渐变）：
+  //   MUSIC 深色=空心描边(白0.3→0)，浅色=白0.2填充+描边(白1→0)
+  //   CHAT  两主题一致=竖向渐变填充(白1→0) @不透明度0.6
+  wmMusicDark: require('./img/wm_music_dark.png'),
+  wmMusicLight: require('./img/wm_music_light.png'),
+  wmChat: require('./img/wm_chat.png'),
   diamondLarge: require('./img/ic_diamond_large.png'),
   vipText: require('./img/ic_vip_text.png'),
   vipBanner: require('./img/bg_vip_banner.png'),

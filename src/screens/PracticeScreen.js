@@ -26,11 +26,8 @@ const PracticeScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
-  // MUSIC / CHAT 大字水印：暗色低透明白、浅色更弱的白（在粉底上呈淡粉）。
-  const watermark = dark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)';
-  // CHAT 水印比背景 MUSIC 更醒目（1:1 蓝湖：卡内 CHAT 清晰可读）
-  const chatWm = dark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.6)';
-  // 磁贴内 VIP/FREE 水印已烘焙进贴图，这里文案水印仅用于 CHAT 行。
+  // MUSIC / CHAT 大字水印现为 Arial Black 精确渐变贴图（wm_music_*/wm_chat），不再用文本着色。
+  // 磁贴内 VIP/FREE 水印已烘焙进贴图。
   const innerRow = dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,120,150,0.08)';
 
   return (
@@ -56,7 +53,11 @@ const PracticeScreen = ({navigation}) => {
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
             <View style={styles.heroLine1Row}>
-              <Text style={styles.heroLine1}>HI~</Text>
+              {/* HI~ 双色（1:1 蓝湖）：H 为强调色（暗紫/亮粉），I~ 为主文本色 */}
+              <Text style={styles.heroLine1}>
+                <Text style={{color: dark ? '#7F47FE' : '#FF5F83'}}>H</Text>
+                I~
+              </Text>
               <Image source={dark ? Images.sparkleDark : Images.sparkle} style={styles.heroSparkle} resizeMode="contain" />
             </View>
             <Text style={styles.heroLine2}>我是你的兔兔教练</Text>
@@ -64,11 +65,14 @@ const PracticeScreen = ({navigation}) => {
           <RabbitMascot loopAction="celebrate" style={styles.mascot} />
         </View>
 
-        {/* MUSIC 大字水印（衔接处，压在卡片之后只露上沿） */}
+        {/* MUSIC 大字水印（衔接处，压在卡片之后只露上沿）——1:1 蓝湖：Arial Black 空心/渐变贴图 */}
         <View style={styles.cardOuter}>
-          <Text style={[styles.musicWatermark, {color: watermark}]} numberOfLines={1}>
-            MUSIC
-          </Text>
+          <Image
+            source={dark ? Images.wmMusicDark : Images.wmMusicLight}
+            style={styles.musicWatermark}
+            resizeMode="contain"
+            pointerEvents="none"
+          />
 
           {/* 主卡片：带缺口的容器贴图 + 内部绝对定位 */}
           <View style={styles.card}>
@@ -110,9 +114,12 @@ const PracticeScreen = ({navigation}) => {
               style={[styles.companionRow, {backgroundColor: innerRow}]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Companion')}>
-              <Text style={[styles.chatWatermark, {color: chatWm}]} numberOfLines={1}>
-                CHAT
-              </Text>
+              <Image
+                source={Images.wmChat}
+                style={styles.chatWatermark}
+                resizeMode="contain"
+                pointerEvents="none"
+              />
               <Image source={Images.companionHeart} style={styles.chatHeart} resizeMode="contain" />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
@@ -155,14 +162,14 @@ const makeStyles = (colors, dark) =>
       height: px(217),
     },
     cardOuter: {position: 'relative', alignItems: 'center'},
+    // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
+    // 母图 1x=362x81（含描边留白），glyph 宽≈352；left 微调到 px(12) 让字身对齐 x16。
     musicWatermark: {
       position: 'absolute',
-      top: px(-40),
-      left: px(16),
-      textAlign: 'left',
-      fontSize: px(96),
-      fontWeight: '900',
-      letterSpacing: 4,
+      top: px(-38),
+      left: px(12),
+      width: px(362),
+      height: px(81),
       zIndex: 0,
     },
     card: {
@@ -234,13 +241,14 @@ const makeStyles = (colors, dark) =>
       fontWeight: '400',
       color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
     },
+    // CHAT 贴图：蓝湖 x42 y507（卡内），母图 1x=156x45（含留白），glyph 宽≈147。
+    // companionRow 内坐标（行左内边距 15 起）：left 微调让字身对齐设计。
     chatWatermark: {
       position: 'absolute',
-      left: px(15),
-      top: px(52),
-      fontSize: px(44),
-      fontWeight: '900',
-      letterSpacing: 2,
+      left: px(12),
+      top: px(48),
+      width: px(156),
+      height: px(45),
     },
     // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖）：贴右下角、按 85x63 比例放大，
     // 圆角溢出裁切（与蓝湖一致：浅紫副心被卡片右下圆角裁掉一角）。

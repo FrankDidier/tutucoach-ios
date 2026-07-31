@@ -143,7 +143,12 @@ const WelcomeScreen = ({navigation}) => {
 
         <View style={styles.center}>
           <View style={styles.mascotBlock}>
-            <Text style={styles.musicWatermark}>MUSIC</Text>
+            <Image
+              source={mode === 'dark' ? Images.wmMusicDark : Images.wmMusicLight}
+              style={styles.musicWatermark}
+              resizeMode="contain"
+              pointerEvents="none"
+            />
 
             <Animated.View
               pointerEvents="none"
@@ -221,13 +226,12 @@ const makeStyles = (colors, mode) =>
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // MUSIC 水印：Arial Black 空心/渐变贴图（1:1 蓝湖），居中压在兔子身后。
   musicWatermark: {
     position: 'absolute',
-    fontSize: px(96),
-    fontWeight: '900',
-    color: '#FFFFFF',
-    opacity: mode === 'dark' ? 0.05 : 0.45,
-    letterSpacing: 4,
+    alignSelf: 'center',
+    width: px(352),
+    height: px(79),
   },
   bubbleWrap: {
     position: 'absolute',
