@@ -17,11 +17,10 @@ import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {useTheme} from '../theme/ThemeContext';
 
-// 与安卓 SettingsActivity.styleLabel 一致
+// 蓝湖 AI选择 卡片副标题：AI分身 / 温柔亲和
 function styleLabel(style) {
-  if (style === 'STRICT') return '严格型';
-  if (style === 'PLAYFUL') return '活泼型';
-  return '鼓励型';
+  if (style === 'ENCOURAGING' || style === 'PLAYFUL') return '温柔亲和';
+  return 'AI分身';
 }
 
 // 与安卓 SettingsActivity.avatarFor 一致：名字含「老师/专业」用真人头像，否则用兔子吉祥物
@@ -164,8 +163,8 @@ const AISelectScreen = ({navigation, route}) => {
           onPress={onConfirm}>
           <LinearGradient
             colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />

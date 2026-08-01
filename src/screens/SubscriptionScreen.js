@@ -162,8 +162,8 @@ const SubscriptionScreen = ({navigation}) => {
         <TouchableOpacity style={styles.purchaseOuter} activeOpacity={0.88} onPress={onPurchase}>
           <LinearGradient
             colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />

@@ -53,10 +53,10 @@ const PracticeScreen = ({navigation}) => {
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
             <View style={styles.heroLine1Row}>
-              {/* HI~ 双色（1:1 蓝湖）：H 为强调色（暗紫/亮粉），I~ 为主文本色 */}
+              {/* HI~ 双色（1:1 蓝湖）：HI 主文本色，~ 强调色（t1 #7F47FE / t2 #FF5F83） */}
               <Text style={styles.heroLine1}>
-                <Text style={{color: dark ? '#7F47FE' : '#FF5F83'}}>H</Text>
-                I~
+                <Text style={{color: colors.textPrimary}}>HI</Text>
+                <Text style={{color: dark ? '#7F47FE' : '#FF5F83'}}>~</Text>
               </Text>
               <Image source={dark ? Images.sparkleDark : Images.sparkle} style={styles.heroSparkle} resizeMode="contain" />
             </View>

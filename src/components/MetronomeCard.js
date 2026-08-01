@@ -14,11 +14,15 @@ import {
 } from 'react-native';
 import {Metronome} from '../services/metronome';
 import {Images} from '../assets/images';
+import {useTheme} from '../theme/ThemeContext';
 
 // variant: 'companion'（陪练模式，白色开始 + 半透明圆按钮 + 白色符号，压在人像上）
-//          'detect'（手型检测/智能AI陪练，紫色开始 + 实心白圆 + 紫色符号，1:1 对齐蓝湖）
+//          'detect'（手型检测/智能AI陪练，主题色开始 + 实心白圆，1:1 对齐蓝湖 t1紫/t2粉）
 export default function MetronomeCard({style, variant = 'companion'}) {
+  const {colors, mode} = useTheme();
   const detect = variant === 'detect';
+  const detectAccent = mode === 'dark' ? '#B595FF' : '#FF355F';
+  const detectBtn = colors.primary;
   const engineRef = useRef(null);
   const dot = useRef(new Animated.Value(0.25)).current;
   const holdTimer = useRef(null);
@@ -99,7 +103,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         <TouchableOpacity
           onPress={toggle}
           activeOpacity={0.85}
-          style={[styles.startBtn, detect && styles.startBtnDetect]}>
+          style={[styles.startBtn, detect && {backgroundColor: detectBtn}]}>
           <Text style={[styles.startText, detect && styles.startTextDetect]}>
             {running ? '停止' : '开始'}
           </Text>
@@ -117,7 +121,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           activeOpacity={0.6}>
           <Image
             source={Images.metroMinus}
-            style={[styles.stepIcon, detect && styles.stepIconDetect]}
+            style={[styles.stepIcon, detect && {tintColor: detectAccent}]}
             resizeMode="contain"
           />
         </TouchableOpacity>
@@ -125,11 +129,15 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         <View style={{flex: 1}} />
 
         <Animated.View
-          style={[styles.dot, {opacity: dot, transform: [{scale: dotScale}]}]}
+          style={[
+            styles.dot,
+            detect && {backgroundColor: detectAccent},
+            {opacity: dot, transform: [{scale: dotScale}]},
+          ]}
         />
         {editing ? (
           <TextInput
-            style={[styles.bpm, styles.bpmInput]}
+            style={[styles.bpm, styles.bpmInput, detect && {color: detectAccent}]}
             value={draft}
             onChangeText={setDraft}
             onEndEditing={commitEdit}
@@ -142,7 +150,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           />
         ) : (
           <TouchableOpacity onPress={beginEdit} activeOpacity={0.6}>
-            <Text style={styles.bpm}>{bpm}</Text>
+            <Text style={[styles.bpm, detect && {color: detectAccent}]}>{bpm}</Text>
           </TouchableOpacity>
         )}
         <Text style={styles.unit}>BPM</Text>
@@ -158,7 +166,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           activeOpacity={0.6}>
           <Image
             source={Images.metroPlus}
-            style={[styles.stepIcon, detect && styles.stepIconDetect]}
+            style={[styles.stepIcon, detect && {tintColor: detectAccent}]}
             resizeMode="contain"
           />
         </TouchableOpacity>

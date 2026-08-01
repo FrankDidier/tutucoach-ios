@@ -57,7 +57,7 @@ let bubbleKey = 1;
 export default function CompanionScreen({navigation}) {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [coachName, setCoachName] = useState('AI 陪练');
+  const [coachName, setCoachName] = useState('专业老师');
   const [avatarUri, setAvatarUri] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -122,7 +122,7 @@ export default function CompanionScreen({navigation}) {
     coachIdRef.current = id;
     profileRef.current = base;
     if (aliveRef.current) {
-      setCoachName(base.displayName || 'AI 陪练');
+      setCoachName(base.displayName || '专业老师');
       setAvatarUri(null); // 先回退默认，若该分身有自定义头像再覆盖
     }
     // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。

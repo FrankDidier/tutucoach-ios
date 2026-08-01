@@ -842,7 +842,7 @@ const DetectionScreen = ({navigation, route}) => {
         </View>
 
         <Text style={styles.statsPink}>
-          正确：{correctSec}s | 不正确：{incorrectSec}s | 占比：
+          正确：{correctSec}s｜不正确：{incorrectSec}s｜占比：
           {Math.round(matchRate)}%
         </Text>
         <MetronomeCard variant="detect" style={styles.metroDetect} />
@@ -855,8 +855,8 @@ const DetectionScreen = ({navigation, route}) => {
           onPress={onToggleDetect}>
           <LinearGradient
             colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />

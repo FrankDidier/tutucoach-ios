@@ -20,10 +20,10 @@ export const lightColors = {
   mode: 'light',
   statusBarStyle: 'dark-content',
 
-  // 背景
-  bg: '#FFF5F7',
-  bgGradientTop: '#FFE8EE',
-  bgGradientBottom: '#FFF5F7',
+  // 背景（蓝湖 t2）
+  bg: '#FAFAFA',
+  bgGradientTop: '#FFE5EC',
+  bgGradientBottom: '#FAFAFA',
 
   // 卡片 / 表面
   card: '#FFFFFF',
@@ -31,17 +31,17 @@ export const lightColors = {
   cardBorder: '#F0DCE2',
   inputBg: '#F7F7F7',
 
-  // 主色（粉）
-  primary: '#FF5A7F',
-  primaryDark: '#E8456A',
-  primaryGradientStart: '#FF6B8A',
-  primaryGradientEnd: '#FF8FA0',
+  // 主色（粉）— CTA 竖向 #FF3761→#FF7797；强调 #FF355F
+  primary: '#FF355F',
+  primaryDark: '#FF3761',
+  primaryGradientStart: '#FF3761',
+  primaryGradientEnd: '#FF7797',
   onPrimary: '#FFFFFF',
-  accent: '#FF5A7F',
+  accent: '#FF5F83',
 
-  // 文字
-  textPrimary: '#191919',
-  textSecondary: '#7A7A86',
+  // 文字（蓝湖正文 #261216）
+  textPrimary: '#261216',
+  textSecondary: '#979797',
   textMuted: '#A6A6A6',
 
   // 分隔线 / tab
@@ -60,24 +60,24 @@ export const darkColors = {
   mode: 'dark',
   statusBarStyle: 'light-content',
 
-  // 背景：近黑的深靛蓝，顶部带紫色辉光
-  bg: '#0B0718',
+  // 背景（蓝湖 t1 页底 #020014）
+  bg: '#020014',
   bgGradientTop: '#241A46',
-  bgGradientBottom: '#070410',
+  bgGradientBottom: '#020014',
 
-  // 卡片 / 表面：深紫黑
-  card: '#161130',
-  cardAlt: '#1E1846',
+  // 卡片 / 表面
+  card: '#040428',
+  cardAlt: '#131444',
   cardBorder: 'rgba(255,255,255,0.07)',
-  inputBg: '#181334',
+  inputBg: '#131444',
 
-  // 主色（亮紫渐变）
-  primary: '#8B5CF6',
-  primaryDark: '#6D3EE6',
-  primaryGradientStart: '#B49BFF',
-  primaryGradientEnd: '#7C5CFF',
+  // 主色（紫）— CTA #7F47FE→#503CFA；Tab/选中 #B595FF
+  primary: '#7F47FE',
+  primaryDark: '#503CFA',
+  primaryGradientStart: '#7F47FE',
+  primaryGradientEnd: '#503CFA',
   onPrimary: '#FFFFFF',
-  accent: '#A98BFF',
+  accent: '#B595FF',
 
   // 文字
   textPrimary: '#FFFFFF',
