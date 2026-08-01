@@ -63,7 +63,10 @@ export const Images = {
   sparkleDark: require('./img/ic_bard_sparkle_dark.png'),
   // 练琴：「选择您的模型」小兔子图标 + AI陪练模式玻璃爱心（1:1 蓝湖）
   modelRabbit: require('./img/ic_model_rabbit.png'),
-  companionHeart: require('./img/ic_companion_heart.png'),
+  // 练琴 AI陪练玻璃爱心：浅色/深色两套（浅色稿为淡紫玻璃，深色稿为深紫；避免浅色主题出现深紫矩形底）
+  companionHeartLight: require('./img/ic_companion_heart_light.png'),
+  companionHeartDark: require('./img/ic_companion_heart_dark.png'),
+  companionHeart: require('./img/ic_companion_heart_dark.png'), // 兼容旧引用
   // 班级管理：学生列表紫色学士帽图标（1:1 蓝湖）
   studentListCap: require('./img/ic_student_list_cap.png'),
   // 练琴大字水印（1:1 蓝湖，Arial Black + 精确渐变）：

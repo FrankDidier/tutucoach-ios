@@ -40,8 +40,16 @@ export async function initDeviceId() {
   return cachedId;
 }
 
-/** 取当前设备 ID；若 init 尚未完成，用一次性 UUID 兜底（应尽量在 init 之后调用）。 */
+/**
+ * 取当前设备 ID。
+ * 若 init 尚未完成被迫生成兜底值，立刻异步持久化，避免「复制出去的 ID」和下次启动不一致，
+ * 导致老师入班时服务端找不到学生。
+ */
 export function getDeviceId() {
-  if (!cachedId) cachedId = uuidv4();
+  if (!cachedId) {
+    cachedId = uuidv4();
+    // fire-and-forget 持久化；initDeviceId 之后会以缓存为准，不会再覆盖。
+    setItem(K_DEVICE_ID, cachedId).catch(() => {});
+  }
   return cachedId;
 }

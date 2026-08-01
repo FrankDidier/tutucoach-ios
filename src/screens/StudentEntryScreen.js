@@ -52,8 +52,8 @@ const StudentEntryScreen = ({navigation}) => {
     });
     setStudents(next);
     resetForm();
-    // 学号填了完整学生 ID（≥12 位）时，顺带在服务端把该学生绑到本老师名下（入班）。
-    if (sid.length >= 12) {
+    // 学号填了足够长的学生 ID（≥8，支持尾号）时，顺带在服务端把该学生绑到本老师名下（入班）。
+    if (sid.length >= 8) {
       try {
         const tid = getDeviceId();
         await registerAccount(tid, 'teacher');
@@ -62,8 +62,11 @@ const StudentEntryScreen = ({navigation}) => {
           Alert.alert('已保存并入班', '学生已绑定到你的班级，班级管理里可看到他的练习数据。');
           return;
         }
-        if (r && r.error === 'not_found') {
-          Alert.alert('已保存', '学生信息已保存（该 ID 在服务端未找到，入班未成功：请确认学生已打开过 App 并复制了正确的完整 ID）。');
+        if (r && (r.error === 'student_not_found' || r.error === 'not_found')) {
+          Alert.alert(
+            '已保存',
+            '学生信息已保存到本机，但入班未成功：服务端找不到这个学生 ID。\n\n请让学生打开 App →「我的」→ 复制完整 ID，再粘贴到「学号」里保存一次。',
+          );
           return;
         }
       } catch (e) {

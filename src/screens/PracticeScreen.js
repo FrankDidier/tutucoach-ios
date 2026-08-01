@@ -120,7 +120,11 @@ const PracticeScreen = ({navigation}) => {
                 resizeMode="contain"
                 pointerEvents="none"
               />
-              <Image source={Images.companionHeart} style={styles.chatHeart} resizeMode="contain" />
+              <Image
+                source={dark ? Images.companionHeartDark : Images.companionHeartLight}
+                style={styles.chatHeart}
+                resizeMode="contain"
+              />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
             </TouchableOpacity>

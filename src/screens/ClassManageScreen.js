@@ -139,7 +139,7 @@ const ClassManageScreen = ({navigation}) => {
         name: nm,
         studentId: sid ? sid.slice(-8) : '—',
         fullId: sid,
-        canBind: sid.length >= 12, // 有完整 ID 才能真正入班
+        canBind: sid.length >= 8, // ≥8 位即可尝试入班（后端支持唯一尾号匹配）
         weekMinutes: 0,
         monthMinutes: 0,
         totalMinutes: 0,
@@ -147,7 +147,7 @@ const ClassManageScreen = ({navigation}) => {
         isVip: false,
         pending: true, // 未入班：显示「待入班」，练习数据入班后才有
       });
-      if (sid.length >= 12) rebindIds.push(sid);
+      if (sid.length >= 8) rebindIds.push(sid);
     });
 
     // 去重：同一个学生（服务端 user_id / 录入学号 / 姓名 尾号双向匹配）只保留一条，
@@ -191,10 +191,10 @@ const ClassManageScreen = ({navigation}) => {
   // 手动把「待入班」的学生加入正式班级（点一下学生卡片即可）。
   const joinClass = async item => {
     const full = (item.fullId || '').trim();
-    if (full.length < 12) {
+    if (full.length < 8) {
       Alert.alert(
         '无法入班',
-        '该学生还没有填写完整 ID。请让学生在「我的」页复制完整 ID，老师在「学生信息录入」里补全学号后再入班。',
+        '该学生还没有填写 ID。请让学生在「我的」页复制完整 ID，老师在「学生信息录入」里补全学号后再入班。',
       );
       return;
     }
@@ -207,8 +207,11 @@ const ClassManageScreen = ({navigation}) => {
         load(); // 刷新，拿到练习数据
         return;
       }
-      if (r && r.error === 'not_found') {
-        Alert.alert('入班失败', '该 ID 在服务端未找到，请确认学生已打开过 App 并复制了正确的完整 ID。');
+      if (r && (r.error === 'student_not_found' || r.error === 'not_found')) {
+        Alert.alert(
+          '入班失败',
+          '服务端找不到这个学生 ID。请让学生打开 App →「我的」→ 复制完整 ID，老师在「学生信息录入」里补全后再点加入。',
+        );
         return;
       }
       Alert.alert('入班失败', '请稍后重试。');
