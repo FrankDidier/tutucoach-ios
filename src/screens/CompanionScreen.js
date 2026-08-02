@@ -123,7 +123,7 @@ export default function CompanionScreen({navigation}) {
     profileRef.current = base;
     if (aliveRef.current) {
       setCoachName(base.displayName || '专业老师');
-      setAvatarUri(null); // 先回退默认，若该分身有自定义头像再覆盖
+      // 不先清空头像：默认立绘立刻显示，远程图 prefetch 完成后再无缝替换（对齐安卓瞬时背景）
     }
     // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。
     try {
@@ -146,7 +146,16 @@ export default function CompanionScreen({navigation}) {
           const uri = /^https?:/.test(sc.avatarUrl)
             ? sc.avatarUrl
             : BASE_URL + sc.avatarUrl;
-          setAvatarUri(uri);
+          // 预加载完成后再切换，避免进页先粉兔/空底再闪成立绘
+          Image.prefetch(uri)
+            .then(() => {
+              if (aliveRef.current) setAvatarUri(uri);
+            })
+            .catch(() => {
+              if (aliveRef.current) setAvatarUri(uri);
+            });
+        } else if (aliveRef.current) {
+          setAvatarUri(null);
         }
       }
     } catch (e) {}

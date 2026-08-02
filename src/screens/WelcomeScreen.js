@@ -128,24 +128,24 @@ const WelcomeScreen = ({navigation}) => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {/* 整屏背景：蓝湖导出图（含光晕），深/浅两版 1:1 还原 */}
+      {/* 整屏背景：蓝湖导出图（含光晕），深/浅两版 1:1 还原；烘焙星已去掉，改用下方官方 bard-fill */}
       <Image
         source={mode === 'dark' ? Images.homeBgDark : Images.homeBgLight}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
         pointerEvents="none"
       />
+      {/* 蓝湖 bard-fill @ (290,108) 35×35：官方 Iconly 双星火花（渐变紫/粉），绝对定位对齐设计稿 */}
+      <Image
+        source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
+        style={styles.lanhuBard}
+        resizeMode="contain"
+        pointerEvents="none"
+      />
       <SafeAreaView style={styles.safe}>
         {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
         <View style={styles.header}>
           <Text style={styles.pageTitle}>首页</Text>
-          {/* 右上角单星：放在 SafeArea 内，避免刘海区裁切；背景图已去掉烘焙星光 */}
-          <Image
-            source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
-            style={styles.cornerSparkle}
-            resizeMode="contain"
-            pointerEvents="none"
-          />
         </View>
 
         <View style={styles.mascotBlock}>
@@ -216,23 +216,26 @@ const makeStyles = (colors, mode) =>
     flex: 1,
   },
   header: {
-    // 蓝湖：标题 x=15 y=54（相对状态栏下）；单星右上
+    // 蓝湖：标题 x=15 y=54（相对状态栏下）
     paddingHorizontal: px(15),
     paddingTop: px(10),
     paddingBottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   pageTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  cornerSparkle: {
-    width: px(28),
-    height: px(28),
-    marginRight: px(20),
+  // 蓝湖 首页_* ：bard-fill rect (290,108,35,35)，相对 375 宽设计稿
+  lanhuBard: {
+    position: 'absolute',
+    left: px(290),
+    top: px(108),
+    width: px(35),
+    height: px(35),
+    zIndex: 2,
   },
   mascotBlock: {
     // 标题底≈79 → 兔顶 163 ⇒ 间距 84；兔 342×343

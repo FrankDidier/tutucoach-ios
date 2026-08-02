@@ -51,7 +51,7 @@ const makeStyles = colors =>
   StyleSheet.create({
     wrap: {
       overflow: 'hidden',
-      backgroundColor: colors.mode === 'dark' ? colors.bgGradientTop : 'transparent',
+      backgroundColor: 'transparent',
     },
     wrapDetect: {
       minHeight: 56,

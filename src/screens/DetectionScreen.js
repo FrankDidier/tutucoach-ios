@@ -1261,6 +1261,7 @@ const makeStyles = (colors, mode) =>
     color: colors.textSecondary,
   },
   camFlipBtn: {
+    // 蓝湖「切换前置」：仅图标，无「后置⇄」文字胶囊
     position: 'absolute',
     top: 10,
     right: 10,
@@ -1269,7 +1270,7 @@ const makeStyles = (colors, mode) =>
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
   camFlipText: {
     fontSize: 12.5,

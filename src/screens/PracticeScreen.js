@@ -236,6 +236,7 @@ const makeStyles = (colors, dark) =>
       fontSize: 15,
       fontWeight: '600',
       color: colors.textPrimary,
+      zIndex: 2,
     },
     companionSub: {
       position: 'absolute',
@@ -243,16 +244,19 @@ const makeStyles = (colors, dark) =>
       top: px(41),
       fontSize: 12,
       fontWeight: '400',
-      color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
+      // 蓝湖稿 0.4；叠 CHAT 水印时略提亮保证可读
+      color: dark ? 'rgba(255,255,255,0.72)' : 'rgba(38,18,22,0.72)',
+      zIndex: 2,
     },
-    // CHAT 贴图：蓝湖 x42 y507（卡内），母图 1x=156x45（含留白），glyph 宽≈147。
-    // companionRow 内坐标（行左内边距 15 起）：left 微调让字身对齐设计。
+    // CHAT 贴图：压低透明度，避免盖住「AI分身语音陪伴…」副文案
     chatWatermark: {
       position: 'absolute',
       left: px(12),
-      top: px(48),
+      top: px(52),
       width: px(156),
       height: px(45),
+      opacity: 0.28,
+      zIndex: 0,
     },
     // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖）：贴右下角、按 85x63 比例放大，
     // 圆角溢出裁切（与蓝湖一致：浅紫副心被卡片右下圆角裁掉一角）。
