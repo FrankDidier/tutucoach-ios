@@ -225,14 +225,15 @@ const makeStyles = (colors, dark) =>
       left: px(12),
       right: px(12),
       top: px(187),
-      height: px(103),
+      // 蓝湖 矩形966 高 100
+      height: px(100),
       borderRadius: px(16),
       overflow: 'hidden',
     },
     companionTitle: {
       position: 'absolute',
-      left: px(15),
-      top: px(15),
+      left: px(12),
+      top: px(14),
       fontSize: 15,
       fontWeight: '600',
       color: colors.textPrimary,
@@ -240,21 +241,21 @@ const makeStyles = (colors, dark) =>
     },
     companionSub: {
       position: 'absolute',
-      left: px(15),
-      top: px(41),
+      left: px(12),
+      top: px(40),
       fontSize: 12,
       fontWeight: '400',
-      // 蓝湖：rgba(*,*,*,0.4)
+      // 蓝湖副文案 opacity 0.4
       color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
       zIndex: 2,
     },
-    // 蓝湖 Chat：设计层 opacity 0.6 已烘焙进 wm_chat.png（含纵向渐变），布局勿再乘透明度
+    // 蓝湖 练琴_t1 Chat：相对卡片 (12,51) 147×49，层 opacity 0.6 已烘焙进贴图
     chatWatermark: {
       position: 'absolute',
       left: px(12),
-      top: px(48),
-      width: px(156),
-      height: px(45),
+      top: px(51),
+      width: px(147),
+      height: px(49),
       opacity: 1,
       zIndex: 0,
     },
