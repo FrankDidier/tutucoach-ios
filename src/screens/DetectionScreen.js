@@ -108,7 +108,7 @@ const NO_HAND_AFTER_MS = 10000; // 连续无手 10 秒后提醒
 const NO_HAND_COOLDOWN_MS = 15000; // 无手提醒间隔
 
 const DetectionScreen = ({navigation, route}) => {
-  const {colors} = useTheme();
+  const {colors, mode} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const premium = !!route?.params?.premium;
   const [detecting, setDetecting] = useState(false);
@@ -720,13 +720,27 @@ const DetectionScreen = ({navigation, route}) => {
   const incorrectSec = Math.max(0, elapsedSec - correctSec);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+    <View style={styles.container}>
+      <StatusBar
+        barStyle={colors.statusBarStyle}
+        backgroundColor="transparent"
+        translucent
+      />
 
+      <Image
+        source={
+          mode === 'dark' ? Images.detectHeaderDark : Images.detectHeaderLight
+        }
+        style={styles.pageHeaderWash}
+        resizeMode="cover"
+        pointerEvents="none"
+      />
+      <SafeAreaView style={styles.safe}>
       <ScreenHeader
         title={premium ? '智能AI陪练' : '手型检测'}
         onBack={handleBack}
         onTitleLongPress={() => setShowSettings(true)}
+        variant="detect"
       />
 
       <View style={styles.body}>
@@ -736,7 +750,11 @@ const DetectionScreen = ({navigation, route}) => {
             activeOpacity={0.9}
             onPress={onSetTemplate}>
             <Image
-              source={Images.photoTemplate}
+              source={
+                mode === 'dark'
+                  ? Images.detectCameraDark
+                  : Images.detectCameraLight
+              }
               style={styles.actionIcon}
               resizeMode="contain"
             />
@@ -752,7 +770,15 @@ const DetectionScreen = ({navigation, route}) => {
             activeOpacity={0.9}
             onPress={onSecondCard}>
             <Image
-              source={premium ? Images.avatarRabbit : Images.ringtoneSelect}
+              source={
+                premium
+                  ? mode === 'dark'
+                    ? Images.detectRabbitMascotDark
+                    : Images.detectRabbitMascotLight
+                  : mode === 'dark'
+                    ? Images.detectRingtoneDark
+                    : Images.detectRingtoneLight
+              }
               style={styles.actionIcon}
               resizeMode="contain"
             />
@@ -761,7 +787,7 @@ const DetectionScreen = ({navigation, route}) => {
                 {premium ? '兔兔教练' : '铃声选择'}
               </Text>
               <Text style={styles.actionHint}>
-                {premium ? coachName : alarmNameById(alarmId)}
+                {premium ? coachName || '点击选择' : '点击选择'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -785,9 +811,15 @@ const DetectionScreen = ({navigation, route}) => {
                 style={styles.camFlipBtn}
                 activeOpacity={0.85}
                 onPress={() => setUseFrontCamera(v => !v)}>
-                <Text style={styles.camFlipText}>
-                  {useFrontCamera ? '前置 ⇄' : '后置 ⇄'}
-                </Text>
+                <Image
+                  source={
+                    mode === 'dark'
+                      ? Images.detectFlipDark
+                      : Images.detectFlipLight
+                  }
+                  style={styles.camFlipIcon}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
             ) : null}
             {cameraDenied ? (
@@ -817,13 +849,25 @@ const DetectionScreen = ({navigation, route}) => {
               </View>
             ) : null}
           </View>
-          <View style={styles.rabbitOverlay}>
+          <View style={styles.rabbitOverlay} pointerEvents="none">
             <Image
-              source={Images.avatarRabbit}
+              source={
+                mode === 'dark'
+                  ? Images.detectRabbitMascotDark
+                  : Images.detectRabbitMascotLight
+              }
               style={styles.rabbitAvatar}
               resizeMode="contain"
             />
-            <Text style={styles.rabbitLabel}>兔兔老师</Text>
+            <Image
+              source={
+                mode === 'dark'
+                  ? Images.detectRabbitLabelDark
+                  : Images.detectRabbitLabelLight
+              }
+              style={styles.rabbitLabelImg}
+              resizeMode="contain"
+            />
           </View>
         </View>
 
@@ -1108,17 +1152,29 @@ const DetectionScreen = ({navigation, route}) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const makeStyles = colors =>
   StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  headerWrap: {
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    safe: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    },
+    pageHeaderWash: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 220,
+    },
+    headerWrap: {
     height: 52,
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1217,10 +1273,12 @@ const makeStyles = colors =>
     position: 'absolute',
     top: 10,
     right: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   camFlipText: {
     fontSize: 12.5,
@@ -1260,29 +1318,33 @@ const makeStyles = colors =>
   },
   rabbitOverlay: {
     position: 'absolute',
-    right: 10,
-    bottom: 10,
-    flexDirection: 'row',
+    right: 8,
+    bottom: 8,
+    flexDirection: 'column',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: 'transparent',
   },
   rabbitAvatar: {
-    width: 24,
-    height: 24,
+    width: 66,
+    height: 90,
   },
   rabbitLabel: {
-    fontSize: 13,
+    marginTop: -4,
+    fontSize: 10,
     fontWeight: '700',
-    color: colors.textPrimary,
+    color: '#FFFFFF',
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
   },
+  rabbitLabelImg: {
+    marginTop: -4,
+    width: 55,
+    height: 20,
+  },
+  camFlipIcon: {width: 24, height: 24},
   templateRow: {
     flexDirection: 'row',
     alignItems: 'center',

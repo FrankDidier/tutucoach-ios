@@ -476,15 +476,21 @@ export default function CompanionScreen({navigation}) {
     Alert.alert('我的学生码', code + '\n\n已复制，发给老师即可为你设置陪练重点。');
   };
 
-  const bg = avatarUri ? {uri: avatarUri} : Images.avatarRabbit;
+  const bg = avatarUri ? {uri: avatarUri} : Images.companionPhoto;
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
   return (
     <ImageBackground source={bg} style={styles.root} resizeMode="cover">
-      <View style={styles.scrim} />
+      {/* 蓝湖纵向渐变遮罩：顶部透出人像，底部保证输入区可读 */}
+      <Image
+        source={Images.companionScrim}
+        style={styles.scrim}
+        resizeMode="stretch"
+        pointerEvents="none"
+      />
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <KeyboardAvoidingView
           style={styles.kav}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -578,7 +584,7 @@ export default function CompanionScreen({navigation}) {
 const makeStyles = colors =>
   StyleSheet.create({
   root: {flex: 1, backgroundColor: '#222'},
-  scrim: {...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)'},
+  scrim: {...StyleSheet.absoluteFillObject, width: '100%', height: '100%'},
   safe: {flex: 1},
   kav: {flex: 1},
   topBar: {
@@ -600,7 +606,8 @@ const makeStyles = colors =>
   },
   coachName: {color: '#fff', fontSize: 15, fontWeight: '600'},
   iconBtn: {width: 36, height: 36, alignItems: 'center', justifyContent: 'center'},
-  headerIcon: {width: 22, height: 22, tintColor: '#fff'},
+  // 蓝湖切片本身已是白色图标，不再额外 tint
+  headerIcon: {width: 20, height: 20},
   pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
   pieceText: {color: '#fff', fontSize: 13},
   chat: {flex: 1},
@@ -638,5 +645,5 @@ const makeStyles = colors =>
     justifyContent: 'center',
   },
   sendBtnDisabled: {opacity: 0.4},
-  sendIcon: {width: 24, height: 24, tintColor: '#fff'},
+  sendIcon: {width: 28, height: 28},
   });

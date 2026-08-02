@@ -3,19 +3,26 @@ import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
 
-// 与安卓二级页头部 1:1：浅粉渐变底（bg_card_header_gradient）+ 深色返回箭头 + 居中深色标题。
-const ScreenHeader = ({title, onBack, right, onTitleLongPress}) => {
-  const {colors} = useTheme();
+// 与安卓二级页头部 1:1：蓝湖 375×220 柔光底 + 返回 + 居中标题。
+const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
+  const {colors, mode} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const detect = variant === 'detect';
+  // detect 页由 DetectionScreen 铺满 375×220 柔光底，此处不再叠一层裁切图
+  const headerBg = detect
+    ? null
+    : mode === 'light'
+      ? Images.cardHeaderGradient
+      : null;
   return (
-    <View style={styles.wrap}>
-      {colors.mode === 'light' && (
+    <View style={[styles.wrap, detect && styles.wrapDetect]}>
+      {headerBg ? (
         <Image
-          source={Images.cardHeaderGradient}
+          source={headerBg}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
         />
-      )}
+      ) : null}
       <View style={styles.bar}>
         <TouchableOpacity
           style={styles.side}
@@ -44,8 +51,11 @@ const makeStyles = colors =>
   StyleSheet.create({
     wrap: {
       overflow: 'hidden',
-      // 暗色下用深紫头部底（覆盖浅色粉色位图）；浅色下透明让位图透出。
       backgroundColor: colors.mode === 'dark' ? colors.bgGradientTop : 'transparent',
+    },
+    wrapDetect: {
+      minHeight: 56,
+      backgroundColor: 'transparent',
     },
     bar: {
       flexDirection: 'row',
