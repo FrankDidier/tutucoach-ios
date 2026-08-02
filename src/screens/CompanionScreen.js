@@ -494,14 +494,13 @@ export default function CompanionScreen({navigation}) {
         <KeyboardAvoidingView
           style={styles.kav}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* 顶部栏：返回 + 分身头像 + 名称(可点切换) + 学生码 + 音量 */}
+        {/* 顶部栏：返回 + 教练名半透明胶囊 + 学生码/音量圆钮 */}
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backIcon}>‹</Text>
           </TouchableOpacity>
-          {/* 点头像/角色名可切换 AI 分身（背景/音色随之更新）；▾ 提示可点击。 */}
           <TouchableOpacity
-            style={styles.nameWrap}
+            style={styles.namePill}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('AISelect')}>
             <Image source={bg} style={styles.headerAvatar} />
@@ -509,10 +508,11 @@ export default function CompanionScreen({navigation}) {
               {coachName} ▾
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={showMyCode} style={styles.iconBtn}>
+          <View style={{flex: 1}} />
+          <TouchableOpacity onPress={showMyCode} style={styles.iconCircle}>
             <Image source={Images.companionCode} style={styles.headerIcon} resizeMode="contain" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleMute} style={[styles.iconBtn, {marginLeft: 6}]}>
+          <TouchableOpacity onPress={toggleMute} style={[styles.iconCircle, {marginLeft: 10}]}>
             <Image
               source={Images.companionVolume}
               style={[styles.headerIcon, muted && {opacity: 0.35}]}
@@ -548,32 +548,33 @@ export default function CompanionScreen({navigation}) {
         {/* 大号节拍器 */}
         <MetronomeCard style={styles.metro} />
 
-        {/* 输入区 */}
+        {/* 输入区：发送图标在输入胶囊内右侧（蓝湖） */}
         <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={t => {
-              setInput(t);
-              markTyping();
-            }}
-            onFocus={() => {
-              markTyping();
-            }}
-            onBlur={() => {
-              // 收起键盘＝此刻不在打字：立即解除，主动播报可以恢复（草稿仍保留在框里）。
-              clearTyping();
-            }}
-            placeholder="和Ta聊天"
-            placeholderTextColor="#979797"
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
-            onPress={onSend}
-            disabled={sending}>
-            <Image source={Images.companionSend} style={styles.sendIcon} resizeMode="contain" />
-          </TouchableOpacity>
+          <View style={styles.inputShell}>
+            <TextInput
+              style={styles.input}
+              value={input}
+              onChangeText={t => {
+                setInput(t);
+                markTyping();
+              }}
+              onFocus={() => {
+                markTyping();
+              }}
+              onBlur={() => {
+                clearTyping();
+              }}
+              placeholder="和Ta聊天"
+              placeholderTextColor="#979797"
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+              onPress={onSend}
+              disabled={sending}>
+              <Image source={Images.companionSend} style={styles.sendIcon} resizeMode="contain" />
+            </TouchableOpacity>
+          </View>
         </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -590,60 +591,77 @@ const makeStyles = colors =>
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'transparent',
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
   backBtn: {width: 38, height: 40, justifyContent: 'center'},
   backIcon: {color: '#fff', fontSize: 30},
-  nameWrap: {flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 4},
+  namePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 32,
+    paddingLeft: 2,
+    paddingRight: 10,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    maxWidth: 160,
+  },
   headerAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    marginRight: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 6,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  coachName: {color: '#fff', fontSize: 15, fontWeight: '600'},
-  iconBtn: {width: 36, height: 36, alignItems: 'center', justifyContent: 'center'},
-  // 蓝湖切片本身已是白色图标，不再额外 tint
-  headerIcon: {width: 20, height: 20},
+  coachName: {color: '#fff', fontSize: 14, fontWeight: '600', maxWidth: 110},
+  iconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIcon: {width: 18, height: 18},
   pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
   pieceText: {color: '#fff', fontSize: 13},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
-  // 蓝湖 ai陪练模式_t1：气泡/节拍器 rgba(26,26,26,0.6)；输入框 rgba(255,255,255,0.1)；hint #979797
   bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(26,26,26,0.6)'},
   bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
   bubbleAiText: {color: '#fff', fontSize: 15, lineHeight: 22},
   bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 22},
   metro: {marginBottom: 10, marginHorizontal: 14},
   inputBar: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  inputShell: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingLeft: 14,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 22,
+    paddingLeft: 18,
     paddingRight: 8,
-    paddingVertical: 10,
+    minHeight: 44,
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 22,
     maxHeight: 100,
-    paddingHorizontal: 18,
     paddingVertical: 10,
+    paddingRight: 8,
     color: '#fff',
     fontSize: 15,
   },
   sendBtn: {
-    marginLeft: 6,
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnDisabled: {opacity: 0.4},
-  sendIcon: {width: 28, height: 28},
+  sendIcon: {width: 26, height: 26},
   });

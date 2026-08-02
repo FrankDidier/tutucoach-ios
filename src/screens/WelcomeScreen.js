@@ -128,11 +128,18 @@ const WelcomeScreen = ({navigation}) => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {/* 整屏背景：蓝湖导出图（含右上角星光 + 光晕），深/浅两版 1:1 还原 */}
+      {/* 整屏背景：蓝湖导出图（含光晕），深/浅两版 1:1 还原 */}
       <Image
         source={mode === 'dark' ? Images.homeBgDark : Images.homeBgLight}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
+        pointerEvents="none"
+      />
+      {/* 蓝湖 bard-fill @ (290,108) 35×35：显式叠加，避免背景裁切后星光丢失 */}
+      <Image
+        source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
+        style={styles.cornerSparkle}
+        resizeMode="contain"
         pointerEvents="none"
       />
 
@@ -205,6 +212,15 @@ const makeStyles = (colors, mode) =>
   root: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  // 蓝湖 首页 bard-fill：x=290 y=108 w=35（相对 375 画布）
+  cornerSparkle: {
+    position: 'absolute',
+    top: px(108),
+    right: px(375 - 290 - 35),
+    width: px(35),
+    height: px(35),
+    zIndex: 2,
   },
   safe: {
     flex: 1,

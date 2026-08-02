@@ -109,7 +109,7 @@ const NO_HAND_COOLDOWN_MS = 15000; // 无手提醒间隔
 
 const DetectionScreen = ({navigation, route}) => {
   const {colors, mode} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, mode), [colors, mode]);
   const premium = !!route?.params?.premium;
   const [detecting, setDetecting] = useState(false);
   const [matchRate, setMatchRate] = useState(0);
@@ -773,8 +773,8 @@ const DetectionScreen = ({navigation, route}) => {
               source={
                 premium
                   ? mode === 'dark'
-                    ? Images.detectRabbitMascotDark
-                    : Images.detectRabbitMascotLight
+                    ? Images.detectCoachHeadDark
+                    : Images.detectCoachHeadLight
                   : mode === 'dark'
                     ? Images.detectRingtoneDark
                     : Images.detectRingtoneLight
@@ -850,6 +850,7 @@ const DetectionScreen = ({navigation, route}) => {
             ) : null}
           </View>
           <View style={styles.rabbitOverlay} pointerEvents="none">
+            {/* 蓝湖切片已含圆形头像 + 「兔兔老师」标，勿再叠一层标签 */}
             <Image
               source={
                 mode === 'dark'
@@ -859,29 +860,21 @@ const DetectionScreen = ({navigation, route}) => {
               style={styles.rabbitAvatar}
               resizeMode="contain"
             />
-            <Image
-              source={
-                mode === 'dark'
-                  ? Images.detectRabbitLabelDark
-                  : Images.detectRabbitLabelLight
-              }
-              style={styles.rabbitLabelImg}
-              resizeMode="contain"
-            />
           </View>
         </View>
 
-        <View style={styles.templateRow}>
-          <Text style={styles.templateText}>目标手型模版</Text>
-          <Text style={hasTemplate ? styles.templateSet : styles.templateMuted}>
-            {hasTemplate ? '已设置' : '未设置'}
+        <View style={styles.statsCard}>
+          <View style={styles.templateRow}>
+            <Text style={styles.templateText}>目标手型模版</Text>
+            <Text style={hasTemplate ? styles.templateSet : styles.templateMuted}>
+              {hasTemplate ? '已设置' : '未设置'}
+            </Text>
+          </View>
+          <Text style={styles.statsPink}>
+            正确：{correctSec}s｜不正确：{incorrectSec}s｜占比：
+            {Math.round(matchRate)}%
           </Text>
         </View>
-
-        <Text style={styles.statsPink}>
-          正确：{correctSec}s｜不正确：{incorrectSec}s｜占比：
-          {Math.round(matchRate)}%
-        </Text>
         <MetronomeCard variant="detect" style={styles.metroDetect} />
       </View>
 
@@ -1157,7 +1150,7 @@ const DetectionScreen = ({navigation, route}) => {
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, mode) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -1326,25 +1319,18 @@ const makeStyles = colors =>
   },
   rabbitAvatar: {
     width: 66,
-    height: 90,
-  },
-  rabbitLabel: {
-    marginTop: -4,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    overflow: 'hidden',
-  },
-  rabbitLabelImg: {
-    marginTop: -4,
-    width: 55,
-    height: 20,
+    height: 105,
   },
   camFlipIcon: {width: 24, height: 24},
+  statsCard: {
+    backgroundColor: mode === 'dark' ? '#131444' : '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: mode === 'dark' ? 0 : 1,
+    borderColor: 'rgba(240,59,97,0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
   templateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1401,8 +1387,8 @@ const makeStyles = colors =>
   statsPink: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primary,
-    marginBottom: 12,
+    color: mode === 'dark' ? '#B595FF' : '#FF355F',
+    marginBottom: 0,
   },
   metroRow: {
     flexDirection: 'row',

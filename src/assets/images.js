@@ -9,6 +9,10 @@ export const Images = {
   // 首页整屏背景（蓝湖导出，含右上角星光；深/浅两版，1:1 还原）
   homeBgDark: require('./img/home_bg_dark.png'),
   homeBgLight: require('./img/home_bg_light.png'),
+  homeSparkleLight: require('./img/ic_home_sparkle_light.png'),
+  homeSparkleDark: require('./img/ic_home_sparkle_dark.png'),
+  detectCoachHeadLight: require('./img/ic_det_coach_head_light.png'),
+  detectCoachHeadDark: require('./img/ic_det_coach_head_dark.png'),
   // 练琴页（蓝湖 1:1）：背景、带缺口卡片容器、VIP/免费磁贴
   practiceBgDark: require('./img/practice_bg_dark.png'),
   practiceBgLight: require('./img/practice_bg_light.png'),

@@ -74,8 +74,8 @@ export const darkColors = {
   // 主色（紫）— CTA #7F47FE→#503CFA；Tab/选中 #B595FF
   primary: '#7F47FE',
   primaryDark: '#503CFA',
-  primaryGradientStart: '#7F47FE',
-  primaryGradientEnd: '#503CFA',
+  primaryGradientStart: '#B595FF',
+  primaryGradientEnd: '#7F47FE',
   onPrimary: '#FFFFFF',
   accent: '#B595FF',
 

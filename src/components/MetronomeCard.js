@@ -1,6 +1,4 @@
-// 大号节拍器卡片（陪练模式用）：两行深色卡片。
-// 上行「🎵 节拍器 + 开始/停止（白胶囊）」；下行「− 90 BPM +（圆形按钮，可键盘输入）」。
-// 复用与迷你节拍器相同的 Metronome 引擎，1–300 BPM。
+// 大号节拍器卡片：陪练 / 手型检测两套样式，1:1 对齐蓝湖。
 import React, {useEffect, useRef, useState} from 'react';
 import {
   View,
@@ -16,8 +14,7 @@ import {Metronome} from '../services/metronome';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 
-// variant: 'companion'（陪练模式，白色开始 + 半透明圆按钮 + 白色符号，压在人像上）
-//          'detect'（手型检测/智能AI陪练，主题色开始 + 实心白圆，1:1 对齐蓝湖 t1紫/t2粉）
+// variant: 'companion' | 'detect'
 export default function MetronomeCard({style, variant = 'companion'}) {
   const {colors, mode} = useTheme();
   const detect = variant === 'detect';
@@ -34,7 +31,11 @@ export default function MetronomeCard({style, variant = 'companion'}) {
   useEffect(() => {
     engineRef.current = new Metronome(() => {
       dot.setValue(1);
-      Animated.timing(dot, {toValue: 0.25, duration: 140, useNativeDriver: true}).start();
+      Animated.timing(dot, {
+        toValue: 0.25,
+        duration: 140,
+        useNativeDriver: true,
+      }).start();
     });
     return () => {
       if (holdTimer.current) clearInterval(holdTimer.current);
@@ -68,11 +69,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
   const startHold = delta => {
     step(delta);
     if (holdTimer.current) clearInterval(holdTimer.current);
-    let first = true;
-    holdTimer.current = setInterval(() => {
-      step(delta);
-      first = false;
-    }, first ? 260 : 60);
+    holdTimer.current = setInterval(() => step(delta), 80);
   };
   const endHold = () => {
     if (holdTimer.current) {
@@ -91,7 +88,10 @@ export default function MetronomeCard({style, variant = 'companion'}) {
     Keyboard.dismiss();
   };
 
-  const dotScale = dot.interpolate({inputRange: [0.25, 1], outputRange: [1, 1.6]});
+  const dotScale = dot.interpolate({
+    inputRange: [0.25, 1],
+    outputRange: [1, 1.6],
+  });
 
   const detectLight = detect && mode === 'light';
   const cardTone = detectLight
@@ -106,12 +106,25 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         }
       : null;
   const titleColor = detectLight ? '#1A1A1A' : '#fff';
-  const unitColor = detectLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.7)';
+  const unitColor = detect
+    ? detectAccent
+    : 'rgba(255,255,255,0.7)';
   const bpmColor = detect ? detectAccent : '#fff';
+  // 蓝湖连续轨道：detect 浅粉 / 深半透明；companion 深半透明条
+  const trackTone = detectLight
+    ? {backgroundColor: '#FFE1E8'}
+    : detect
+      ? {backgroundColor: 'rgba(255,255,255,0.1)'}
+      : {backgroundColor: 'rgba(0,0,0,0.28)'};
+  const circleTone = detect
+    ? {
+        backgroundColor: '#fff',
+        ...(detectLight ? {} : {}),
+      }
+    : {backgroundColor: 'rgba(255,255,255,0.12)'};
 
   return (
     <View style={[styles.card, cardTone, style]}>
-      {/* 上行 */}
       <View style={styles.row}>
         <Image
           source={Images.metroNote}
@@ -130,14 +143,10 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         </TouchableOpacity>
       </View>
 
-      {/* 下行 */}
-      <View style={[styles.row, {marginTop: 14}]}>
+      {/* 蓝湖：± 与 BPM 嵌在连续轨道内 */}
+      <View style={[styles.track, trackTone]}>
         <TouchableOpacity
-          style={[
-            styles.circle,
-            detect && styles.circleDetect,
-            detectLight && {backgroundColor: 'rgba(240,59,97,0.12)'},
-          ]}
+          style={[styles.circle, circleTone]}
           onPress={() => step(-1)}
           onLongPress={() => startHold(-1)}
           onPressOut={endHold}
@@ -145,14 +154,16 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           activeOpacity={0.6}>
           <Image
             source={Images.metroMinus}
-            style={[styles.stepIcon, detect && {tintColor: detectAccent}]}
+            style={[
+              styles.stepIcon,
+              {tintColor: detect ? detectAccent : '#fff'},
+            ]}
             resizeMode="contain"
           />
         </TouchableOpacity>
 
         <View style={{flex: 1}} />
 
-        {/* 蓝湖检测页无 BPM 旁色点 */}
         {!detect ? (
           <Animated.View
             style={[styles.dot, {opacity: dot, transform: [{scale: dotScale}]}]}
@@ -181,11 +192,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         <View style={{flex: 1}} />
 
         <TouchableOpacity
-          style={[
-            styles.circle,
-            detect && styles.circleDetect,
-            detectLight && {backgroundColor: 'rgba(240,59,97,0.12)'},
-          ]}
+          style={[styles.circle, circleTone]}
           onPress={() => step(1)}
           onLongPress={() => startHold(1)}
           onPressOut={endHold}
@@ -193,7 +200,10 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           activeOpacity={0.6}>
           <Image
             source={Images.metroPlus}
-            style={[styles.stepIcon, detect && {tintColor: detectAccent}]}
+            style={[
+              styles.stepIcon,
+              {tintColor: detect ? detectAccent : '#fff'},
+            ]}
             resizeMode="contain"
           />
         </TouchableOpacity>
@@ -204,7 +214,6 @@ export default function MetronomeCard({style, variant = 'companion'}) {
 
 const styles = StyleSheet.create({
   card: {
-    // 蓝湖 ai陪练模式_t1：rgba(26,26,26,0.6) + 顶部淡白描边
     backgroundColor: 'rgba(26,26,26,0.6)',
     borderRadius: 22,
     borderWidth: 1,
@@ -224,25 +233,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startText: {fontSize: 14, fontWeight: 'bold', color: '#1A1A1A'},
-  // detect 变体：紫色开始按钮 + 白色文字
-  startBtnDetect: {backgroundColor: '#8B5CF6'},
   startTextDetect: {color: '#fff'},
-  circle: {
-    width: 40,
+  track: {
+    marginTop: 14,
     height: 40,
     borderRadius: 20,
-    borderWidth: 0,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  circle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // detect 变体：实心白圆 + 紫色加减符号
-  circleDetect: {
-    backgroundColor: '#fff',
-    borderWidth: 0,
-  },
-  stepIcon: {width: 16, height: 16, tintColor: '#fff'},
-  stepIconDetect: {tintColor: '#8B5CF6'},
+  stepIcon: {width: 14, height: 14},
   dot: {
     width: 12,
     height: 12,
@@ -250,7 +257,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#B98CFF',
     marginRight: 10,
   },
-  bpm: {fontSize: 26, fontWeight: 'bold', color: '#fff', textAlign: 'center', minWidth: 52},
+  bpm: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    minWidth: 52,
+  },
   bpmInput: {padding: 0},
-  unit: {fontSize: 12, color: 'rgba(255,255,255,0.7)', marginLeft: 2},
+  unit: {fontSize: 12, marginLeft: 2},
 });
