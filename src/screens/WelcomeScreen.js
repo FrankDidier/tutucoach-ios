@@ -137,42 +137,42 @@ const WelcomeScreen = ({navigation}) => {
       />
 
       <SafeAreaView style={styles.safe}>
+        {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
         <View style={styles.header}>
           <Text style={styles.pageTitle}>首页</Text>
         </View>
 
-        <View style={styles.center}>
-          <View style={styles.mascotBlock}>
-            <Image
-              source={mode === 'dark' ? Images.wmMusicDark : Images.wmMusicLight}
-              style={styles.musicWatermark}
-              resizeMode="contain"
-              pointerEvents="none"
-            />
+        <View style={styles.mascotBlock}>
+          <Image
+            source={mode === 'dark' ? Images.wmMusicDark : Images.wmMusicLight}
+            style={styles.musicWatermark}
+            resizeMode="contain"
+            pointerEvents="none"
+          />
 
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.bubbleWrap, {opacity: bubbleOpacity}]}>
+            <View style={styles.bubble}>
+              <Text style={styles.bubbleText}>{bubble}</Text>
+            </View>
+            <View style={styles.bubbleTail} />
+          </Animated.View>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={handleTap}
+            style={styles.rabbitTouch}>
             <Animated.View
-              pointerEvents="none"
-              style={[styles.bubbleWrap, {opacity: bubbleOpacity}]}>
-              <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{bubble}</Text>
-              </View>
-              <View style={styles.bubbleTail} />
+              style={[styles.rabbitAnimWrap, {transform: [{scale: bounce}]}]}>
+              <RabbitMascot talking={talking} style={styles.rabbitImg} />
             </Animated.View>
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={handleTap}
-              style={styles.rabbitTouch}>
-              <Animated.View
-                style={[styles.rabbitAnimWrap, {transform: [{scale: bounce}]}]}>
-                <RabbitMascot talking={talking} style={styles.rabbitImg} />
-              </Animated.View>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.welcomeCaption}>
-            欢迎使用全球第一款智能手型检测软件
-          </Text>
+          </TouchableOpacity>
         </View>
+
+        <Text style={styles.welcomeCaption}>
+          欢迎使用全球第一款智能手型检测软件
+        </Text>
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -180,7 +180,12 @@ const WelcomeScreen = ({navigation}) => {
             onPress={() => navigation.navigate('练琴')}
             style={styles.ctaOuter}>
             <LinearGradient
-              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              colors={[
+                colors.primaryGradientStart,
+                colors.primaryGradientEnd,
+                colors.primaryGradientStart,
+              ]}
+              locations={[0, 0.66, 1]}
               start={{x: 0.5, y: 0}}
               end={{x: 0.5, y: 1}}
               style={StyleSheet.absoluteFill}
@@ -205,33 +210,33 @@ const makeStyles = (colors, mode) =>
     flex: 1,
   },
   header: {
-    paddingHorizontal: 24, // 设计稿：标题左 30（安全区内约 24）
-    paddingTop: 8,
-    paddingBottom: 4,
+    // 蓝湖：标题 x=15 y=54（相对状态栏下）
+    paddingHorizontal: px(15),
+    paddingTop: px(10),
+    paddingBottom: 0,
   },
   pageTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-  },
   mascotBlock: {
-    width: '100%',
-    minHeight: px(400),
+    // 标题底≈79 → 兔顶 163 ⇒ 间距 84；兔 342×343
+    marginTop: px(84),
+    width: px(342),
+    height: px(343),
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // MUSIC 水印：Arial Black 空心/渐变贴图（1:1 蓝湖），居中压在兔子身后。
+  // MUSIC：蓝湖 y=247，相对兔顶 +84；贴图 352×79
   musicWatermark: {
     position: 'absolute',
+    top: px(84),
     alignSelf: 'center',
     width: px(352),
     height: px(79),
+    zIndex: 0,
   },
   bubbleWrap: {
     position: 'absolute',
@@ -270,20 +275,22 @@ const makeStyles = (colors, mode) =>
   },
   rabbitTouch: {
     alignSelf: 'center',
+    zIndex: 1,
   },
   rabbitAnimWrap: {
     alignItems: 'center',
     alignSelf: 'center',
   },
   rabbitImg: {
-    // 设计稿兔子 342x343（近正方、居中）；帧比例 480x552，用容器尺寸 + aspect 适配。
     width: px(342),
     height: px(343),
     zIndex: 1,
     alignSelf: 'center',
   },
   welcomeCaption: {
-    marginTop: px(24),
+    // 兔底 506 → 文案 537 ⇒ 31
+    marginTop: px(31),
+    paddingHorizontal: px(35),
     fontSize: 18,
     lineHeight: 26,
     textAlign: 'center',
@@ -292,8 +299,9 @@ const makeStyles = (colors, mode) =>
   },
   footer: {
     alignItems: 'center',
-    paddingBottom: 20,
-    paddingTop: 8,
+    // 文案底≈575 → 按钮 601 ⇒ 26；按钮底到 Tab≈90
+    marginTop: px(26),
+    marginBottom: px(24),
   },
   ctaOuter: {
     width: px(210),
@@ -301,6 +309,11 @@ const makeStyles = (colors, mode) =>
     borderRadius: px(22),
     overflow: 'hidden',
     justifyContent: 'center',
+    shadowColor: '#4B28AA',
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: {width: 0, height: 6},
+    elevation: 6,
   },
   ctaLabelWrap: {
     ...StyleSheet.absoluteFillObject,

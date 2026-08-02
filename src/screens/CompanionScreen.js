@@ -559,7 +559,7 @@ export default function CompanionScreen({navigation}) {
               clearTyping();
             }}
             placeholder="和Ta聊天"
-            placeholderTextColor="rgba(255,255,255,0.5)"
+            placeholderTextColor="#979797"
             multiline
           />
           <TouchableOpacity
@@ -606,7 +606,8 @@ const makeStyles = colors =>
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
-  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(36,28,61,0.7)'},
+  // 蓝湖 ai陪练模式_t1：气泡/节拍器 rgba(26,26,26,0.6)；输入框 rgba(255,255,255,0.1)；hint #979797
+  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(26,26,26,0.6)'},
   bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
   bubbleAiText: {color: '#fff', fontSize: 15, lineHeight: 22},
   bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 22},
@@ -614,14 +615,14 @@ const makeStyles = colors =>
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(10,7,24,0.8)',
+    backgroundColor: 'transparent',
     paddingLeft: 14,
     paddingRight: 8,
     paddingVertical: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 22,
     maxHeight: 100,
     paddingHorizontal: 18,

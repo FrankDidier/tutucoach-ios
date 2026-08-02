@@ -15,6 +15,7 @@ import DetectionScreen from './src/screens/DetectionScreen';
 import ClassManageScreen from './src/screens/ClassManageScreen';
 import AISelectScreen from './src/screens/AISelectScreen';
 import AISettingsScreen from './src/screens/AISettingsScreen';
+import AIListScreen from './src/screens/AIListScreen';
 import GuideScreen from './src/screens/GuideScreen';
 import CheckinStatsScreen from './src/screens/CheckinStatsScreen';
 import StudentEntryScreen from './src/screens/StudentEntryScreen';
@@ -124,6 +125,7 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="Companion" component={CompanionScreen} />
         <Stack.Screen name="ClassManage" component={ClassManageScreen} />
         <Stack.Screen name="AISelect" component={AISelectScreen} />
+        <Stack.Screen name="AIList" component={AIListScreen} />
         <Stack.Screen name="AISettings" component={AISettingsScreen} />
         <Stack.Screen name="StudentReminder" component={StudentReminderScreen} />
         <Stack.Screen name="LessonPlan" component={LessonPlanScreen} />

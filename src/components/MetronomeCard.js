@@ -177,16 +177,17 @@ export default function MetronomeCard({style, variant = 'companion'}) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(23,18,46,0.8)',
+    // 蓝湖 ai陪练模式_t1：rgba(26,26,26,0.6) + 顶部淡白描边
+    backgroundColor: 'rgba(26,26,26,0.6)',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
   row: {flexDirection: 'row', alignItems: 'center'},
   note: {width: 20, height: 20, tintColor: '#fff'},
-  title: {fontSize: 16, fontWeight: 'bold', color: '#fff', marginLeft: 8},
+  title: {fontSize: 14, fontWeight: 'bold', color: '#fff', marginLeft: 8},
   startBtn: {
     backgroundColor: '#fff',
     borderRadius: 20,
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
     minWidth: 72,
     alignItems: 'center',
   },
-  startText: {fontSize: 15, fontWeight: 'bold', color: '#17122E'},
+  startText: {fontSize: 14, fontWeight: 'bold', color: '#1A1A1A'},
   // detect 变体：紫色开始按钮 + 白色文字
   startBtnDetect: {backgroundColor: '#8B5CF6'},
   startTextDetect: {color: '#fff'},
@@ -203,9 +204,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderWidth: 0,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },

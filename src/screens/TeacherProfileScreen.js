@@ -119,7 +119,7 @@ const TeacherProfileScreen = ({navigation}) => {
           <MenuRow
             icon={Images.tAi}
             label="AI分身｜陪练设置"
-            onPress={() => navigation.navigate('AISettings')}
+            onPress={() => navigation.navigate('AIList')}
             divider
           />
           <MenuRow
