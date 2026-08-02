@@ -786,9 +786,7 @@ const DetectionScreen = ({navigation, route}) => {
               <Text style={styles.actionTitle}>
                 {premium ? '兔兔教练' : '铃声选择'}
               </Text>
-              <Text style={styles.actionHint}>
-                {premium ? coachName || '点击选择' : '点击选择'}
-              </Text>
+              <Text style={styles.actionHint}>点击选择</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -1252,7 +1250,7 @@ const makeStyles = (colors, mode) =>
   },
   cameraBox: {
     flex: 1,
-    backgroundColor: '#D8D8D8',
+    backgroundColor: mode === 'dark' ? '#0A0818' : '#D8D8D8',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1316,6 +1314,7 @@ const makeStyles = (colors, mode) =>
     flexDirection: 'column',
     alignItems: 'center',
     backgroundColor: 'transparent',
+    zIndex: 5,
   },
   rabbitAvatar: {
     width: 66,

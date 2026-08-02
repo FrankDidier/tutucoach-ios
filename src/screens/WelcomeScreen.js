@@ -135,18 +135,17 @@ const WelcomeScreen = ({navigation}) => {
         resizeMode="cover"
         pointerEvents="none"
       />
-      {/* 蓝湖 bard-fill @ (290,108) 35×35：显式叠加，避免背景裁切后星光丢失 */}
-      <Image
-        source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
-        style={styles.cornerSparkle}
-        resizeMode="contain"
-        pointerEvents="none"
-      />
-
       <SafeAreaView style={styles.safe}>
         {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
         <View style={styles.header}>
           <Text style={styles.pageTitle}>首页</Text>
+          {/* 右上角单星：放在 SafeArea 内，避免刘海区裁切；背景图已去掉烘焙星光 */}
+          <Image
+            source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
+            style={styles.cornerSparkle}
+            resizeMode="contain"
+            pointerEvents="none"
+          />
         </View>
 
         <View style={styles.mascotBlock}>
@@ -213,28 +212,27 @@ const makeStyles = (colors, mode) =>
     flex: 1,
     backgroundColor: colors.bg,
   },
-  // 蓝湖 首页 bard-fill：x=290 y=108 w=35（相对 375 画布）
-  cornerSparkle: {
-    position: 'absolute',
-    top: px(108),
-    right: px(375 - 290 - 35),
-    width: px(35),
-    height: px(35),
-    zIndex: 2,
-  },
   safe: {
     flex: 1,
   },
   header: {
-    // 蓝湖：标题 x=15 y=54（相对状态栏下）
+    // 蓝湖：标题 x=15 y=54（相对状态栏下）；单星右上
     paddingHorizontal: px(15),
     paddingTop: px(10),
     paddingBottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  cornerSparkle: {
+    width: px(28),
+    height: px(28),
+    marginRight: px(20),
   },
   mascotBlock: {
     // 标题底≈79 → 兔顶 163 ⇒ 间距 84；兔 342×343

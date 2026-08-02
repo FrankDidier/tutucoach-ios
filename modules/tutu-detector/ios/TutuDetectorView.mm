@@ -28,7 +28,9 @@
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
-    self.backgroundColor = [UIColor colorWithRed:0.847 green:0.847 blue:0.847 alpha:1.0];
+    // 深色主题占位（与 RN cameraBox #0A0818 一致）；浅色由上层 JS 卡片底色兜底。
+    // 避免权限未就绪时出现「大块浅灰」看起来像旧版占位。
+    self.backgroundColor = [UIColor colorWithRed:0.039 green:0.031 blue:0.094 alpha:1.0];
     _cameraQueue = dispatch_queue_create("com.impit.tutucoach.camera", DISPATCH_QUEUE_SERIAL);
   }
   return self;
