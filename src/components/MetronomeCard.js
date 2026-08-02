@@ -93,12 +93,32 @@ export default function MetronomeCard({style, variant = 'companion'}) {
 
   const dotScale = dot.interpolate({inputRange: [0.25, 1], outputRange: [1, 1.6]});
 
+  const detectLight = detect && mode === 'light';
+  const cardTone = detectLight
+    ? {
+        backgroundColor: '#FFFFFF',
+        borderColor: 'rgba(240,59,97,0.2)',
+      }
+    : detect
+      ? {
+          backgroundColor: 'rgba(26,26,26,0.6)',
+          borderColor: 'rgba(255,255,255,0.1)',
+        }
+      : null;
+  const titleColor = detectLight ? '#1A1A1A' : '#fff';
+  const unitColor = detectLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.7)';
+  const bpmColor = detect ? detectAccent : '#fff';
+
   return (
-    <View style={[styles.card, style]}>
+    <View style={[styles.card, cardTone, style]}>
       {/* 上行 */}
       <View style={styles.row}>
-        <Image source={Images.metroNote} style={styles.note} resizeMode="contain" />
-        <Text style={styles.title}>节拍器</Text>
+        <Image
+          source={Images.metroNote}
+          style={[styles.note, {tintColor: detect ? detectAccent : '#fff'}]}
+          resizeMode="contain"
+        />
+        <Text style={[styles.title, {color: titleColor}]}>节拍器</Text>
         <View style={{flex: 1}} />
         <TouchableOpacity
           onPress={toggle}
@@ -113,7 +133,11 @@ export default function MetronomeCard({style, variant = 'companion'}) {
       {/* 下行 */}
       <View style={[styles.row, {marginTop: 14}]}>
         <TouchableOpacity
-          style={[styles.circle, detect && styles.circleDetect]}
+          style={[
+            styles.circle,
+            detect && styles.circleDetect,
+            detectLight && {backgroundColor: 'rgba(240,59,97,0.12)'},
+          ]}
           onPress={() => step(-1)}
           onLongPress={() => startHold(-1)}
           onPressOut={endHold}
@@ -128,16 +152,15 @@ export default function MetronomeCard({style, variant = 'companion'}) {
 
         <View style={{flex: 1}} />
 
-        <Animated.View
-          style={[
-            styles.dot,
-            detect && {backgroundColor: detectAccent},
-            {opacity: dot, transform: [{scale: dotScale}]},
-          ]}
-        />
+        {/* 蓝湖检测页无 BPM 旁色点 */}
+        {!detect ? (
+          <Animated.View
+            style={[styles.dot, {opacity: dot, transform: [{scale: dotScale}]}]}
+          />
+        ) : null}
         {editing ? (
           <TextInput
-            style={[styles.bpm, styles.bpmInput, detect && {color: detectAccent}]}
+            style={[styles.bpm, styles.bpmInput, {color: bpmColor}]}
             value={draft}
             onChangeText={setDraft}
             onEndEditing={commitEdit}
@@ -150,15 +173,19 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           />
         ) : (
           <TouchableOpacity onPress={beginEdit} activeOpacity={0.6}>
-            <Text style={[styles.bpm, detect && {color: detectAccent}]}>{bpm}</Text>
+            <Text style={[styles.bpm, {color: bpmColor}]}>{bpm}</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.unit}>BPM</Text>
+        <Text style={[styles.unit, {color: unitColor}]}>BPM</Text>
 
         <View style={{flex: 1}} />
 
         <TouchableOpacity
-          style={[styles.circle, detect && styles.circleDetect]}
+          style={[
+            styles.circle,
+            detect && styles.circleDetect,
+            detectLight && {backgroundColor: 'rgba(240,59,97,0.12)'},
+          ]}
           onPress={() => step(1)}
           onLongPress={() => startHold(1)}
           onPressOut={endHold}

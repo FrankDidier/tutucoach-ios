@@ -4,7 +4,7 @@ import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
 
 // 与安卓二级页头部 1:1：浅粉渐变底（bg_card_header_gradient）+ 深色返回箭头 + 居中深色标题。
-const ScreenHeader = ({title, onBack, right}) => {
+const ScreenHeader = ({title, onBack, right, onTitleLongPress}) => {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
@@ -25,9 +25,15 @@ const ScreenHeader = ({title, onBack, right}) => {
           accessibilityLabel="返回">
           <Text style={styles.backText}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
+        <TouchableOpacity
+          style={styles.titleHit}
+          activeOpacity={onTitleLongPress ? 0.7 : 1}
+          onLongPress={onTitleLongPress}
+          disabled={!onTitleLongPress}>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+        </TouchableOpacity>
         <View style={styles.side}>{right}</View>
       </View>
     </View>
@@ -60,8 +66,8 @@ const makeStyles = colors =>
       fontWeight: '400',
       marginTop: -4,
     },
+    titleHit: {flex: 1, justifyContent: 'center'},
     title: {
-      flex: 1,
       textAlign: 'center',
       fontSize: 18,
       fontWeight: '600',

@@ -22,7 +22,11 @@ export function ThemeProvider({children}) {
 
   useEffect(() => {
     (async () => {
-      const saved = await getItem(STORAGE_KEY);
+      const auditTheme = await getItem('audit_theme');
+      const saved =
+        auditTheme === 'light' || auditTheme === 'dark'
+          ? auditTheme
+          : await getItem(STORAGE_KEY);
       if (saved === 'light' || saved === 'dark') setModeState(saved);
       setReady(true);
     })();

@@ -9,6 +9,7 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
@@ -89,14 +90,6 @@ const TeacherProfileScreen = ({navigation}) => {
       />
       <SafeAreaView style={styles.safe}>
       <View style={styles.topBar}>
-        <TouchableOpacity
-          style={styles.backHit}
-          onPress={() => navigation?.goBack?.()}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-          accessibilityRole="button"
-          accessibilityLabel="返回">
-          <Text style={styles.backText}>‹</Text>
-        </TouchableOpacity>
         <Text style={styles.pageTitle}>我的</Text>
       </View>
 
@@ -143,6 +136,43 @@ const TeacherProfileScreen = ({navigation}) => {
           />
         </View>
       </ScrollView>
+
+      {/* 蓝湖「我的教师端」含底栏；跳回 MainTabs 对应 Tab */}
+      <View style={styles.tabBar}>
+        {[
+          {key: '首页', icon: Images.tabHome},
+          {key: '练琴', icon: Images.tabPractice},
+          {key: '我的', icon: Images.tabProfile},
+        ].map(tab => {
+          const active = tab.key === '我的';
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tabItem}
+              activeOpacity={0.85}
+              onPress={() => {
+                if (tab.key === '我的') return;
+                navigation.navigate('MainTabs', {screen: tab.key});
+              }}>
+              <Image
+                source={tab.icon}
+                style={[
+                  styles.tabIcon,
+                  {tintColor: active ? colors.tabActive : colors.tabInactive},
+                ]}
+                resizeMode="contain"
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {color: active ? colors.tabActive : colors.tabInactive},
+                ]}>
+                {tab.key}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       </SafeAreaView>
     </View>
   );
@@ -155,13 +185,11 @@ const makeStyles = (colors, dark) =>
     topBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingTop: 8,
+      paddingHorizontal: 15,
+      paddingTop: 10,
     },
-    backHit: {width: 40, height: 40, justifyContent: 'center', alignItems: 'center'},
-    backText: {fontSize: 30, color: colors.textPrimary, marginTop: -4},
-    // 标题「我的」18/600（教师端沿用同一导航样式）
-    pageTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginLeft: 4},
+    // 标题「我的」18/600（蓝湖教师端无返回箭头，与学生端「我的」一致）
+    pageTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
     scroll: {paddingBottom: 40, paddingHorizontal: 15},
     profileBlock: {alignItems: 'center', paddingTop: 20, paddingBottom: 8},
     avatar: {width: 80, height: 80, borderRadius: 40, marginBottom: 12},
@@ -193,6 +221,18 @@ const makeStyles = (colors, dark) =>
       height: StyleSheet.hairlineWidth,
       backgroundColor: colors.divider,
     },
+    tabBar: {
+      flexDirection: 'row',
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.divider,
+      backgroundColor: colors.tabBarBg,
+      paddingTop: 6,
+      paddingBottom: Platform.OS === 'ios' ? 8 : 8,
+      minHeight: 64,
+    },
+    tabItem: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+    tabIcon: {width: 24, height: 24},
+    tabLabel: {fontSize: 11, fontWeight: '600', marginTop: 2},
   });
 
 export default TeacherProfileScreen;

@@ -24,7 +24,7 @@ import StudentReminderScreen from './src/screens/StudentReminderScreen';
 import LessonPlanScreen from './src/screens/LessonPlanScreen';
 
 import {Images} from './src/assets/images';
-import {getItem} from './src/services/storage';
+import {getItem, setItem} from './src/services/storage';
 import {initDeviceId, getDeviceId} from './src/services/device';
 import {registerAccount} from './src/services/account';
 import {registerWeChat} from './src/services/wechat';
@@ -51,14 +51,20 @@ function TabIcon({label, color}: {label: string; focused: boolean; color: string
   );
 }
 
-function MainTabs() {
+function MainTabs({route}: {route?: {params?: {screen?: string}}}) {
   const {colors} = useTheme();
+  const startTab = route?.params?.screen;
   return (
     <Tab.Navigator
-      screenOptions={({route}) => ({
+      initialRouteName={
+        startTab === '练琴' || startTab === '我的' || startTab === '首页'
+          ? startTab
+          : '首页'
+      }
+      screenOptions={({route: r}) => ({
         headerShown: false,
         tabBarIcon: ({focused, color}) => (
-          <TabIcon label={route.name} focused={focused} color={color} />
+          <TabIcon label={r.name} focused={focused} color={color} />
         ),
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
@@ -88,6 +94,8 @@ function AppInner(): React.JSX.Element {
   const {colors} = useTheme();
   // 首次启动显示引导页（对应安卓 GuideActivity 为 LAUNCHER）。
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  // Lanhu audit: AsyncStorage verify_boot_route → stack/tab name for cold start.
+  const [bootParams, setBootParams] = useState<Record<string, unknown> | undefined>();
 
   useEffect(() => {
     (async () => {
@@ -101,8 +109,46 @@ function AppInner(): React.JSX.Element {
       }
       // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
       registerWeChat();
+      // Lanhu emulator audit: seed via AsyncStorage keys set before launch
+      // (audit_skip_guide=1, audit_theme=dark|light, verify_boot_route).
+      const auditSkip = await getItem('audit_skip_guide');
+      const auditTheme = await getItem('audit_theme');
+      if (auditTheme === 'light' || auditTheme === 'dark') {
+        await setItem('theme_mode', auditTheme);
+      }
+      if (auditSkip === '1') {
+        await setItem('guide_shown', '1');
+      }
+      const boot = (await getItem('verify_boot_route')) || '';
+      // one-shot: clear so next natural launch is unaffected
+      if (boot) {
+        await setItem('verify_boot_route', '');
+      }
       const shown = await getItem('guide_shown');
-      setInitialRoute(shown === '1' ? 'MainTabs' : 'Guide');
+      const tabNames = ['首页', '练琴', '我的'];
+      if (boot === 'Detection' || boot === 'DetectionPremium') {
+        setBootParams({premium: boot === 'DetectionPremium'});
+        setInitialRoute('Detection');
+      } else if (
+        boot &&
+        [
+          'TeacherProfile',
+          'AIList',
+          'AISettings',
+          'AISelect',
+          'Subscription',
+          'ClassManage',
+          'Companion',
+          'MainTabs',
+        ].includes(boot)
+      ) {
+        setInitialRoute(boot);
+      } else if (tabNames.includes(boot)) {
+        setBootParams({screen: boot});
+        setInitialRoute('MainTabs');
+      } else {
+        setInitialRoute(shown === '1' ? 'MainTabs' : 'Guide');
+      }
     })();
   }, []);
 
@@ -116,12 +162,24 @@ function AppInner(): React.JSX.Element {
         initialRouteName={initialRoute}
         screenOptions={{headerShown: false}}>
         <Stack.Screen name="Guide" component={GuideScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen
+          name="MainTabs"
+          component={MainTabs}
+          initialParams={
+            initialRoute === 'MainTabs' ? bootParams : undefined
+          }
+        />
         <Stack.Screen name="Teacher" component={TeacherScreen} />
         <Stack.Screen name="TeacherProfile" component={TeacherProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-        <Stack.Screen name="Detection" component={DetectionScreen} />
+        <Stack.Screen
+          name="Detection"
+          component={DetectionScreen}
+          initialParams={
+            initialRoute === 'Detection' ? bootParams : undefined
+          }
+        />
         <Stack.Screen name="Companion" component={CompanionScreen} />
         <Stack.Screen name="ClassManage" component={ClassManageScreen} />
         <Stack.Screen name="AISelect" component={AISelectScreen} />

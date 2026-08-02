@@ -90,7 +90,7 @@ function visibilityLabel(v) {
  * 字段顺序：头像 → 名称 → 陪练提示 → 音色 → 可见范围 → 问候 → 人设 → 删除/保存提交
  */
 const AISettingsScreen = ({navigation, route}) => {
-  const {colors} = useTheme();
+  const {colors, mode} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const coachId = route?.params?.coachId || '';
   const [draft, setDraft] = useState(emptyDraft());
@@ -501,7 +501,11 @@ const AISettingsScreen = ({navigation, route}) => {
                   style={StyleSheet.absoluteFill}
                 />
                 <Text style={styles.saveBtnText}>
-                  {saving ? '保存中…' : '保存提交'}
+                  {saving
+                    ? '保存中…'
+                    : mode === 'dark'
+                      ? '保存提交'
+                      : '保存'}
                 </Text>
               </TouchableOpacity>
             </View>
