@@ -135,13 +135,6 @@ const WelcomeScreen = ({navigation}) => {
         resizeMode="cover"
         pointerEvents="none"
       />
-      {/* 蓝湖 bard-fill @ (290,108) 35×35：官方 Iconly 双星火花（渐变紫/粉），绝对定位对齐设计稿 */}
-      <Image
-        source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
-        style={styles.lanhuBard}
-        resizeMode="contain"
-        pointerEvents="none"
-      />
       <SafeAreaView style={styles.safe}>
         {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
         <View style={styles.header}>
@@ -202,6 +195,13 @@ const WelcomeScreen = ({navigation}) => {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+      {/* 蓝湖 bard-fill @ (290,108) 35×35：必须叠在兔子之上，否则兔耳会盖住 */}
+      <Image
+        source={mode === 'dark' ? Images.homeSparkleDark : Images.homeSparkleLight}
+        style={styles.lanhuBard}
+        resizeMode="contain"
+        pointerEvents="none"
+      />
     </View>
   );
 };

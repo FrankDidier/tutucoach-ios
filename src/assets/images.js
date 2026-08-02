@@ -76,6 +76,7 @@ export const Images = {
   detectRabbitLabelDark: require('./img/ic_det_rabbit_label_dark.png'),
   companionScrim: require('./img/bg_companion_scrim.png'),
   companionPhoto: require('./img/bg_companion_photo.png'),
+  wmChatLight: require('./img/wm_chat_light.png'),
   // 装饰 / 徽标
   sparkle: require('./img/ic_bard_sparkle.png'),
   sparkleDark: require('./img/ic_bard_sparkle_dark.png'),

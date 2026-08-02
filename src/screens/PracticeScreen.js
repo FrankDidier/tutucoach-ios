@@ -115,7 +115,7 @@ const PracticeScreen = ({navigation}) => {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Companion')}>
               <Image
-                source={Images.wmChat}
+                source={dark ? Images.wmChat : Images.wmChatLight}
                 style={styles.chatWatermark}
                 resizeMode="contain"
                 pointerEvents="none"
@@ -244,18 +244,18 @@ const makeStyles = (colors, dark) =>
       top: px(41),
       fontSize: 12,
       fontWeight: '400',
-      // 蓝湖稿 0.4；叠 CHAT 水印时略提亮保证可读
-      color: dark ? 'rgba(255,255,255,0.72)' : 'rgba(38,18,22,0.72)',
+      // 蓝湖：rgba(*,*,*,0.4)
+      color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
       zIndex: 2,
     },
-    // CHAT 贴图：压低透明度，避免盖住「AI分身语音陪伴…」副文案
+    // 蓝湖 Chat：设计层 opacity 0.6 已烘焙进 wm_chat.png（含纵向渐变），布局勿再乘透明度
     chatWatermark: {
       position: 'absolute',
       left: px(12),
-      top: px(52),
+      top: px(48),
       width: px(156),
       height: px(45),
-      opacity: 0.28,
+      opacity: 1,
       zIndex: 0,
     },
     // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖）：贴右下角、按 85x63 比例放大，

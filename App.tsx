@@ -180,7 +180,16 @@ function AppInner(): React.JSX.Element {
             initialRoute === 'Detection' ? bootParams : undefined
           }
         />
-        <Stack.Screen name="Companion" component={CompanionScreen} />
+        <Stack.Screen
+          name="Companion"
+          component={CompanionScreen}
+          options={{
+            // 进陪练立刻盖住上一页，避免粉兔水印/练琴页透出约 1s
+            animation: 'fade',
+            animationDuration: 150,
+            contentStyle: {backgroundColor: '#222'},
+          }}
+        />
         <Stack.Screen name="ClassManage" component={ClassManageScreen} />
         <Stack.Screen name="AISelect" component={AISelectScreen} />
         <Stack.Screen name="AIList" component={AIListScreen} />

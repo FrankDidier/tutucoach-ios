@@ -8,7 +8,6 @@ import {
   Image,
   TextInput,
   ScrollView,
-  ImageBackground,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
@@ -485,12 +484,24 @@ export default function CompanionScreen({navigation}) {
     Alert.alert('我的学生码', code + '\n\n已复制，发给老师即可为你设置陪练重点。');
   };
 
-  const bg = avatarUri ? {uri: avatarUri} : Images.companionPhoto;
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
   return (
-    <ImageBackground source={bg} style={styles.root} resizeMode="cover">
+    <View style={styles.root}>
+      {/* 默认立绘立刻铺满；远程头像预加载完成后再叠一层，避免粉兔/上一页透出约 1s */}
+      <Image
+        source={Images.companionPhoto}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      {avatarUri ? (
+        <Image
+          source={{uri: avatarUri}}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
+      ) : null}
       {/* 蓝湖纵向渐变遮罩：顶部透出人像，底部保证输入区可读 */}
       <Image
         source={Images.companionScrim}
@@ -512,7 +523,10 @@ export default function CompanionScreen({navigation}) {
             style={styles.namePill}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('AISelect')}>
-            <Image source={bg} style={styles.headerAvatar} />
+            <Image
+              source={avatarUri ? {uri: avatarUri} : Images.companionPhoto}
+              style={styles.headerAvatar}
+            />
             <Text style={styles.coachName} numberOfLines={1}>
               {coachName} ▾
             </Text>
@@ -587,7 +601,7 @@ export default function CompanionScreen({navigation}) {
         </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
