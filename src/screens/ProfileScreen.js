@@ -136,7 +136,8 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
-  const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
+  // 列表只展示尾号；点复制会复制完整 ID（老师入班必须用完整 ID）。
+  const idText = userId ? `尾号:${userId.slice(-8)}` : 'ID:----';
 
   const MenuRow = ({icon, label, onPress, last}) => (
     <TouchableOpacity

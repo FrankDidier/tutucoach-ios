@@ -17,7 +17,7 @@ import {getDeviceId} from '../services/device';
 import {registerAccount, bindTeacher} from '../services/account';
 
 // 对应安卓 StudentEntryActivity：录入表单（姓名必填 / 学号 / 备注）+ 列表（点编辑、长按删除）。
-const StudentEntryScreen = ({navigation}) => {
+const StudentEntryScreen = ({navigation, route}) => {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -29,7 +29,14 @@ const StudentEntryScreen = ({navigation}) => {
 
   useEffect(() => {
     listStudents().then(setStudents);
-  }, []);
+    // 从班级管理「补全 ID」跳入时预填
+    const p = route?.params || {};
+    if (p.editName || p.editStudentId || p.editLocalId) {
+      setName(p.editName || '');
+      setStudentId(p.editStudentId || '');
+      setEditingId(p.editLocalId || null);
+    }
+  }, [route?.params]);
 
   const resetForm = () => {
     setName('');
@@ -117,7 +124,7 @@ const StudentEntryScreen = ({navigation}) => {
             style={styles.input}
             value={studentId}
             onChangeText={setStudentId}
-            placeholder="可选（≥12位可服务端绑定）"
+            placeholder="粘贴学生「我的」页复制的完整 ID"
             placeholderTextColor={colors.textMuted}
           />
           <Text style={styles.label}>备注</Text>

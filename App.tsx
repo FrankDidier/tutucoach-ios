@@ -24,7 +24,8 @@ import LessonPlanScreen from './src/screens/LessonPlanScreen';
 
 import {Images} from './src/assets/images';
 import {getItem} from './src/services/storage';
-import {initDeviceId} from './src/services/device';
+import {initDeviceId, getDeviceId} from './src/services/device';
+import {registerAccount} from './src/services/account';
 import {registerWeChat} from './src/services/wechat';
 import {ThemeProvider, useTheme} from './src/theme/ThemeContext';
 
@@ -91,6 +92,12 @@ function AppInner(): React.JSX.Element {
     (async () => {
       // 先固化稳定设备 ID（账号/会员/练习/入班绑定都依赖它），再决定首屏。
       await initDeviceId();
+      // 冷启动即静默注册到服务端，避免学生没进过「我的」导致老师入班找不到 ID。
+      try {
+        await registerAccount(getDeviceId(), 'student');
+      } catch (e) {
+        // 网络失败下次启动再试，不阻塞首屏
+      }
       // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
       registerWeChat();
       const shown = await getItem('guide_shown');

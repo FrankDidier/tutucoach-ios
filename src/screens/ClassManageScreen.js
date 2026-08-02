@@ -10,6 +10,7 @@ import {
   StatusBar,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Images} from '../assets/images';
@@ -18,7 +19,7 @@ import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {registerAccount, bindTeacher} from '../services/account';
 import {fetchStudents} from '../services/teacher';
-import {listStudents} from '../services/students';
+import {listStudents, saveStudent} from '../services/students';
 
 const remarksKey = tid => `student_remarks:${tid}`;
 
@@ -139,6 +140,7 @@ const ClassManageScreen = ({navigation}) => {
         name: nm,
         studentId: sid ? sid.slice(-8) : '—',
         fullId: sid,
+        localId: s.localId,
         canBind: sid.length >= 8, // ≥8 位即可尝试入班（后端支持唯一尾号匹配）
         weekMinutes: 0,
         monthMinutes: 0,
@@ -188,13 +190,63 @@ const ClassManageScreen = ({navigation}) => {
     load();
   }, [load]);
 
+  // 用完整 ID 更新本地名册并立刻入班（解决「只录了尾号 / 错号」）。
+  const saveIdAndJoin = async (item, rawId) => {
+    const sid = (rawId || '').trim().replace(/\s+/g, '');
+    if (sid.length < 8) {
+      Alert.alert('提示', '请粘贴学生在「我的」页复制的完整 ID（至少 8 位）。');
+      return;
+    }
+    try {
+      await saveStudent({
+        localId: item.localId,
+        name: item.name,
+        studentId: sid,
+        note: '',
+      });
+    } catch (e) {}
+    await joinClass({...item, fullId: sid});
+  };
+
+  const promptPasteFullId = item => {
+    const goEntry = () =>
+      navigation.navigate('StudentEntry', {
+        editName: item.name,
+        editStudentId: item.fullId || '',
+        editLocalId: item.localId,
+      });
+    // Alert.prompt 仅 iOS；安卓跳转录入页粘贴完整 ID。
+    if (Platform.OS !== 'ios' || typeof Alert.prompt !== 'function') {
+      goEntry();
+      return;
+    }
+    Alert.prompt(
+      '粘贴完整学生 ID',
+      `「${item.name}」当前 ID「${item.fullId || '未填'}」在服务端找不到。\n\n请让学生打开 App →「我的」→ 点复制完整 ID，再粘贴到这里。`,
+      [
+        {text: '取消', style: 'cancel'},
+        {text: '去录入页', onPress: goEntry},
+        {
+          text: '保存并入班',
+          onPress: v => saveIdAndJoin(item, v),
+        },
+      ],
+      'plain-text',
+      item.fullId || '',
+    );
+  };
+
   // 手动把「待入班」的学生加入正式班级（点一下学生卡片即可）。
   const joinClass = async item => {
     const full = (item.fullId || '').trim();
     if (full.length < 8) {
       Alert.alert(
         '无法入班',
-        '该学生还没有填写 ID。请让学生在「我的」页复制完整 ID，老师在「学生信息录入」里补全学号后再入班。',
+        '该学生还没有填写 ID。请让学生打开 App →「我的」→ 复制完整 ID。',
+        [
+          {text: '取消', style: 'cancel'},
+          {text: '粘贴完整 ID', onPress: () => promptPasteFullId(item)},
+        ],
       );
       return;
     }
@@ -210,11 +262,24 @@ const ClassManageScreen = ({navigation}) => {
       if (r && (r.error === 'student_not_found' || r.error === 'not_found')) {
         Alert.alert(
           '入班失败',
-          '服务端找不到这个学生 ID。请让学生打开 App →「我的」→ 复制完整 ID，老师在「学生信息录入」里补全后再点加入。',
+          `服务端找不到「${full}」。\n\n常见原因：只录了尾号且该学生还没打开过 App，或 ID 抄错。\n请让学生打开最新版 App（会自动注册）→「我的」→ 复制完整 ID，再粘贴补全。`,
+          [
+            {text: '取消', style: 'cancel'},
+            {text: '粘贴完整 ID', onPress: () => promptPasteFullId(item)},
+            {
+              text: '去录入页',
+              onPress: () =>
+                navigation.navigate('StudentEntry', {
+                  editName: item.name,
+                  editStudentId: item.fullId || '',
+                  editLocalId: item.localId,
+                }),
+            },
+          ],
         );
         return;
       }
-      Alert.alert('入班失败', '请稍后重试。');
+      Alert.alert('入班失败', (r && r.message) || '请稍后重试。');
     } catch (e) {
       Alert.alert('入班失败', '网络异常，请稍后重试。');
     }
@@ -222,9 +287,10 @@ const ClassManageScreen = ({navigation}) => {
 
   const onStudentPress = item => {
     if (item.pending) {
-      // 待入班：主操作就是「加入班级」。
+      // 待入班：主操作就是「加入班级」；也可直接补全 ID。
       Alert.alert(item.name, '该学生尚未入班，是否现在加入正式班级名单？', [
         {text: '取消', style: 'cancel'},
+        {text: '粘贴完整 ID', onPress: () => promptPasteFullId(item)},
         {text: '加入班级', onPress: () => joinClass(item)},
       ]);
       return;
