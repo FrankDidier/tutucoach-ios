@@ -20,8 +20,7 @@ const px = n => Math.round(n * S);
 
 // 卡片（含缺口）设计尺寸 345x305，内部元素按「卡片内相对坐标」绝对定位，做到 1:1。
 const CARD_W = 345;
-// 原蓝湖 305；加高以吃满底栏上方空档，并配合闭合描边
-const CARD_H = 420;
+const CARD_H = 305;
 
 const PracticeScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
@@ -166,13 +165,7 @@ const makeStyles = (colors, dark) =>
       width: px(216),
       height: px(217),
     },
-    // 卡片区吃满标题/问候以下剩余高度，避免高屏底部大片空档、边框「没填满」
-    cardOuter: {
-      flex: 1,
-      position: 'relative',
-      alignItems: 'center',
-      marginBottom: px(8),
-    },
+    cardOuter: {position: 'relative', alignItems: 'center'},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
     // 母图 1x=362x81（含描边留白），glyph 宽≈352；left 微调到 px(12) 让字身对齐 x16。
     musicWatermark: {
@@ -185,8 +178,7 @@ const makeStyles = (colors, dark) =>
     },
     card: {
       width: px(CARD_W),
-      flex: 1,
-      minHeight: px(CARD_H),
+      height: px(CARD_H),
       zIndex: 1,
     },
     selLabelRow: {
