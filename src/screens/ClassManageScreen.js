@@ -389,7 +389,23 @@ const ClassManageScreen = ({navigation}) => {
         />
       </View>
 
-      {/* 蓝湖「班级管理」无区间 chips；逻辑默认「所有」，UI 隐藏 */}
+      {/* 练琴时长区间：产品功能，始终展示（蓝湖稿无此行，但业务需要） */}
+      <View style={styles.rangeRow}>
+        {RANGES.map(r => {
+          const on = range === r.key;
+          return (
+            <TouchableOpacity
+              key={r.key}
+              style={[styles.rangeChip, on && styles.rangeChipOn]}
+              activeOpacity={0.85}
+              onPress={() => setRange(r.key)}>
+              <Text style={[styles.rangeChipText, on && styles.rangeChipTextOn]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <View style={styles.listHeaderRow}>
         <Image
