@@ -156,7 +156,7 @@ const makeStyles = (colors, dark) =>
     heroCopy: {marginTop: px(52), maxWidth: px(200)},
     heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
     heroLine1: {fontSize: 24, fontWeight: '600', color: colors.textPrimary},
-    heroSparkle: {width: 22, height: 22, marginLeft: 8},
+    heroSparkle: {width: px(24), height: px(24), marginLeft: px(8)},
     heroLine2: {fontSize: 20, fontWeight: '600', color: colors.textPrimary, marginTop: 6},
     mascot: {
       position: 'absolute',
