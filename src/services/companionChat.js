@@ -127,13 +127,14 @@ export async function generateLessonSection(
  * 分三个方向：偏重技术 / 偏重乐感 / 冷门。
  * @returns {Promise<{ok:boolean, technique:Array, musicality:Array, niche:Array, raw?:string}>}
  */
-export async function recommendPieces(level, age, years, category = 'general') {
+export async function recommendPieces(level, age, years, category = 'general', avoid = []) {
   try {
     const body = {
       level: level || '',
       age: age || '',
       years: years || '',
       category: category || 'general',
+      avoid: Array.isArray(avoid) ? avoid.filter(Boolean).slice(0, 40) : [],
     };
     const resp = await postJson('/api/coach/recommend_pieces', body, null, 100000);
     if (!resp || !resp.ok) return {ok: false};

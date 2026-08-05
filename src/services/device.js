@@ -17,6 +17,8 @@ import {getItem, setItem} from './storage';
 const K_DEVICE_ID = 'device_id';
 const K_ACCOUNT_ID = 'account_id';
 let cachedId = null;
+let initPromise = null;
+let initDone = false;
 
 const NativeId = NativeModules.RNStableIdentity || null;
 
@@ -75,50 +77,64 @@ export async function adoptUserId(id) {
  */
 export async function initDeviceId() {
   if (cachedId) return cachedId;
-  try {
-    // 1) 本次安装内：微信主账号优先
-    let id = await getItem(K_ACCOUNT_ID);
-    // 2) 跨卸载：Keychain 主账号（曾微信登录过）
-    if (!id) id = await nativeGet(K_ACCOUNT_ID);
-    // 3) 本次安装内：本机设备 ID
-    if (!id) id = await getItem(K_DEVICE_ID);
-    // 4) 跨卸载：Keychain 设备 ID（即便从未微信登录，重装也保持同一访客身份）
-    if (!id) id = await nativeGet(K_DEVICE_ID);
-
-    if (!id) {
-      id = uuidv4();
-    }
-
-    cachedId = id;
-    // 回写两端，保证下次冷启动/重装都能命中。
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
     try {
-      await setItem(K_DEVICE_ID, id);
-      // 若来自 Keychain 的主账号，同步回 AsyncStorage account_id
-      const acct = (await getItem(K_ACCOUNT_ID)) || (await nativeGet(K_ACCOUNT_ID));
-      if (acct) await setItem(K_ACCOUNT_ID, acct);
-    } catch (e) {}
-    await nativeSet(K_DEVICE_ID, id);
-    if (Platform.OS === 'ios') {
-      // account_id 有则再确认写入 Keychain
-      const acct = await getItem(K_ACCOUNT_ID);
-      if (acct) await nativeSet(K_ACCOUNT_ID, acct);
+      // 1) 本次安装内：微信主账号优先
+      let id = await getItem(K_ACCOUNT_ID);
+      // 2) 跨卸载：Keychain 主账号（曾微信登录过）
+      if (!id) id = await nativeGet(K_ACCOUNT_ID);
+      // 3) 本次安装内：本机设备 ID
+      if (!id) id = await getItem(K_DEVICE_ID);
+      // 4) 跨卸载：Keychain 设备 ID（即便从未微信登录，重装也保持同一访客身份）
+      if (!id) id = await nativeGet(K_DEVICE_ID);
+
+      if (!id) {
+        id = uuidv4();
+      }
+
+      cachedId = id;
+      // 回写两端，保证下次冷启动/重装都能命中。
+      try {
+        await setItem(K_DEVICE_ID, id);
+        const acct = (await getItem(K_ACCOUNT_ID)) || (await nativeGet(K_ACCOUNT_ID));
+        if (acct) await setItem(K_ACCOUNT_ID, acct);
+      } catch (e) {}
+      await nativeSet(K_DEVICE_ID, id);
+      if (Platform.OS === 'ios') {
+        const acct = await getItem(K_ACCOUNT_ID);
+        if (acct) await nativeSet(K_ACCOUNT_ID, acct);
+      }
+      if (!NativeId && Platform.OS === 'ios') {
+        // 未链上 Keychain 模块时打日志，便于排查「重装 ID 仍变」
+        console.warn('[device] RNStableIdentity native module missing — Keychain persistence inactive');
+      }
+    } catch (e) {
+      if (!cachedId) cachedId = uuidv4();
+    } finally {
+      initDone = true;
     }
-  } catch (e) {
-    if (!cachedId) cachedId = uuidv4();
-  }
-  return cachedId;
+    return cachedId;
+  })();
+  return initPromise;
 }
 
 /**
  * 取当前设备/账号 ID。
- * 若 init 尚未完成被迫生成兜底值，立刻异步持久化（含 Keychain），
- * 避免「复制出去的 ID」和下次启动不一致。
+ * 注意：不要在 initDeviceId 完成前用本函数生成新 UUID（会污染缓存、导致重装后 Keychain 读不回）。
+ * 若尚未 init，返回空字符串并触发 init（调用方应 await initDeviceId）。
  */
 export function getDeviceId() {
-  if (!cachedId) {
-    cachedId = uuidv4();
-    setItem(K_DEVICE_ID, cachedId).catch(() => {});
-    nativeSet(K_DEVICE_ID, cachedId);
+  if (cachedId) return cachedId;
+  if (!initDone) {
+    if (!initPromise) {
+      initDeviceId().catch(() => {});
+    }
+    return '';
   }
+  // init 已完成仍无 ID（极端），再生成并持久化
+  cachedId = uuidv4();
+  setItem(K_DEVICE_ID, cachedId).catch(() => {});
+  nativeSet(K_DEVICE_ID, cachedId);
   return cachedId;
 }

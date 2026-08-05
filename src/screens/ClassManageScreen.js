@@ -262,7 +262,7 @@ const ClassManageScreen = ({navigation}) => {
       if (r && (r.error === 'student_not_found' || r.error === 'not_found')) {
         Alert.alert(
           '入班失败',
-          `服务端找不到「${full}」。\n\n常见原因：只录了尾号且该学生还没打开过 App，或 ID 抄错。\n请让学生打开最新版 App（会自动注册）→「我的」→ 复制完整 ID，再粘贴补全。`,
+          `服务端找不到「${full}」。\n\n请让学生：打开最新版 App →（若用微信）先完成微信登录 →「我的」→ 复制完整 ID，再粘贴到这里。\n重装后 ID 可能已合并到微信主账号，请用登录后显示的完整 ID。`,
           [
             {text: '取消', style: 'cancel'},
             {text: '粘贴完整 ID', onPress: () => promptPasteFullId(item)},

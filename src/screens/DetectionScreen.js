@@ -741,6 +741,14 @@ const DetectionScreen = ({navigation, route}) => {
         onBack={handleBack}
         onTitleLongPress={() => setShowSettings(true)}
         variant="detect"
+        right={
+          <TouchableOpacity
+            onPress={() => setShowSettings(true)}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            accessibilityLabel="检测设置">
+            <Text style={styles.gearText}>⚙</Text>
+          </TouchableOpacity>
+        }
       />
 
       <View style={styles.body}>

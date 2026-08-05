@@ -178,6 +178,7 @@ export default function LessonPlanScreen({navigation}) {
   const [recYears, setRecYears] = useState('');
   const [recLoading, setRecLoading] = useState(false);
   const [recResult, setRecResult] = useState(null); // {technique,musicality,niche,raw}
+  const [recAvoid, setRecAvoid] = useState([]); // 最近已推荐曲名，降低重复
 
   const theme =
     PLAN_STYLES.find(s => s.key === styleKey) || PLAN_STYLES[0];
@@ -214,9 +215,17 @@ export default function LessonPlanScreen({navigation}) {
         recAge.trim(),
         recYears.trim(),
         recCategory,
+        recAvoid,
       );
       if (r && r.ok) {
         setRecResult(r);
+        const names = []
+          .concat(r.technique || [], r.musicality || [], r.niche || [])
+          .map(x => x && x.name)
+          .filter(Boolean);
+        if (names.length) {
+          setRecAvoid(prev => [...names, ...prev].slice(0, 40));
+        }
         setTimeout(() => scrollRef.current?.scrollToEnd?.({animated: true}), 300);
       } else {
         Alert.alert('推荐失败', '请稍后重试（生成较慢，请保持网络畅通）。');
