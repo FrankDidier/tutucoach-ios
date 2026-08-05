@@ -162,7 +162,6 @@ export default function LessonPlanScreen({navigation}) {
   const [pickerLoading, setPickerLoading] = useState(false);
   const [pickerStudents, setPickerStudents] = useState([]); // [{id,name}]
   const [pickerPieces, setPickerPieces] = useState(null); // null=选学生阶段；[]=已选学生
-  const teacherId = useRef(getDeviceId()).current;
 
   // 「板块详解」页状态
   const [detailOpen, setDetailOpen] = useState(false);
@@ -305,7 +304,7 @@ export default function LessonPlanScreen({navigation}) {
   const pickStudent = async stu => {
     setPickerLoading(true);
     try {
-      const r = await fetchReminders(stu.id, teacherId);
+      const r = await fetchReminders(stu.id, getDeviceId());
       setPickerPieces((r && r.pieces) || []);
     } catch (e) {
       setPickerPieces([]);

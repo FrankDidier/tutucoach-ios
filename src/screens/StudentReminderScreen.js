@@ -35,7 +35,6 @@ const remarksKey = tid => `student_remarks:${tid}`;
 export default function StudentReminderScreen({navigation}) {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const teacherId = useRef(getDeviceId()).current;
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [sel, setSel] = useState(null); // {id, name}
@@ -73,7 +72,7 @@ export default function StudentReminderScreen({navigation}) {
     let alive = true;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(remarksKey(teacherId));
+        const raw = await AsyncStorage.getItem(remarksKey(getDeviceId()));
         remarksRef.current = raw ? JSON.parse(raw) || {} : {};
       } catch (e) {
         remarksRef.current = {};
@@ -93,7 +92,7 @@ export default function StudentReminderScreen({navigation}) {
       rosterRef.current = rmap;
 
       try {
-        await registerAccount(teacherId, 'teacher');
+        await registerAccount(getDeviceId(), 'teacher');
       } catch (e) {}
 
       // 合并两个来源，按学生码去重：① 本地班级名单（有名字、可能学生还没打开过 App）
@@ -107,7 +106,7 @@ export default function StudentReminderScreen({navigation}) {
         };
       });
       try {
-        const r = await fetchStudents(teacherId);
+        const r = await fetchStudents(getDeviceId());
         if (r && r.ok && Array.isArray(r.students)) {
           r.students.forEach(s => {
             byId[s.user_id] = {id: s.user_id, name: displayName(s)};
@@ -124,7 +123,7 @@ export default function StudentReminderScreen({navigation}) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teacherId]);
+  }, []);
 
   // 保存/更新某学生的备注名（本地长期保存 + 立即刷新界面）。
   const setRemark = (studentId, name) => {
@@ -133,7 +132,7 @@ export default function StudentReminderScreen({navigation}) {
     if (clean) map[studentId] = clean;
     else delete map[studentId];
     remarksRef.current = map;
-    AsyncStorage.setItem(remarksKey(teacherId), JSON.stringify(map)).catch(() => {});
+    AsyncStorage.setItem(remarksKey(getDeviceId()), JSON.stringify(map)).catch(() => {});
     setStudents(prev =>
       prev.map(s => (s.id === studentId ? {...s, name: clean || s.id.slice(-6)} : s)),
     );
@@ -162,7 +161,7 @@ export default function StudentReminderScreen({navigation}) {
     setSel(stu);
     setLoadingStudent(true);
     try {
-      const r = await fetchReminders(stu.id, teacherId);
+      const r = await fetchReminders(stu.id, getDeviceId());
       setFreq(Math.max(FREQ_MIN, Math.min(FREQ_MAX, r.freqSec || 45)));
       let ps = Array.isArray(r.pieces) ? r.pieces : [];
       // 兼容旧数据：只有无曲目的 reminders 时，塞进一个「默认」曲目方便编辑。
@@ -238,7 +237,7 @@ export default function StudentReminderScreen({navigation}) {
       .filter(p => p.name);
     setSaving(true);
     try {
-      const ok = await savePieces(teacherId, sel.id, sel.name, clean, freq);
+      const ok = await savePieces(getDeviceId(), sel.id, sel.name, clean, freq);
       if (ok) {
         Alert.alert('已保存', '该学生进入「AI 陪练模式」时即会播报这些重点。');
       } else {

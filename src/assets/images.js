@@ -81,7 +81,9 @@ export const Images = {
   sparkle: require('./img/ic_bard_sparkle.png'),
   sparkleDark: require('./img/ic_bard_sparkle_dark.png'),
   // 练琴：「选择您的模型」小兔子图标 + AI陪练模式玻璃爱心（1:1 蓝湖）
+  // 深色稿=紫色渐变(#7F47FE→#B595FF)，浅色稿=粉色渐变(#FF7A9A→#FF355F)
   modelRabbit: require('./img/ic_model_rabbit.png'),
+  modelRabbitLight: require('./img/ic_model_rabbit_light.png'),
   // 练琴 AI陪练玻璃爱心：浅色/深色两套（浅色稿为淡紫玻璃，深色稿为深紫；避免浅色主题出现深紫矩形底）
   companionHeartLight: require('./img/ic_companion_heart_light.png'),
   companionHeartDark: require('./img/ic_companion_heart_dark.png'),

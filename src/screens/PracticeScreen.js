@@ -85,7 +85,7 @@ const PracticeScreen = ({navigation}) => {
 
             {/* 选择您的模型进行练习 (56,278) → 卡内 (41,10)；图标为紫色小兔子(tuzi)，非闪光 */}
             <View style={styles.selLabelRow}>
-              <Image source={Images.modelRabbit} style={styles.selIcon} resizeMode="contain" />
+              <Image source={dark ? Images.modelRabbit : Images.modelRabbitLight} style={styles.selIcon} resizeMode="contain" />
               <Text style={styles.selLabel}>选择您的模型进行练习</Text>
             </View>
 

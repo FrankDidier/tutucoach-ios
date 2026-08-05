@@ -130,7 +130,16 @@ const ProfileScreen = ({navigation}) => {
   const onWeChatLogin = async () => {
     try {
       const r = await loginWithWeChat(getDeviceId());
-      Alert.alert('微信登录', r.ok ? '登录成功' : r.message || '暂未开通');
+      if (r.ok) {
+        // 身份已切换为主账号：刷新 ID 与会员状态，练习/入班数据也随之找回。
+        const id = getDeviceId();
+        setUserId(id);
+        try {
+          const m = await getMembership(id);
+          if (m && m.ok) setVip(m);
+        } catch (e) {}
+      }
+      Alert.alert('微信登录', r.ok ? '登录成功，数据已同步' : r.message || '暂未开通');
     } catch (e) {
       Alert.alert('微信登录', '网络异常，请重试');
     }

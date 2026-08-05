@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
   Text,
@@ -34,7 +34,6 @@ const AIListScreen = ({navigation}) => {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const deviceId = useRef(getDeviceId()).current;
 
   const load = useCallback(async () => {
     const admin = await isAdminRole();
@@ -43,13 +42,13 @@ const AIListScreen = ({navigation}) => {
     if (r && r.ok && Array.isArray(r.coaches)) {
       const list = admin
         ? r.coaches
-        : r.coaches.filter(c => c.ownerId && c.ownerId === deviceId);
+        : r.coaches.filter(c => c.ownerId && c.ownerId === getDeviceId());
       setCoaches(list);
     } else {
       setCoaches([]);
     }
     setLoading(false);
-  }, [deviceId]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
