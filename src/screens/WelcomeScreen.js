@@ -67,7 +67,7 @@ const WelcomeScreen = ({navigation}) => {
     (message, {rate = 1.0, pitch = 1.0} = {}) => {
       if (!message) return;
       showSpeechBubble(message);
-      speak(message, {rate, pitch});
+      speak(message, {rate, pitch, coachId: 'home_rabbit'});
       setTalking(true); // → RabbitMascot 播「说话」动作，声音结束后回待机
       if (talkTimerRef.current) {
         clearTimeout(talkTimerRef.current);
@@ -170,7 +170,7 @@ const WelcomeScreen = ({navigation}) => {
         </View>
 
         <Text style={styles.welcomeCaption}>
-          欢迎使用全球第一款智能手型检测软件
+          欢迎使用全球第一款AI手型陪练软件
         </Text>
 
         <View style={styles.footer}>

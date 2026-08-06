@@ -139,6 +139,8 @@ function AppInner(): React.JSX.Element {
           'Subscription',
           'ClassManage',
           'Companion',
+          'LessonPlan',
+          'Detection',
           'MainTabs',
         ].includes(boot)
       ) {

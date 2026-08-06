@@ -34,6 +34,14 @@ export function bindTeacher(teacherId, studentId) {
   });
 }
 
+/** 老师把学生移出本班。 */
+export function unbindTeacher(teacherId, studentId) {
+  return postJson('/api/account/unbind_teacher', {
+    teacher_id: teacherId,
+    student_id: studentId,
+  });
+}
+
 /** 微信登录：App 拿到 code 后交后端换 OpenID（AppSecret 配好后生效）。
  *  preferUserId：登录前本机旧 ID，服务端可把被冲掉的 UUID 提升回主号。 */
 export function wechatLogin(code, deviceId, preferUserId) {

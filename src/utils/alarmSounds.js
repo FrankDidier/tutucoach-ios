@@ -3,9 +3,9 @@
 export const ALARM_SOUNDS = [
   {id: 0, name: '默认提示音', free: true, file: 'alarm_default.wav'},
   {id: 1, name: '钢琴音符', free: true, file: 'alarm_piano.wav'},
-  {id: 2, name: '温柔铃声', free: false, file: null},
-  {id: 3, name: '紧急蜂鸣', free: false, file: null},
-  {id: 4, name: '旋律提醒', free: false, file: null},
+  {id: 2, name: '温柔铃声', free: true, file: null},
+  {id: 3, name: '紧急蜂鸣', free: true, file: null},
+  {id: 4, name: '旋律提醒', free: true, file: null},
   {id: 10, name: '猫叫提醒 🐱', free: true, file: 'alarm_cat.wav'},
   {id: 11, name: '狗叫提醒 🐶', free: true, file: 'alarm_dog.wav'},
   {id: 12, name: '男声提醒 🗣', free: true, file: 'alarm_male_voice.wav'},

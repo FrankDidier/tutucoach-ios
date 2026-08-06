@@ -17,9 +17,9 @@ import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
-import {registerAccount, bindTeacher} from '../services/account';
+import {registerAccount, bindTeacher, unbindTeacher} from '../services/account';
 import {fetchStudents} from '../services/teacher';
-import {listStudents, saveStudent} from '../services/students';
+import {listStudents, saveStudent, deleteStudent, syncRosterFromServer} from '../services/students';
 
 const remarksKey = tid => `student_remarks:${tid}`;
 
@@ -88,10 +88,46 @@ const ClassManageScreen = ({navigation}) => {
         if (s && s.studentId) roster[s.studentId] = (s.name || '').trim();
       });
     } catch (e) {}
+    // 微信合并后备注键挂在旧老师 ID 上：迁到当前 tid（无本地旧键则无副作用）。
     try {
-      const raw = await AsyncStorage.getItem(remarksKey(tid));
-      remarks = raw ? JSON.parse(raw) || {} : {};
-    } catch (e) {}
+      const {getPreviousUserId} = require('../services/device');
+      const prev = (await getPreviousUserId()) || '';
+      const candidates = [prev, '732343f2-9a5c-4a2d-afcd-3694a5aa4d09'].filter(
+        Boolean,
+      );
+      let cur = {};
+      try {
+        cur = JSON.parse((await AsyncStorage.getItem(remarksKey(tid))) || '{}') || {};
+      } catch (e) {
+        cur = {};
+      }
+      let changed = false;
+      for (const old of candidates) {
+        if (!old || old === tid) continue;
+        try {
+          const map =
+            JSON.parse((await AsyncStorage.getItem(remarksKey(old))) || '{}') ||
+            {};
+          Object.keys(map).forEach(k => {
+            if (map[k] && !cur[k]) {
+              cur[k] = map[k];
+              changed = true;
+            }
+          });
+        } catch (e) {}
+      }
+      if (changed) {
+        await AsyncStorage.setItem(remarksKey(tid), JSON.stringify(cur));
+      }
+      remarks = cur;
+    } catch (e) {
+      try {
+        const raw = await AsyncStorage.getItem(remarksKey(tid));
+        remarks = raw ? JSON.parse(raw) || {} : {};
+      } catch (e2) {
+        remarks = {};
+      }
+    }
 
     // 一个录入学生（studentId）是否已经出现在服务端「已入班」名单里（精确 / 尾号双向匹配）。
     const matchesServer = (sid, serverStudents) => {
@@ -110,6 +146,15 @@ const ClassManageScreen = ({navigation}) => {
     } catch (e) {
       // 离线：serverStudents 为空，仍能展示本地录入名单
     }
+
+    // 合并后本地「学生录入」常丢：把服务端已有昵称的学生补进本机名册。
+    try {
+      rosterList = await syncRosterFromServer(serverStudents);
+      roster = {};
+      rosterList.forEach(s => {
+        if (s && s.studentId) roster[s.studentId] = (s.name || '').trim();
+      });
+    } catch (e) {}
 
     const merged = serverStudents.map(s => ({
       id: s.user_id,
@@ -285,13 +330,67 @@ const ClassManageScreen = ({navigation}) => {
     }
   };
 
+  const removeFromClass = async item => {
+    const sid = (item.fullId || item.id || '').trim();
+    const name = item.name || '该学生';
+    Alert.alert(
+      '移出班级',
+      `确定把「${name}」从班级管理里移除吗？\n（不会删除学生本人的账号与练习记录）`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '移除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (item.pending && item.localId) {
+                await deleteStudent(item.localId);
+                load();
+                return;
+              }
+              if (!sid || sid.length < 6) {
+                Alert.alert('无法移除', '缺少有效学生 ID。');
+                return;
+              }
+              const tid = getDeviceId();
+              const r = await unbindTeacher(tid, sid);
+              if (r && r.ok) {
+                // 同步从本机录入名单去掉（若有）
+                try {
+                  const local = await listStudents();
+                  const hit = local.find(
+                    s =>
+                      s.studentId &&
+                      (s.studentId === sid ||
+                        sid.endsWith(s.studentId) ||
+                        s.studentId.endsWith(sid.slice(-8))),
+                  );
+                  if (hit) await deleteStudent(hit.localId);
+                } catch (e) {}
+                Alert.alert('已移除', `「${name}」已移出班级。`);
+                load();
+              } else {
+                Alert.alert(
+                  '移除失败',
+                  (r && r.error) || '请稍后重试',
+                );
+              }
+            } catch (e) {
+              Alert.alert('移除失败', '网络异常，请稍后重试。');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const onStudentPress = item => {
     if (item.pending) {
-      // 待入班：主操作就是「加入班级」；也可直接补全 ID。
       Alert.alert(item.name, '该学生尚未入班，是否现在加入正式班级名单？', [
         {text: '取消', style: 'cancel'},
         {text: '粘贴完整 ID', onPress: () => promptPasteFullId(item)},
         {text: '加入班级', onPress: () => joinClass(item)},
+        {text: '从名单删除', style: 'destructive', onPress: () => removeFromClass(item)},
       ]);
       return;
     }
@@ -305,6 +404,11 @@ const ClassManageScreen = ({navigation}) => {
             Alert.alert('已复制', '学生完整 ID 已复制');
           }
         },
+      },
+      {
+        text: '移出班级',
+        style: 'destructive',
+        onPress: () => removeFromClass(item),
       },
     ]);
   };
@@ -323,7 +427,8 @@ const ClassManageScreen = ({navigation}) => {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.85}
-      onPress={() => onStudentPress(item)}>
+      onPress={() => onStudentPress(item)}
+      onLongPress={() => removeFromClass(item)}>
       <View style={styles.cardTopRow}>
         <Image
           source={Images.avatarRabbit}
@@ -415,6 +520,9 @@ const ClassManageScreen = ({navigation}) => {
         />
         <Text style={styles.listHeader}>学生列表({filtered.length})</Text>
       </View>
+      <Text style={styles.emptyHint}>
+        点学生可移出班级；长按也可移除。不会删除学生本人账号。
+      </Text>
 
       <FlatList
         data={filtered}

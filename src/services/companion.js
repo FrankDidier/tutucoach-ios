@@ -1,6 +1,8 @@
 // 兔兔伙伴状态机（持久化）—— 与安卓 RabbitCompanion.java 1:1。
 // 负责：连续天数、累计分钟、打卡日期、积分、成就装扮、点击计数。
 import {getItem, setItem} from './storage';
+import {getJson} from './api';
+import {getDeviceId} from './device';
 import {
   GREETING_MORNING,
   GREETING_AFTERNOON,
@@ -197,7 +199,37 @@ async function monotonicPoints() {
   return points;
 }
 
+/**
+ * 微信换号后本机分钟/积分常归零，但练习记录已在服务端。
+ * 用服务端累计分钟抬高本地 minutes + points_floor（只增不减）。
+ */
+let hydrateTried = false;
+export async function hydratePointsFromServer() {
+  if (hydrateTried) return;
+  hydrateTried = true;
+  try {
+    await ensureLoaded();
+    const uid = getDeviceId();
+    if (!uid) return;
+    const r = await getJson('/api/practice/summary', {user_id: uid});
+    if (!r || !r.ok) return;
+    const serverMin = Math.round(Number(r.total_minutes) || 0);
+    const serverPts = Math.round(Number(r.points_from_practice) || serverMin * 10);
+    if (serverMin > Math.round(state.minutes || 0)) {
+      state.minutes = serverMin;
+      await setItem(K.minutes, state.minutes);
+    }
+    let floor = Number(await getItem('rc_points_floor'));
+    if (Number.isNaN(floor)) floor = 0;
+    if (serverPts > floor) await setItem('rc_points_floor', serverPts);
+  } catch (e) {
+    // 离线时跳过，下次打开再试
+    hydrateTried = false;
+  }
+}
+
 export async function getPoints() {
+  await hydratePointsFromServer();
   return monotonicPoints();
 }
 
@@ -221,4 +253,5 @@ export default {
   resetSession,
   getPoints,
   getStats,
+  hydratePointsFromServer,
 };

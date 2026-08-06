@@ -62,7 +62,7 @@ const PracticeScreen = ({navigation}) => {
             </View>
             <Text style={styles.heroLine2}>我是你的兔兔教练</Text>
           </View>
-          <RabbitMascot loopAction="celebrate" style={styles.mascot} />
+          <RabbitMascot loopAction="stand" style={styles.mascot} />
         </View>
 
         {/* MUSIC 大字水印（衔接处，压在卡片之后只露上沿）——1:1 蓝湖：Arial Black 空心/渐变贴图 */}
@@ -105,7 +105,7 @@ const PracticeScreen = ({navigation}) => {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Detection', {premium: false})}>
               <Image source={dark ? Images.practiceTileFreeDark : Images.practiceTileFreeLight} style={styles.tileImg} resizeMode="stretch" />
-              <Text style={styles.tileTitle}>智能手型检测</Text>
+              <Text style={styles.tileTitle}>AI手型陪练</Text>
               <Text style={styles.tileSub}>免费检测</Text>
             </TouchableOpacity>
 
@@ -125,7 +125,7 @@ const PracticeScreen = ({navigation}) => {
                 style={styles.chatHeart}
                 resizeMode="contain"
               />
-              <Text style={styles.companionTitle}>AI陪练模式</Text>
+              <Text style={styles.companionTitle}>AI陪伴模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
             </TouchableOpacity>
           </View>

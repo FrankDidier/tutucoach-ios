@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
-import {listStudents, saveStudent, deleteStudent} from '../services/students';
+import {listStudents, saveStudent, deleteStudent, syncRosterFromServer} from '../services/students';
 import {getDeviceId} from '../services/device';
 import {registerAccount, bindTeacher} from '../services/account';
+import {fetchStudents} from '../services/teacher';
 
 // 对应安卓 StudentEntryActivity：录入表单（姓名必填 / 学号 / 备注）+ 列表（点编辑、长按删除）。
 const StudentEntryScreen = ({navigation, route}) => {
@@ -28,8 +29,20 @@ const StudentEntryScreen = ({navigation, route}) => {
   const [students, setStudents] = useState([]);
 
   useEffect(() => {
-    listStudents().then(setStudents);
-    // 从班级管理「补全 ID」跳入时预填
+    (async () => {
+      let list = await listStudents();
+      // 合并后本机常只剩 0～1 条：从班级服务端名单补全。
+      if (list.length < 3) {
+        try {
+          const tid = getDeviceId();
+          const r = await fetchStudents(tid);
+          if (r && r.ok && Array.isArray(r.students) && r.students.length) {
+            list = await syncRosterFromServer(r.students);
+          }
+        } catch (e) {}
+      }
+      setStudents(list);
+    })();
     const p = route?.params || {};
     if (p.editName || p.editStudentId || p.editLocalId) {
       setName(p.editName || '');

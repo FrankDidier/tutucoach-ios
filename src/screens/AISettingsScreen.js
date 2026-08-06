@@ -39,9 +39,41 @@ import {
 const PERSONA_EXAMPLE =
   '身份：教龄15年的钢琴老师\n' +
   '性格：温柔耐心，但对手型要求严格\n' +
+  '语言：中文\n' +
   '说话风格：轻声细语、爱用鼓励的话\n' +
   '口头禅：我们慢慢来\n' +
   '对学生的态度：先肯定再纠正，从不凶';
+
+const SPEAK_LANG_OPTIONS = [
+  {key: 'zh', label: '中文', line: '中文'},
+  {key: 'en', label: '英语', line: '英语'},
+  {key: 'ja', label: '日语', line: '日语'},
+  {key: 'ko', label: '韩语', line: '韩语'},
+];
+
+function parseSpeakLang(persona) {
+  const m = String(persona || '').match(/(?:^|\n)\s*语言\s*[：:]\s*([^\n；;，,。]+)/);
+  if (!m) return 'zh';
+  const v = m[1].trim().toLowerCase();
+  if (/英|en/.test(v)) return 'en';
+  if (/日|ja|jp/.test(v)) return 'ja';
+  if (/韩|ko|kr/.test(v)) return 'ko';
+  return 'zh';
+}
+
+function upsertSpeakLangLine(persona, langKey) {
+  const opt = SPEAK_LANG_OPTIONS.find(o => o.key === langKey) || SPEAK_LANG_OPTIONS[0];
+  const line = `语言：${opt.line}`;
+  const text = String(persona || '');
+  if (/(?:^|\n)\s*语言\s*[：:]/.test(text)) {
+    return text.replace(/(?:^|\n)(\s*语言\s*[：:]\s*)([^\n]*)/, `\n${line}`).replace(/^\n/, '');
+  }
+  // 插在「说话风格」前；没有则放开头
+  if (/说话风格\s*[：:]/.test(text)) {
+    return text.replace(/(说话风格\s*[：:])/, `${line}\n$1`);
+  }
+  return text ? `${line}\n${text}` : line;
+}
 
 function emptyDraft() {
   return {
@@ -391,7 +423,7 @@ const AISettingsScreen = ({navigation, route}) => {
                 <View style={{flex: 1, paddingRight: 8}}>
                   <Text style={styles.fieldLabel}>陪练提示设置</Text>
                   <Text style={styles.hintMuted}>
-                    按学生·按曲目设置「AI陪练模式」重点播报内容
+                    按学生·按曲目设置「AI陪伴模式」重点播报内容
                   </Text>
                 </View>
                 <Text style={styles.chevron}>›</Text>
@@ -458,6 +490,32 @@ const AISettingsScreen = ({navigation, route}) => {
               />
             </View>
 
+            {/* 6.5 陪伴语言 */}
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>陪伴语言</Text>
+              <Text style={styles.hintMuted}>
+                AI 全程用所选语言说话（也会写入人设「语言：」一行）
+              </Text>
+              <View style={styles.langRow}>
+                {SPEAK_LANG_OPTIONS.map(o => {
+                  const on = parseSpeakLang(draft.systemPrompt) === o.key;
+                  return (
+                    <TouchableOpacity
+                      key={o.key}
+                      style={[styles.langChip, on && styles.langChipOn]}
+                      activeOpacity={0.8}
+                      onPress={() =>
+                        set('systemPrompt', upsertSpeakLangLine(draft.systemPrompt, o.key))
+                      }>
+                      <Text style={[styles.langChipText, on && styles.langChipTextOn]}>
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* 7. 分身人设 */}
             <View style={styles.card}>
               <View style={styles.personaHead}>
@@ -469,7 +527,7 @@ const AISettingsScreen = ({navigation, route}) => {
                 </TouchableOpacity>
               </View>
               <Text style={styles.hintMuted}>
-                决定AI的性格与说话方式，越具体越像真人
+                决定AI的性格与说话方式，越具体越像真人。也可在文中写「语言：英语」
               </Text>
               <TextInput
                 style={[styles.multiline, {minHeight: 130}]}
@@ -608,6 +666,27 @@ const makeStyles = colors =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    langRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 10,
+    },
+    langChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 18,
+      backgroundColor: colors.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F2F2F5',
+    },
+    langChipOn: {
+      backgroundColor: colors.primary || '#E85A7A',
+    },
+    langChipText: {
+      fontSize: 13,
+      color: colors.textSecondary || '#888',
+      fontWeight: '600',
+    },
+    langChipTextOn: {color: '#fff'},
     fillExample: {fontSize: 14, color: colors.accent, fontWeight: '600'},
     multiline: {
       marginTop: 10,

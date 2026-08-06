@@ -43,3 +43,44 @@ export async function deleteStudent(localId) {
   await setJson(K, next);
   return next;
 }
+
+/**
+ * 账号合并后「学生信息录入」本地名单常为空：把班级管理里已绑定的学生
+ * 同步进本机名册（按学号去重，不覆盖已有备注/姓名）。
+ */
+export async function syncRosterFromServer(serverStudents) {
+  const list = await listStudents();
+  const bySid = new Map();
+  list.forEach(s => {
+    const k = norm(s.studentId);
+    if (k) bySid.set(k, s);
+  });
+  let changed = false;
+  for (const s of serverStudents || []) {
+    const uid = (s.user_id || s.id || '').trim();
+    if (!uid) continue;
+    const nick = (s.nickname || s.name || '').trim();
+    if (!nick || nick === uid.slice(-6)) continue;
+    const key = norm(uid);
+    if (bySid.has(key)) continue;
+    let hit = false;
+    for (const [k] of bySid) {
+      if (uid.endsWith(k) || k.endsWith(uid.slice(-8))) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) continue;
+    const row = {
+      localId: `${Date.now()}_${uid.slice(-6)}`,
+      name: nick,
+      studentId: uid,
+      note: '（账号合并后自动同步）',
+    };
+    list.push(row);
+    bySid.set(key, row);
+    changed = true;
+  }
+  if (changed) await setJson(K, list);
+  return list;
+}

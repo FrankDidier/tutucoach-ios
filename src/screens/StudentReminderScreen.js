@@ -57,25 +57,76 @@ export default function StudentReminderScreen({navigation}) {
   const [manualName, setManualName] = useState('');
 
   // 名字优先级：班级名单备注名(学生录入) > 老师备注名 > 后台昵称 > id 尾号。
+  // 后台 nickname 在账号合并后会从陪练提示 student_name 回填，故应优先于尾号。
   const displayName = s => {
-    const id = s.user_id || s.id;
-    return (
-      rosterRef.current[id] ||
-      remarksRef.current[id] ||
-      s.nickname ||
-      s.name ||
-      (id || '').slice(-6)
-    );
+    const id = s.user_id || s.id || '';
+    const tryMaps = key =>
+      (rosterRef.current[key] || remarksRef.current[key] || '').trim();
+    let n = tryMaps(id);
+    if (!n && id.length > 6) {
+      // 学生码可能是尾号形式
+      const keys = Object.keys(rosterRef.current).concat(Object.keys(remarksRef.current));
+      for (const k of keys) {
+        if (k && (id.endsWith(k) || k.endsWith(id.slice(-6)))) {
+          n = tryMaps(k);
+          if (n) break;
+        }
+      }
+    }
+    return n || s.nickname || s.name || s.student_name || id.slice(-6);
+  };
+
+  // 把旧账号下的本地备注迁到当前老师 ID（微信合并后常见）。
+  const migrateLocalRemarks = async tid => {
+    try {
+      const {getPreviousUserId} = require('../services/device');
+      const prev = (await getPreviousUserId()) || '';
+      // 常见旧 UUID（微信登录前）也尝试迁一次；无本地键则无副作用。
+      const candidates = [
+        prev,
+        '732343f2-9a5c-4a2d-afcd-3694a5aa4d09',
+      ].filter(Boolean);
+      let cur = {};
+      try {
+        cur = JSON.parse((await AsyncStorage.getItem(remarksKey(tid))) || '{}') || {};
+      } catch (e) {
+        cur = {};
+      }
+      let changed = false;
+      for (const old of candidates) {
+        if (!old || old === tid) continue;
+        try {
+          const raw = await AsyncStorage.getItem(remarksKey(old));
+          const map = raw ? JSON.parse(raw) || {} : {};
+          Object.keys(map).forEach(k => {
+            if (map[k] && !cur[k]) {
+              cur[k] = map[k];
+              changed = true;
+            }
+          });
+        } catch (e) {}
+      }
+      if (changed) {
+        await AsyncStorage.setItem(remarksKey(tid), JSON.stringify(cur));
+      }
+      remarksRef.current = cur;
+    } catch (e) {
+      remarksRef.current = {};
+    }
   };
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(remarksKey(getDeviceId()));
-        remarksRef.current = raw ? JSON.parse(raw) || {} : {};
-      } catch (e) {
-        remarksRef.current = {};
+      const tid = getDeviceId();
+      await migrateLocalRemarks(tid);
+      if (!Object.keys(remarksRef.current || {}).length) {
+        try {
+          const raw = await AsyncStorage.getItem(remarksKey(tid));
+          remarksRef.current = raw ? JSON.parse(raw) || {} : {};
+        } catch (e) {
+          remarksRef.current = {};
+        }
       }
       // 先读「学生录入」的本地班级名单：这里老师已经给每个学生起了名字 + 学生码。
       // 和安卓一致——点进来就直接按班级学生的备注名显示，无需再手动补备注。

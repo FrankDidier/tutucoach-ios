@@ -174,11 +174,17 @@ export default function LessonPlanScreen({navigation}) {
   // 曲目推荐输入 + 结果
   const [recCategory, setRecCategory] = useState('general');
   const [recLevel, setRecLevel] = useState('');
+  const [recGradeChip, setRecGradeChip] = useState(0); // 0=未选；1-10=考级快捷
   const [recAge, setRecAge] = useState('');
   const [recYears, setRecYears] = useState('');
   const [recLoading, setRecLoading] = useState(false);
   const [recResult, setRecResult] = useState(null); // {technique,musicality,niche,raw}
   const [recAvoid, setRecAvoid] = useState([]); // 最近已推荐曲名，降低重复
+
+  const pickGrade = n => {
+    setRecGradeChip(n);
+    setRecLevel(`考级 ${n} 级`);
+  };
 
   const theme =
     PLAN_STYLES.find(s => s.key === styleKey) || PLAN_STYLES[0];
@@ -207,6 +213,15 @@ export default function LessonPlanScreen({navigation}) {
   };
 
   const onRecommend = async () => {
+    if (!(recLevel || '').trim()) {
+      Alert.alert(
+        '请先填写程度',
+        recCategory === 'kaoji'
+          ? '考级场景请点下方「1–10 级」快捷按钮，或手写如「考级 4 级」。'
+          : '请填写学生程度，例如「车尔尼599」或「考级 3 级」，否则难度容易不准。',
+      );
+      return;
+    }
     setRecLoading(true);
     setRecResult(null);
     try {
@@ -527,13 +542,35 @@ export default function LessonPlanScreen({navigation}) {
             </View>
 
             <Text style={[styles.fieldLabel, {marginTop: 14}]}>学生程度</Text>
+            <View style={styles.chipRow}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => {
+                const on = recGradeChip === n;
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    style={[styles.chip, on && styles.chipOn]}
+                    activeOpacity={0.85}
+                    onPress={() => pickGrade(n)}>
+                    <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                      {n}级
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, {marginTop: 8}]}
               value={recLevel}
-              onChangeText={setRecLevel}
-              placeholder="如：拜厄下册 / 车尔尼599 / 考级 4 级水平"
+              onChangeText={t => {
+                setRecLevel(t);
+                setRecGradeChip(0);
+              }}
+              placeholder="或手写：拜厄下册 / 车尔尼599 / 考级 4 级"
               placeholderTextColor={colors.textSecondary}
             />
+            <Text style={[styles.fieldHint, {marginTop: 6}]}>
+              考级场景请优先点级别按钮，保证推荐难度与所选级别一致。
+            </Text>
             <Text style={[styles.fieldLabel, {marginTop: 12}]}>生理年龄</Text>
             <TextInput
               style={styles.input}

@@ -309,6 +309,7 @@ export default function CompanionScreen({navigation}) {
             pitch: p.pitch || 1.0,
             coachId: coachIdRef.current || p.id,
             voiceId: p.voiceId || 0,
+            lang: p.speakLang || 'auto',
           });
         } catch (e) {}
       }

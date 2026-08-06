@@ -3,6 +3,7 @@
 import React, {createContext, useCallback, useContext, useEffect, useMemo, useState} from 'react';
 import {getItem, setItem} from '../services/storage';
 import {colorsForMode} from './themes';
+import {stop as stopTts} from '../services/voice';
 
 const STORAGE_KEY = 'theme_mode';
 // 默认走新「黑紫色」暗色主题（客户指定的主视觉）；可通过「切换主题」切到浅色。
@@ -39,6 +40,10 @@ export function ThemeProvider({children}) {
   }, []);
 
   const toggle = useCallback(() => {
+    // 切主题前停掉 TTS，避免 MediaPlayer/原生合成被打断产生杂音（对齐安卓）。
+    try {
+      stopTts();
+    } catch (e) {}
     setModeState(prev => {
       const next = prev === 'dark' ? 'light' : 'dark';
       setItem(STORAGE_KEY, next);
