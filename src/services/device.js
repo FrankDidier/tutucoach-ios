@@ -16,6 +16,7 @@ import {getItem, setItem} from './storage';
 
 const K_DEVICE_ID = 'device_id';
 const K_ACCOUNT_ID = 'account_id';
+const K_PREV_ID = 'account_id_prev';
 let cachedId = null;
 let initPromise = null;
 let initDone = false;
@@ -55,10 +56,21 @@ export function setDeviceId(id) {
 
 /**
  * 微信登录成功后调用：把服务端返回的主账号 user_id 固化为本机当前身份。
- * 之后 getDeviceId() 立即返回它，会员/练习/入班全部对齐到该主账号。
+ * 切换前把旧 ID 写入 account_id_prev，供下次登录时 prefer 找回。
  */
 export async function adoptUserId(id) {
   if (!id) return cachedId;
+  const prev =
+    cachedId ||
+    (await getItem(K_ACCOUNT_ID)) ||
+    (await getItem(K_DEVICE_ID)) ||
+    (await nativeGet(K_ACCOUNT_ID)) ||
+    (await nativeGet(K_DEVICE_ID));
+  if (prev && prev !== id) {
+    try {
+      await setItem(K_PREV_ID, prev);
+    } catch (e) {}
+  }
   cachedId = id;
   try {
     await setItem(K_ACCOUNT_ID, id);
@@ -68,6 +80,15 @@ export async function adoptUserId(id) {
   await nativeSet(K_ACCOUNT_ID, id);
   await nativeSet(K_DEVICE_ID, id);
   return cachedId;
+}
+
+/** 登录前本机曾用 ID（可能已被微信主号覆盖），供服务端提升别名回主号。 */
+export async function getPreviousUserId() {
+  try {
+    return (await getItem(K_PREV_ID)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 /**

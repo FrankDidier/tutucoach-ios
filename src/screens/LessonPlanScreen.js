@@ -554,7 +554,9 @@ export default function LessonPlanScreen({navigation}) {
               {recCategory === 'hezou'
                 ? '重奏场景按「双钢琴 / 四手联弹 / 与其他乐器重奏」三类各推荐几项。点某项可直接带入教案生成。'
                 : `按学生的程度、年龄、学琴时长和场景，从「偏重技术 / 偏重乐感 / ${
-                    recCategory === 'general' ? '教材推荐' : '冷门'
+                    recCategory === 'general' || recCategory === 'kaoji'
+                      ? '教材推荐'
+                      : '冷门'
                   }」三个方向各推荐几项。点某项可直接带入教案生成。`}
             </Text>
             <TouchableOpacity
@@ -600,7 +602,7 @@ export default function LessonPlanScreen({navigation}) {
                     title:
                       recCategory === 'hezou'
                         ? '③ 与其他乐器重奏'
-                        : recCategory === 'general'
+                        : recCategory === 'general' || recCategory === 'kaoji'
                         ? '③ 教材推荐'
                         : '③ 冷门推荐',
                     data: recResult.niche,

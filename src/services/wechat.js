@@ -12,7 +12,7 @@
 import {NativeModules, Platform} from 'react-native';
 import {WECHAT_APP_ID, WECHAT_UNIVERSAL_LINK} from './config';
 import {wechatLogin} from './account';
-import {adoptUserId} from './device';
+import {adoptUserId, getDeviceId, getPreviousUserId} from './device';
 import {postJson} from './api';
 
 const RNWeChat = NativeModules.RNWeChat || null;
@@ -38,7 +38,12 @@ export async function loginWithWeChat(deviceId) {
   }
   const {code} = await RNWeChat.sendAuthReq('snsapi_userinfo', 'tutu_login');
   if (!code) return {ok: false, error: 'auth_cancelled', message: '已取消授权'};
-  const res = await wechatLogin(code, deviceId);
+  const prefer =
+    (await getPreviousUserId()) ||
+    deviceId ||
+    getDeviceId() ||
+    null;
+  const res = await wechatLogin(code, deviceId || getDeviceId(), prefer);
   // 关键：登录成功后把服务端主账号 user_id 固化为本机身份，之后所有请求都用它 →
   // 会员/练习/入班数据即刻找回（此前只弹提示、身份没切换，导致「微信登录没用」）。
   if (res && res.ok && res.user && res.user.user_id) {

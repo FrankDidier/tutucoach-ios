@@ -34,7 +34,10 @@ export function bindTeacher(teacherId, studentId) {
   });
 }
 
-/** 微信登录：App 拿到 code 后交后端换 OpenID（AppSecret 配好后生效）。 */
-export function wechatLogin(code, deviceId) {
-  return postJson('/api/account/wechat_login', {code, device_id: deviceId});
+/** 微信登录：App 拿到 code 后交后端换 OpenID（AppSecret 配好后生效）。
+ *  preferUserId：登录前本机旧 ID，服务端可把被冲掉的 UUID 提升回主号。 */
+export function wechatLogin(code, deviceId, preferUserId) {
+  const body = {code, device_id: deviceId};
+  if (preferUserId) body.prefer_user_id = preferUserId;
+  return postJson('/api/account/wechat_login', body);
 }
