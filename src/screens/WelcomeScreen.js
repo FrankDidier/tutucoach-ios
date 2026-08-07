@@ -114,6 +114,15 @@ const WelcomeScreen = ({navigation}) => {
 
   useEffect(() => {
     // 进入首页问候（每次进入一次），对应 RabbitCompanion.onAppOpen
+    // 主题切换后跳过，避免再播 TTS（安卓同款杂音问题）。
+    if (global.__tutuSkipHomeGreet) {
+      global.__tutuSkipHomeGreet = false;
+      greetedRef.current = true;
+      return () => {
+        if (talkTimerRef.current) clearTimeout(talkTimerRef.current);
+        if (hideBubbleTimerRef.current) clearTimeout(hideBubbleTimerRef.current);
+      };
+    }
     if (!greetedRef.current) {
       greetedRef.current = true;
       setTimeout(() => onAppOpen().then(talkSequence), 500);

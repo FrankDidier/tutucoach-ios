@@ -32,6 +32,36 @@ import {
 import {listStudents} from '../services/students';
 import {getDeviceId} from '../services/device';
 
+/** 服务端偶发只回 raw（```json ...```）；剥围栏再解析，避免整页原文。 */
+function normalizeRecommendResult(r) {
+  if (!r) return r;
+  if ((r.technique && r.technique.length) || (r.musicality && r.musicality.length) || (r.niche && r.niche.length)) {
+    return {...r, raw: undefined};
+  }
+  let raw = (r.raw || '').trim();
+  if (!raw) return r;
+  if (raw.startsWith('```')) {
+    raw = raw.replace(/^```(?:json|JSON)?\s*/, '').replace(/\s*```$/, '').trim();
+  }
+  try {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const o = JSON.parse(raw.slice(start, end + 1));
+      if (o && (o.technique || o.musicality || o.niche)) {
+        return {
+          ...r,
+          technique: o.technique || [],
+          musicality: o.musicality || [],
+          niche: o.niche || [],
+          raw: undefined,
+        };
+      }
+    }
+  } catch (e) {}
+  return {...r, raw: '推荐结果解析失败，请再点一次「推荐曲目」。'};
+}
+
 const CATEGORIES = [
   {key: 'general', label: '通用'},
   {key: 'qimeng', label: '启蒙'},
@@ -233,9 +263,10 @@ export default function LessonPlanScreen({navigation}) {
         recAvoid,
       );
       if (r && r.ok) {
-        setRecResult(r);
+        const normalized = normalizeRecommendResult(r);
+        setRecResult(normalized);
         const names = []
-          .concat(r.technique || [], r.musicality || [], r.niche || [])
+          .concat(normalized.technique || [], normalized.musicality || [], normalized.niche || [])
           .map(x => x && x.name)
           .filter(Boolean);
         if (names.length) {

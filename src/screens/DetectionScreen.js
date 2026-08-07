@@ -737,7 +737,7 @@ const DetectionScreen = ({navigation, route}) => {
       />
       <SafeAreaView style={styles.safe}>
       <ScreenHeader
-        title={premium ? '智能AI陪练' : '手型检测'}
+        title={premium ? 'AI手型陪练' : '智能手型检测'}
         onBack={handleBack}
         onTitleLongPress={() => setShowSettings(true)}
         variant="detect"

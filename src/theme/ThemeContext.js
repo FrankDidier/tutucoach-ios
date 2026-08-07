@@ -44,6 +44,10 @@ export function ThemeProvider({children}) {
     try {
       stopTts();
     } catch (e) {}
+    // 标记：首页勿在切主题后立刻再问候播报。
+    try {
+      global.__tutuSkipHomeGreet = true;
+    } catch (e) {}
     setModeState(prev => {
       const next = prev === 'dark' ? 'light' : 'dark';
       setItem(STORAGE_KEY, next);
