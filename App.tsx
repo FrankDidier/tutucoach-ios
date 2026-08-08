@@ -142,6 +142,8 @@ function AppInner(): React.JSX.Element {
           'LessonPlan',
           'Detection',
           'MainTabs',
+          'StudentReminder',
+          'StudentEntry',
         ].includes(boot)
       ) {
         setInitialRoute(boot);

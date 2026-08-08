@@ -493,7 +493,7 @@ export default function CompanionScreen({navigation}) {
       {/* 全屏永远用蓝湖默认立绘；自定义头像只放顶部小圆，避免把脸图撑满全屏变形 */}
       <Image
         source={Images.companionPhoto}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, {backgroundColor: '#0B0618'}]}
         resizeMode="cover"
       />
       {/* 蓝湖纵向渐变遮罩：顶部透出人像，底部保证输入区可读 */}
