@@ -5,6 +5,7 @@ const K = {
   displayName: 'profile_display_name',
   avatarUri: 'profile_avatar_uri',
   teacherAvatarUri: 'teacher_avatar_uri',
+  companionBgUri: 'companion_bg_uri',
 };
 
 export const DEFAULT_DISPLAY_NAME = '钢琴小达人'; // 与安卓默认一致
@@ -25,6 +26,15 @@ export async function setAvatarUri(uri) {
   if (uri) await setItem(K.avatarUri, uri);
 }
 
+export async function getCompanionBgUri() {
+  return (await getItem(K.companionBgUri)) || null;
+}
+
+export async function setCompanionBgUri(uri) {
+  if (uri) await setItem(K.companionBgUri, uri);
+  else await setItem(K.companionBgUri, '');
+}
+
 export async function getTeacherAvatarUri() {
   return (await getItem(K.teacherAvatarUri)) || null;
 }
@@ -38,6 +48,8 @@ export default {
   setDisplayName,
   getAvatarUri,
   setAvatarUri,
+  getCompanionBgUri,
+  setCompanionBgUri,
   getTeacherAvatarUri,
   setTeacherAvatarUri,
   DEFAULT_DISPLAY_NAME,

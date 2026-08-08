@@ -23,6 +23,11 @@ import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
 import {syncPractice} from '../services/account';
 import {chat, fetchReminders} from '../services/companionChat';
+import {pickFromGallery} from '../services/imagePicker';
+import {
+  getCompanionBgUri,
+  setCompanionBgUri,
+} from '../services/profilePrefs';
 import {
   speak,
   stop as stopSpeak,
@@ -58,6 +63,7 @@ export default function CompanionScreen({navigation}) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [coachName, setCoachName] = useState('专业老师');
   const [avatarUri, setAvatarUri] = useState(null);
+  const [bgUri, setBgUri] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -175,6 +181,10 @@ export default function CompanionScreen({navigation}) {
     (async () => {
       studentIdRef.current = getDeviceId();
       await reloadCoach();
+      try {
+        const customBg = await getCompanionBgUri();
+        if (aliveRef.current && customBg) setBgUri(customBg);
+      } catch (e) {}
 
       const von = await isVoiceEnabled();
       mutedRef.current = !von;
@@ -485,18 +495,55 @@ export default function CompanionScreen({navigation}) {
     Alert.alert('我的学生码', code + '\n\n已复制，发给老师即可为你设置陪练重点。');
   };
 
+  const changeBackground = () => {
+    const buttons = [
+      {
+        text: '从相册选择',
+        onPress: async () => {
+          const r = await pickFromGallery({
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.9,
+          });
+          if (r?.cancelled || r?.error || !r?.uri) return;
+          await setCompanionBgUri(r.uri);
+          setBgUri(r.uri);
+        },
+      },
+    ];
+    if (bgUri) {
+      buttons.push({
+        text: '恢复默认',
+        onPress: async () => {
+          await setCompanionBgUri(null);
+          setBgUri(null);
+        },
+      });
+    }
+    buttons.push({text: '取消', style: 'cancel'});
+    Alert.alert('陪练背景', '可换成自己喜欢的照片，长按背景也可再改。', buttons);
+  };
+
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
+  const bgSource = bgUri ? {uri: bgUri} : Images.companionPhoto;
+
   return (
     <View style={styles.root}>
-      {/* 全屏永远用蓝湖默认立绘；自定义头像只放顶部小圆，避免把脸图撑满全屏变形 */}
-      <Image
-        source={Images.companionPhoto}
-        style={[StyleSheet.absoluteFill, {backgroundColor: '#0B0618'}]}
-        resizeMode="cover"
-      />
-      {/* 蓝湖纵向渐变遮罩：顶部透出人像，底部保证输入区可读 */}
+      {/* 默认钢琴氛围图；长按可换自己的照片 */}
+      <TouchableOpacity
+        activeOpacity={1}
+        onLongPress={changeBackground}
+        style={StyleSheet.absoluteFill}
+        delayLongPress={450}>
+        <Image
+          source={bgSource}
+          style={[StyleSheet.absoluteFill, {backgroundColor: '#0B0618'}]}
+          resizeMode="cover"
+        />
+      </TouchableOpacity>
+      {/* 纵向渐变遮罩：底栏可读 */}
       <Image
         source={Images.companionScrim}
         style={styles.scrim}
@@ -518,7 +565,7 @@ export default function CompanionScreen({navigation}) {
             activeOpacity={0.7}
             onPress={() => navigation.navigate('AISelect')}>
             <Image
-              source={avatarUri ? {uri: avatarUri} : Images.companionPhoto}
+              source={avatarUri ? {uri: avatarUri} : Images.coachPro}
               style={styles.headerAvatar}
             />
             <Text style={styles.coachName} numberOfLines={1}>
@@ -526,7 +573,10 @@ export default function CompanionScreen({navigation}) {
             </Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
-          <TouchableOpacity onPress={showMyCode} style={styles.iconCircle}>
+          <TouchableOpacity onPress={changeBackground} style={styles.iconCircle}>
+            <Text style={styles.bgBtnText}>背景</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={showMyCode} style={[styles.iconCircle, {marginLeft: 10}]}>
             <Image source={Images.companionCode} style={styles.headerIcon} resizeMode="contain" />
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleMute} style={[styles.iconCircle, {marginLeft: 10}]}>
@@ -640,13 +690,14 @@ const makeStyles = colors =>
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bgBtnText: {color: '#fff', fontSize: 10, fontWeight: '600'},
   headerIcon: {width: 18, height: 18},
   pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
   pieceText: {color: '#fff', fontSize: 13},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
-  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(26,26,26,0.6)'},
+  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(26,26,26,0.88)'},
   bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
   bubbleAiText: {color: '#fff', fontSize: 15, lineHeight: 22},
   bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 22},
