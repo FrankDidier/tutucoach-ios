@@ -22,7 +22,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {registerAccount} from '../services/account';
 import {fetchStudents} from '../services/teacher';
-import {listStudents} from '../services/students';
+import {listStudents, syncRosterFromServer} from '../services/students';
 import {fetchReminders, savePieces} from '../services/companionChat';
 
 const FREQ_MIN = 10;
@@ -40,6 +40,8 @@ export default function StudentReminderScreen({navigation}) {
   const [sel, setSel] = useState(null); // {id, name}
   const remarksRef = useRef({}); // {studentId: 备注名}
   const rosterRef = useRef({}); // {studentId(学生码): 班级备注名} —— 来自「学生录入」本地班级名单
+  const [rosterList, setRosterList] = useState([]); // [{id, name}] 班级名册，供一键选取
+  const [rosterPickerOpen, setRosterPickerOpen] = useState(false);
   const [pieces, setPieces] = useState([]); // [{name, lines:[]}]
   const [freq, setFreq] = useState(45);
   const [saving, setSaving] = useState(false);
@@ -128,17 +130,28 @@ export default function StudentReminderScreen({navigation}) {
           remarksRef.current = {};
         }
       }
-      // 先读「学生录入」的本地班级名单：这里老师已经给每个学生起了名字 + 学生码。
-      // 和安卓一致——点进来就直接按班级学生的备注名显示，无需再手动补备注。
+      // 先读「学生录入」的本地班级名单；若为空则从服务端班级同步（账号合并后常空）。
       let roster = [];
       try {
         roster = (await listStudents()) || [];
       } catch (e) {
         roster = [];
       }
+      try {
+        const r = await fetchStudents(tid);
+        if (r && r.ok && Array.isArray(r.students) && r.students.length) {
+          roster = (await syncRosterFromServer(r.students)) || roster;
+        }
+      } catch (e) {}
       const rmap = {};
+      const rlist = [];
       roster.forEach(s => {
-        if (s && s.studentId) rmap[s.studentId] = (s.name || '').trim();
+        if (!s) return;
+        const sid = (s.studentId || '').trim();
+        if (!sid) return;
+        const nm = (s.name || '').trim() || sid.slice(-6);
+        rmap[sid] = nm;
+        rlist.push({id: sid, name: nm});
       });
       rosterRef.current = rmap;
 
@@ -149,23 +162,22 @@ export default function StudentReminderScreen({navigation}) {
       // 合并两个来源，按学生码去重：① 本地班级名单（有名字、可能学生还没打开过 App）
       // ② 后台已入班学生。班级名单里的备注名优先，让老师一眼看懂。
       const byId = {};
-      roster.forEach(s => {
-        if (!s || !s.studentId) return; // 没有学生码无法定向下发提醒，跳过
-        byId[s.studentId] = {
-          id: s.studentId,
-          name: (s.name || '').trim() || s.studentId.slice(-6),
-        };
+      rlist.forEach(s => {
+        byId[s.id] = {id: s.id, name: s.name};
       });
       try {
         const r = await fetchStudents(getDeviceId());
         if (r && r.ok && Array.isArray(r.students)) {
           r.students.forEach(s => {
-            byId[s.user_id] = {id: s.user_id, name: displayName(s)};
+            if (!byId[s.user_id]) {
+              byId[s.user_id] = {id: s.user_id, name: displayName(s)};
+            }
           });
         }
       } catch (e) {}
 
       if (alive) {
+        setRosterList(rlist);
         setStudents(Object.values(byId));
         setLoading(false);
       }
@@ -353,6 +365,21 @@ export default function StudentReminderScreen({navigation}) {
             showsVerticalScrollIndicator={false}>
             {/* 选择学生 */}
             <Text style={styles.sectionLabel}>选择学生</Text>
+            <TouchableOpacity
+              style={styles.rosterPickBtn}
+              activeOpacity={0.88}
+              onPress={() => {
+                if (!rosterList.length) {
+                  Alert.alert(
+                    '班级名册为空',
+                    '请先到「我的 → 学生信息录入」添加学生（姓名 + 学号），或等班级管理同步后再来。',
+                  );
+                  return;
+                }
+                setRosterPickerOpen(true);
+              }}>
+              <Text style={styles.rosterPickBtnText}>👥 从班级名册一键选择</Text>
+            </TouchableOpacity>
             <View style={styles.chipWrap}>
               {students.map(s => {
                 const active = sel && sel.id === s.id;
@@ -379,12 +406,12 @@ export default function StudentReminderScreen({navigation}) {
             </View>
             {students.length === 0 ? (
               <Text style={styles.emptyHint}>
-                还没有学生。到「我的 → 学生录入」把学生的姓名 + 学生码加进班级，这里就会直接按姓名显示；
-                或让学生在「AI 陪练模式」里复制学生码，用上面「＋ 学生码」快速录入。
+                还没有学生。点上方「从班级名册一键选择」，或到「学生信息录入」添加后再来；
+                也可让学生在「AI 陪练模式」复制学生码，用「＋ 学生码」录入。
               </Text>
             ) : (
               <Text style={styles.emptyHint}>
-                名单来自「学生录入」的班级名字。看到 id 尾号的是还没录入班级的学生，选中后点「✎ 备注名」给 TA 起个名字即可。
+                点上方按钮可一键从班级名册选人；也可直接点下方姓名芯片。看到 id 尾号的可点「✎ 备注名」起名。
               </Text>
             )}
 
@@ -571,6 +598,47 @@ export default function StudentReminderScreen({navigation}) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 从班级名册一键选择（对齐安卓 pickFromRoster） */}
+      <Modal
+        visible={rosterPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRosterPickerOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, {maxHeight: '70%'}]}>
+            <Text style={styles.modalTitle}>从班级名册选择</Text>
+            <Text style={styles.modalFieldLabel}>点学生姓名即可添加并开始设置陪练重点</Text>
+            <ScrollView style={{maxHeight: 360}} keyboardShouldPersistTaps="handled">
+              {rosterList.map(s => (
+                <TouchableOpacity
+                  key={s.id}
+                  style={styles.rosterRow}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setRosterPickerOpen(false);
+                    setStudents(prev =>
+                      prev.find(x => x.id === s.id) ? prev : [s, ...prev],
+                    );
+                    selectStudent(s);
+                  }}>
+                  <Text style={styles.rosterRowName} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  <Text style={styles.rosterRowId} numberOfLines={1}>
+                    {s.id.length > 12 ? '…' + s.id.slice(-8) : s.id}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.modalBtn, styles.modalBtnGhost, {marginTop: 12, alignSelf: 'stretch'}]}
+              onPress={() => setRosterPickerOpen(false)}>
+              <Text style={[styles.modalBtnGhostText, {textAlign: 'center'}]}>取消</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -587,6 +655,22 @@ const makeStyles = colors =>
       color: colors.textSecondary,
       marginBottom: 8,
     },
+    rosterPickBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    rosterPickBtnText: {fontSize: 15, fontWeight: '700', color: '#fff'},
+    rosterRow: {
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border || '#E5E5EA',
+    },
+    rosterRowName: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
+    rosterRowId: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
     chipWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
     stuChip: {
       paddingHorizontal: 14,

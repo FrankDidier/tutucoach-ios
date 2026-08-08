@@ -63,7 +63,11 @@ const StudentEntryScreen = ({navigation, route}) => {
       Alert.alert('提示', '请输入学生姓名');
       return;
     }
-    const sid = studentId.trim();
+    // 清洗微信粘贴带来的零宽字符 / 异形横线，避免「看起来一样却入班失败」
+    const sid = studentId
+      .trim()
+      .replace(/[\u200b-\u200f\u202a-\u202e\ufeff\u00a0]/g, '')
+      .replace(/[\u2010-\u2015\u2212\uff0d]/g, '-');
     const next = await saveStudent({
       localId: editingId,
       name: name.trim(),
@@ -75,7 +79,11 @@ const StudentEntryScreen = ({navigation, route}) => {
     // 学号填了足够长的学生 ID（≥8，支持尾号）时，顺带在服务端把该学生绑到本老师名下（入班）。
     if (sid.length >= 8) {
       try {
-        const tid = getDeviceId();
+        let tid = getDeviceId();
+        if (!tid) {
+          Alert.alert('提示', '老师账号尚未就绪，请退出重进教师端后再保存一次。');
+          return;
+        }
         await registerAccount(tid, 'teacher');
         const r = await bindTeacher(tid, sid);
         if (r && r.ok) {

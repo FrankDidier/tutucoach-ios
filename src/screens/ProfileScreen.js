@@ -115,13 +115,19 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
-  const onCopyId = () => {
-    const full = userId || '';
-    if (Clipboard && full) {
+  const onCopyId = async () => {
+    const full = userId || getDeviceId() || '';
+    if (!full) {
+      Alert.alert('提示', 'ID 尚未就绪，请稍等两秒再复制');
+      return;
+    }
+    // 复制前再静默注册一次，避免「本机有 ID、服务端还没有」导致老师入班失败。
+    try {
+      await registerAccount(full, 'student');
+    } catch (e) {}
+    if (Clipboard) {
       Clipboard.setString(full);
-      Alert.alert('已复制', '完整 ID 已复制到剪贴板');
-    } else if (!full) {
-      Alert.alert('提示', 'ID 尚未就绪');
+      Alert.alert('已复制', '完整 ID 已复制到剪贴板，发给老师即可加入班级');
     } else {
       Alert.alert('提示', '剪贴板模块未集成（需重新编译）');
     }
