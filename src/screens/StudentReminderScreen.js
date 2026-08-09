@@ -169,10 +169,31 @@ export default function StudentReminderScreen({navigation}) {
         const r = await fetchStudents(getDeviceId());
         if (r && r.ok && Array.isArray(r.students)) {
           r.students.forEach(s => {
-            if (!byId[s.user_id]) {
-              byId[s.user_id] = {id: s.user_id, name: displayName(s)};
+            const uid = s.user_id || '';
+            if (!uid) return;
+            const nick = (s.nickname || '').trim();
+            // 服务端带回的备注名（陪练提示 student_name）写入本地 remarks，跨端一致
+            if (
+              nick &&
+              nick !== uid &&
+              nick !== uid.slice(-6) &&
+              nick !== uid.slice(-8) &&
+              !remarksRef.current[uid]
+            ) {
+              remarksRef.current[uid] = nick;
+            }
+            if (!byId[uid]) {
+              byId[uid] = {id: uid, name: displayName(s)};
+            } else if (nick && (!byId[uid].name || byId[uid].name === uid.slice(-6))) {
+              byId[uid] = {...byId[uid], name: displayName(s)};
             }
           });
+          try {
+            await AsyncStorage.setItem(
+              remarksKey(getDeviceId()),
+              JSON.stringify(remarksRef.current || {}),
+            );
+          } catch (e) {}
         }
       } catch (e) {}
 
@@ -188,7 +209,7 @@ export default function StudentReminderScreen({navigation}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 保存/更新某学生的备注名（本地长期保存 + 立即刷新界面）。
+  // 保存/更新某学生的备注名（本地 + 服务端 student_name，跨端同步）
   const setRemark = (studentId, name) => {
     const clean = (name || '').trim();
     const map = {...remarksRef.current};
@@ -202,6 +223,21 @@ export default function StudentReminderScreen({navigation}) {
     setSel(prev =>
       prev && prev.id === studentId ? {...prev, name: clean || prev.id.slice(-6)} : prev,
     );
+    // 写回服务端：保留已有曲目/频率，只更新 student_name（安卓同步时才能看到备注）
+    (async () => {
+      try {
+        const tid = getDeviceId();
+        const r = await fetchReminders(studentId, tid);
+        const ps = Array.isArray(r.pieces) ? r.pieces : [];
+        await savePieces(
+          tid,
+          studentId,
+          clean || studentId.slice(-6),
+          ps,
+          r.freqSec || 45,
+        );
+      } catch (e) {}
+    })();
   };
 
   const renameStudent = stu => {
@@ -369,7 +405,11 @@ export default function StudentReminderScreen({navigation}) {
               style={styles.rosterPickBtn}
               activeOpacity={0.88}
               onPress={() => {
-                if (!rosterList.length) {
+                // 名册 = 本地录入 ∪ 服务端入班；以前只看 rosterList，服务端有人时按钮会误报「空」
+                const pool = (rosterList && rosterList.length
+                  ? rosterList
+                  : students) || [];
+                if (!pool.length) {
                   Alert.alert(
                     '班级名册为空',
                     '请先到「我的 → 学生信息录入」添加学生（姓名 + 学号），或等班级管理同步后再来。',
@@ -610,7 +650,7 @@ export default function StudentReminderScreen({navigation}) {
             <Text style={styles.modalTitle}>从班级名册选择</Text>
             <Text style={styles.modalFieldLabel}>点学生姓名即可添加并开始设置陪练重点</Text>
             <ScrollView style={{maxHeight: 360}} keyboardShouldPersistTaps="handled">
-              {rosterList.map(s => (
+              {(rosterList.length ? rosterList : students).map(s => (
                 <TouchableOpacity
                   key={s.id}
                   style={styles.rosterRow}
