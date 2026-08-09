@@ -16,6 +16,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {Images} from '../assets/images';
@@ -541,29 +542,42 @@ export default function CompanionScreen({navigation}) {
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
   const bgSource = bgUri ? {uri: bgUri} : Images.companionPhoto;
+  // 必须用窗口像素铺满：部分机型上 Image 会按素材 intrinsic 宽（如 375）排版，
+  // 在 iPhone 16 Pro(393) 等更宽屏右侧露出黑边。
+  const {width: winW, height: winH} = useWindowDimensions();
+  const bgFillStyle = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: winW,
+    height: winH,
+    backgroundColor: '#0B0618',
+  };
 
   return (
     <View style={styles.root}>
       {/* 默认钢琴氛围图；长按可换自己的照片 */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onLongPress={changeBackground}
-        style={StyleSheet.absoluteFill}
-        delayLongPress={450}>
+      <View style={styles.bgLayer} pointerEvents="box-none">
         <Image
           source={bgSource}
           defaultSource={Images.companionPhoto}
-          style={[StyleSheet.absoluteFill, {backgroundColor: '#0B0618'}]}
+          style={bgFillStyle}
           resizeMode="cover"
           onError={() => {
             if (bgUri) setBgUri(null);
           }}
         />
-      </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={1}
+          onLongPress={changeBackground}
+          style={StyleSheet.absoluteFill}
+          delayLongPress={450}
+        />
+      </View>
       {/* 纵向渐变遮罩：底栏可读 */}
       <Image
         source={Images.companionScrim}
-        style={styles.scrim}
+        style={[styles.scrim, {width: winW, height: winH}]}
         resizeMode="stretch"
         pointerEvents="none"
       />
@@ -668,8 +682,16 @@ export default function CompanionScreen({navigation}) {
 
 const makeStyles = colors =>
   StyleSheet.create({
-  root: {flex: 1, backgroundColor: '#222'},
-  scrim: {...StyleSheet.absoluteFillObject, width: '100%', height: '100%'},
+  root: {flex: 1, backgroundColor: '#0B0618', overflow: 'hidden'},
+  bgLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
   safe: {flex: 1},
   kav: {flex: 1},
   topBar: {

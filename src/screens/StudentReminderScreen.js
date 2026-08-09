@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {getItem, setItem} from '../services/storage';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
@@ -116,6 +117,19 @@ export default function StudentReminderScreen({navigation}) {
       remarksRef.current = {};
     }
   };
+
+  
+  // QA audit: one-shot open roster picker (verify_open_roster=1)
+  useEffect(() => {
+    (async () => {
+      try {
+        if ((await getItem('verify_open_roster')) === '1') {
+          await setItem('verify_open_roster', '');
+          setRosterPickerOpen(true);
+        }
+      } catch (e) {}
+    })();
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -691,7 +705,7 @@ export default function StudentReminderScreen({navigation}) {
               ))}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.modalBtn, styles.modalBtnGhost, styles.rosterModalCancel]}
+              style={[styles.rosterModalCancelBtn]}
               onPress={() => setRosterPickerOpen(false)}>
               <Text style={[styles.modalBtnGhostText, {textAlign: 'center'}]}>取消</Text>
             </TouchableOpacity>
@@ -850,6 +864,16 @@ const makeStyles = colors =>
     rosterModalList: {
       maxHeight: 280,
       marginTop: 4,
+    },
+    // 单独一列里不要用 modalBtn 的 flex:1，否则高度被压成 0，取消键看不见
+    rosterModalCancelBtn: {
+      marginTop: 12,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: colors.bg,
     },
     rosterModalCancel: {
       marginTop: 12,
