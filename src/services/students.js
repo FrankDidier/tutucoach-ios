@@ -58,19 +58,14 @@ export async function syncRosterFromServer(serverStudents) {
   let changed = false;
   for (const s of serverStudents || []) {
     const uid = (s.user_id || s.id || '').trim();
-    if (!uid) continue;
-    const nick = (s.nickname || s.name || '').trim();
-    if (!nick || nick === uid.slice(-6)) continue;
+    if (!uid || uid.length < 6) continue;
+    let nick = (s.nickname || s.name || '').trim();
+    if (!nick || nick === uid) {
+      nick = uid.slice(-6);
+    }
     const key = norm(uid);
     if (bySid.has(key)) continue;
-    let hit = false;
-    for (const [k] of bySid) {
-      if (uid.endsWith(k) || k.endsWith(uid.slice(-8))) {
-        hit = true;
-        break;
-      }
-    }
-    if (hit) continue;
+    // 不再做后缀模糊跳过：会把新 UUID 误判成已有短学号。
     const row = {
       localId: `${Date.now()}_${uid.slice(-6)}`,
       name: nick,
