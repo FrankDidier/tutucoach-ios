@@ -418,7 +418,7 @@ export default function StudentReminderScreen({navigation}) {
                 }
                 setRosterPickerOpen(true);
               }}>
-              <Text style={styles.rosterPickBtnText}>👥 从班级名册一键选择</Text>
+              <Text style={styles.rosterPickBtnText}>从班级名册一键选择</Text>
             </TouchableOpacity>
             <View style={styles.chipWrap}>
               {students.map(s => {
@@ -645,11 +645,30 @@ export default function StudentReminderScreen({navigation}) {
         transparent
         animationType="fade"
         onRequestClose={() => setRosterPickerOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, {maxHeight: '70%'}]}>
-            <Text style={styles.modalTitle}>从班级名册选择</Text>
-            <Text style={styles.modalFieldLabel}>点学生姓名即可添加并开始设置陪练重点</Text>
-            <ScrollView style={{maxHeight: 360}} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setRosterPickerOpen(false)}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={[styles.modalCard, styles.rosterModalCard]}>
+            <View style={styles.rosterModalHeader}>
+              <Text style={styles.modalTitle}>从班级名册选择</Text>
+              <TouchableOpacity
+                onPress={() => setRosterPickerOpen(false)}
+                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                accessibilityLabel="关闭">
+                <Text style={styles.rosterModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalFieldLabel}>
+              点学生姓名即可添加并开始设置陪练重点；也可点「取消」或空白处返回
+            </Text>
+            <ScrollView
+              style={styles.rosterModalList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator>
               {(rosterList.length ? rosterList : students).map(s => (
                 <TouchableOpacity
                   key={s.id}
@@ -672,12 +691,12 @@ export default function StudentReminderScreen({navigation}) {
               ))}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.modalBtn, styles.modalBtnGhost, {marginTop: 12, alignSelf: 'stretch'}]}
+              style={[styles.modalBtn, styles.modalBtnGhost, styles.rosterModalCancel]}
               onPress={() => setRosterPickerOpen(false)}>
               <Text style={[styles.modalBtnGhostText, {textAlign: 'center'}]}>取消</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -812,6 +831,29 @@ const makeStyles = colors =>
       backgroundColor: colors.card,
       borderRadius: 16,
       padding: 18,
+    },
+    rosterModalCard: {
+      maxHeight: '72%',
+    },
+    rosterModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    rosterModalClose: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      paddingHorizontal: 4,
+    },
+    rosterModalList: {
+      maxHeight: 280,
+      marginTop: 4,
+    },
+    rosterModalCancel: {
+      marginTop: 12,
+      alignSelf: 'stretch',
     },
     modalTitle: {
       fontSize: 17,

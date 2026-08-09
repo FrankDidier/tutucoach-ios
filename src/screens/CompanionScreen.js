@@ -183,7 +183,20 @@ export default function CompanionScreen({navigation}) {
       await reloadCoach();
       try {
         const customBg = await getCompanionBgUri();
-        if (aliveRef.current && customBg) setBgUri(customBg);
+        if (!aliveRef.current || !customBg) return;
+        // 自定义图失效（卸载/权限）时回退默认钢琴图，避免黑屏/空白
+        Image.getSize(
+          customBg,
+          () => {
+            if (aliveRef.current) setBgUri(customBg);
+          },
+          async () => {
+            try {
+              await setCompanionBgUri(null);
+            } catch (e) {}
+            if (aliveRef.current) setBgUri(null);
+          },
+        );
       } catch (e) {}
 
       const von = await isVoiceEnabled();
@@ -539,8 +552,12 @@ export default function CompanionScreen({navigation}) {
         delayLongPress={450}>
         <Image
           source={bgSource}
+          defaultSource={Images.companionPhoto}
           style={[StyleSheet.absoluteFill, {backgroundColor: '#0B0618'}]}
           resizeMode="cover"
+          onError={() => {
+            if (bgUri) setBgUri(null);
+          }}
         />
       </TouchableOpacity>
       {/* 纵向渐变遮罩：底栏可读 */}
