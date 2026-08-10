@@ -64,6 +64,7 @@ export default function CompanionScreen({navigation}) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [coachName, setCoachName] = useState('专业老师');
   const [avatarUri, setAvatarUri] = useState(null);
+  const [avatarBgFailed, setAvatarBgFailed] = useState(false);
   const [bgUri, setBgUri] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -155,13 +156,20 @@ export default function CompanionScreen({navigation}) {
           // 预加载完成后再切换，避免进页先粉兔/空底再闪成立绘
           Image.prefetch(uri)
             .then(() => {
-              if (aliveRef.current) setAvatarUri(uri);
+              if (aliveRef.current) {
+                setAvatarUri(uri);
+                setAvatarBgFailed(false);
+              }
             })
             .catch(() => {
-              if (aliveRef.current) setAvatarUri(uri);
+              if (aliveRef.current) {
+                setAvatarUri(uri);
+                setAvatarBgFailed(false);
+              }
             });
         } else if (aliveRef.current) {
           setAvatarUri(null);
+          setAvatarBgFailed(false);
         }
       }
     } catch (e) {}
@@ -527,7 +535,7 @@ export default function CompanionScreen({navigation}) {
     ];
     if (bgUri) {
       buttons.push({
-        text: '恢复默认',
+        text: '恢复角色背景',
         onPress: async () => {
           await setCompanionBgUri(null);
           setBgUri(null);
@@ -535,15 +543,24 @@ export default function CompanionScreen({navigation}) {
       });
     }
     buttons.push({text: '取消', style: 'cancel'});
-    Alert.alert('陪练背景', '可换成自己喜欢的照片，长按背景也可再改。', buttons);
+    Alert.alert(
+      '陪练背景',
+      '默认同所选 AI 分身照片；也可换成自己喜欢的图，长按背景可再改。',
+      buttons,
+    );
   };
 
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
-  const bgSource = bgUri ? {uri: bgUri} : Images.companionPhoto;
+  const bgSource = bgUri
+    ? {uri: bgUri}
+    : avatarUri && !avatarBgFailed
+      ? {uri: avatarUri}
+      : Images.companionPhoto;
   // 必须用窗口像素铺满：部分机型上 Image 会按素材 intrinsic 宽（如 375）排版，
   // 在 iPhone 16 Pro(393) 等更宽屏右侧露出黑边。
+  // 无自定义背景时，自动用当前 AI 分身照片（与旧版安卓一致）。
   const {width: winW, height: winH} = useWindowDimensions();
   const bgFillStyle = {
     position: 'absolute',
@@ -565,6 +582,7 @@ export default function CompanionScreen({navigation}) {
           resizeMode="cover"
           onError={() => {
             if (bgUri) setBgUri(null);
+            else setAvatarBgFailed(true);
           }}
         />
         <TouchableOpacity
