@@ -577,20 +577,24 @@ export default function CompanionScreen({navigation}) {
       {/* 默认钢琴氛围图；长按可换自己的照片 */}
       <View style={styles.bgLayer} pointerEvents="box-none">
         <Image
+          key={bgUri || (avatarUri && !avatarBgFailed ? avatarUri : 'piano')}
           source={bgSource}
           defaultSource={Images.companionPhoto}
           style={bgFillStyle}
           resizeMode="cover"
           onError={() => {
+            // 自定义图失败才清；角色图失败仅退回钢琴，保留顶部小头像
             if (bgUri) setBgUri(null);
-            else setAvatarBgFailed(true);
+            else if (avatarUri && !avatarBgFailed) setAvatarBgFailed(true);
           }}
         />
+        {/* 仅长按换背景：不拦截点击，避免挡住聊天/节拍器 */}
         <TouchableOpacity
           activeOpacity={1}
           onLongPress={changeBackground}
           style={StyleSheet.absoluteFill}
           delayLongPress={450}
+          pointerEvents="box-only"
         />
       </View>
       {/* 纵向渐变遮罩：底栏可读 */}
