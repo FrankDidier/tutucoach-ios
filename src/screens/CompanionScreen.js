@@ -192,20 +192,21 @@ export default function CompanionScreen({navigation}) {
       await reloadCoach();
       try {
         const customBg = await getCompanionBgUri();
-        if (!aliveRef.current || !customBg) return;
-        // 自定义图失效（卸载/权限）时回退默认钢琴图，避免黑屏/空白
-        Image.getSize(
-          customBg,
-          () => {
-            if (aliveRef.current) setBgUri(customBg);
-          },
-          async () => {
-            try {
-              await setCompanionBgUri(null);
-            } catch (e) {}
-            if (aliveRef.current) setBgUri(null);
-          },
-        );
+        // 注意：无自定义背景时不能 return——否则会跳过开场问候/主动陪伴，页面像死机。
+        if (aliveRef.current && customBg) {
+          Image.getSize(
+            customBg,
+            () => {
+              if (aliveRef.current) setBgUri(customBg);
+            },
+            async () => {
+              try {
+                await setCompanionBgUri(null);
+              } catch (e) {}
+              if (aliveRef.current) setBgUri(null);
+            },
+          );
+        }
       } catch (e) {}
 
       const von = await isVoiceEnabled();
