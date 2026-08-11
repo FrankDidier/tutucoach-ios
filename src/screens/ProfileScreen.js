@@ -151,8 +151,8 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
-  // 列表只展示尾号；点复制会复制完整 ID（老师入班必须用完整 ID）。
-  const idText = userId ? `尾号:${userId.slice(-8)}` : 'ID:----';
+  // 蓝湖展示「ID:…」；列表只展示尾号，点复制仍复制完整 ID（老师入班必须用完整 ID）。
+  const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
 
   const MenuRow = ({icon, label, onPress, last}) => (
     <TouchableOpacity
@@ -285,13 +285,12 @@ const makeStyles = (colors, dark) =>
       paddingHorizontal: 15,
       paddingTop: 8,
     },
-    // 标题 我的 18/600，左边距 30（页边距 15 + 15）
+    // 蓝湖「我的」@(15,54) 18/600 — 与 scroll paddingHorizontal:15 对齐，勿再加 marginLeft
     screenTitle: {
       fontSize: 18,
       fontWeight: '600',
       color: colors.textPrimary,
       alignSelf: 'flex-start',
-      marginLeft: 15,
       marginBottom: 16,
     },
     icpBeian: {

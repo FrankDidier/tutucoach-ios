@@ -60,6 +60,13 @@ export const Images = {
   // AI 选择页顶部背景（蓝湖 1:1）
   aiselectTopDark: require('./img/aiselect_top_dark.png'),
   aiselectTopLight: require('./img/aiselect_top_light.png'),
+  // AI 分身列表（蓝湖 ai设置）
+  ailistTopDark: require('./img/ailist_top_dark.png'),
+  ailistTopLight: require('./img/ailist_top_light.png'),
+  ailistEditDark: require('./img/ailist_edit_dark.png'),
+  ailistEditLight: require('./img/ailist_edit_light.png'),
+  ailistDeleteDark: require('./img/ailist_delete_dark.png'),
+  ailistDeleteLight: require('./img/ailist_delete_light.png'),
   pointsCard: require('./img/bg_points_card_img.png'),
   cardHeaderGradient: require('./img/bg_card_header_gradient.png'),
   detectHeaderLight: require('./img/bg_detect_header_light.png'),
@@ -90,6 +97,8 @@ export const Images = {
   companionHeart: require('./img/ic_companion_heart_dark.png'), // 兼容旧引用
   // 班级管理：学生列表紫色学士帽图标（1:1 蓝湖）
   studentListCap: require('./img/ic_student_list_cap.png'),
+  classVipDark: require('./img/class_vip_dark.png'),
+  classVipLight: require('./img/class_vip_light.png'),
   // 练琴大字水印（1:1 蓝湖，Arial Black + 精确渐变）：
   //   MUSIC 深色=空心描边(白0.3→0)，浅色=白0.2填充+描边(白1→0)
   //   CHAT  两主题一致=竖向渐变填充(白1→0) @不透明度0.6

@@ -559,11 +559,7 @@ const AISettingsScreen = ({navigation, route}) => {
                   style={StyleSheet.absoluteFill}
                 />
                 <Text style={styles.saveBtnText}>
-                  {saving
-                    ? '保存中…'
-                    : mode === 'dark'
-                      ? '保存提交'
-                      : '保存'}
+                  {saving ? '保存中…' : '保存提交'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -698,11 +694,12 @@ const makeStyles = colors =>
       color: colors.textPrimary,
       textAlignVertical: 'top',
     },
-    footerRow: {flexDirection: 'row', gap: 12, marginTop: 22},
+    footerRow: {flexDirection: 'row', gap: 15, marginTop: 22},
+    // 蓝湖双钮各 165×44
     deleteBtn: {
-      width: 110,
-      height: 50,
-      borderRadius: 25,
+      flex: 1,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: colors.cardAlt,
       alignItems: 'center',
       justifyContent: 'center',
@@ -710,13 +707,13 @@ const makeStyles = colors =>
     deleteBtnText: {color: colors.textPrimary, fontSize: 14, fontWeight: '600'},
     saveBtnOuter: {
       flex: 1,
-      height: 50,
-      borderRadius: 25,
+      height: 44,
+      borderRadius: 22,
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+    saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '600'},
   });
 
 export default AISettingsScreen;

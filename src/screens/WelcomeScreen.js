@@ -179,7 +179,7 @@ const WelcomeScreen = ({navigation}) => {
         </View>
 
         <Text style={styles.welcomeCaption}>
-          欢迎使用全球第一款AI手型陪练软件
+          欢迎使用全球第一款智能手型检测软件
         </Text>
 
         <View style={styles.footer}>

@@ -439,9 +439,13 @@ const ClassManageScreen = ({navigation}) => {
           <View style={styles.nameRow}>
             <Text style={styles.studentName}>{item.name}</Text>
             {item.isVip ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>V</Text>
-              </View>
+              <Image
+                source={
+                  colors.mode === 'dark' ? Images.classVipDark : Images.classVipLight
+                }
+                style={styles.vipIcon}
+                resizeMode="contain"
+              />
             ) : null}
             {item.pending ? (
               <View style={styles.pendingBadge}>
@@ -485,13 +489,16 @@ const ClassManageScreen = ({navigation}) => {
       <ScreenHeader title="班级管理" onBack={() => navigation?.goBack?.()} />
 
       <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="搜索学生"
-          placeholderTextColor={colors.textSecondary}
-          value={query}
-          onChangeText={setQuery}
-        />
+        <View style={styles.searchShell}>
+          <Text style={styles.searchGlyph}>⌕</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="搜索学生"
+            placeholderTextColor={colors.textSecondary}
+            value={query}
+            onChangeText={setQuery}
+          />
+        </View>
       </View>
 
       {/* 练琴时长区间：产品功能，始终展示（蓝湖稿无此行，但业务需要） */}
@@ -547,19 +554,32 @@ const makeStyles = colors =>
       backgroundColor: colors.bg,
     },
     searchBar: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 15,
       paddingTop: 12,
       paddingBottom: 8,
     },
-    searchInput: {
-      height: 42,
-      borderRadius: 21,
+    searchShell: {
+      height: 44,
+      borderRadius: 22,
       backgroundColor: colors.inputBg,
-      paddingHorizontal: 16,
-      fontSize: 14,
-      color: colors.textPrimary,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardAlt,
+    },
+    searchGlyph: {
+      fontSize: 18,
+      color: colors.textMuted,
+      marginRight: 8,
+      marginTop: -1,
+    },
+    searchInput: {
+      flex: 1,
+      height: 44,
+      fontSize: 15,
+      color: colors.textPrimary,
+      paddingVertical: 0,
     },
     rangeRow: {
       flexDirection: 'row',
@@ -599,12 +619,12 @@ const makeStyles = colors =>
       marginRight: 6,
     },
     listHeader: {
-      fontSize: 15,
-      fontWeight: '700',
+      fontSize: 16,
+      fontWeight: '600',
       color: colors.textPrimary,
     },
     list: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 15,
       paddingBottom: 24,
     },
     emptyHint: {
@@ -620,6 +640,7 @@ const makeStyles = colors =>
       borderRadius: 16,
       padding: 14,
       marginBottom: 10,
+      minHeight: 120,
       borderWidth: colors.mode === 'dark' ? 1 : 0,
       borderColor: colors.cardBorder,
       shadowColor: '#000',
@@ -649,9 +670,13 @@ const makeStyles = colors =>
       gap: 6,
     },
     studentName: {
-      fontSize: 16,
-      fontWeight: '700',
+      fontSize: 15,
+      fontWeight: '600',
       color: colors.textPrimary,
+    },
+    vipIcon: {
+      width: 18,
+      height: 18,
     },
     badge: {
       width: 20,

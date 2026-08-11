@@ -48,6 +48,8 @@ function stripParentheticals(s) {
 }
 import {
   getSelectedCoachId,
+  getCachedCoachAvatarUri,
+  setCachedCoachAvatarUri,
   profileById,
   isVoiceEnabled,
 } from '../services/coachPrefs';
@@ -123,24 +125,32 @@ export default function CompanionScreen({navigation}) {
   };
 
   // 读取当前所选 AI 分身（名称 / 头像背景 / 音色）。初始化和「切换分身」返回后都会调用。
-  const reloadCoach = async () => {
+  // 策略：先同步本地 id + 缓存头像 URL（瞬时出图），再后台拉服务器刷新（不挡开场）。
+  const reloadCoach = async ({blocking = false} = {}) => {
     const id = await getSelectedCoachId();
     const base = profileById(id);
     coachIdRef.current = id;
     profileRef.current = base;
     if (aliveRef.current) {
       setCoachName(base.displayName || '专业老师');
-      // 不先清空头像：默认立绘立刻显示，远程图 prefetch 完成后再无缝替换（对齐安卓瞬时背景）
     }
-    // 覆盖为后台老师自定义资料（头像 / 音色 / 招呼语）。
+    // 瞬时：用上次成功的头像 URL 铺背景（第二次及以后进陪练不再「等一下才出图」）
     try {
-      const res = await fetchCoaches();
-      const list = (res && (res.coaches || res.data)) || [];
-      const sc = list.find(c => c.id === id);
-      if (aliveRef.current && sc) {
+      const cached = await getCachedCoachAvatarUri(id);
+      if (aliveRef.current && cached) {
+        setAvatarUri(cached);
+        setAvatarBgFailed(false);
+      }
+    } catch (e) {}
+
+    const refreshFromServer = async () => {
+      try {
+        const res = await fetchCoaches();
+        const list = (res && (res.coaches || res.data)) || [];
+        const sc = list.find(c => c.id === id);
+        if (!aliveRef.current || !sc) return;
         profileRef.current = {
           ...base,
-          // 自定义分身必须保留后台真实 id，否则 TTS 会退回 coach_pro 的预设音色。
           id: sc.id || id || base.id,
           displayName: sc.name || base.displayName,
           greeting: sc.greeting || base.greeting,
@@ -153,15 +163,13 @@ export default function CompanionScreen({navigation}) {
           const uri = /^https?:/.test(sc.avatarUrl)
             ? sc.avatarUrl
             : BASE_URL + sc.avatarUrl;
-          // 预加载完成后再切换，避免进页先粉兔/空底再闪成立绘
+          try {
+            await setCachedCoachAvatarUri(id, uri);
+          } catch (e) {}
+          // 预热后切换；已缓存同图时 RN 会命中磁盘/内存，几乎瞬时
           Image.prefetch(uri)
-            .then(() => {
-              if (aliveRef.current) {
-                setAvatarUri(uri);
-                setAvatarBgFailed(false);
-              }
-            })
-            .catch(() => {
+            .catch(() => {})
+            .finally(() => {
               if (aliveRef.current) {
                 setAvatarUri(uri);
                 setAvatarBgFailed(false);
@@ -171,8 +179,14 @@ export default function CompanionScreen({navigation}) {
           setAvatarUri(null);
           setAvatarBgFailed(false);
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    };
+
+    if (blocking) {
+      await refreshFromServer();
+    } else {
+      refreshFromServer();
+    }
   };
 
   // ============ 初始化 ============
@@ -189,23 +203,13 @@ export default function CompanionScreen({navigation}) {
     } catch (e) {}
     (async () => {
       studentIdRef.current = getDeviceId();
-      await reloadCoach();
+      // 非阻塞：本地 id + 缓存头像立刻铺上；服务器刷新在后台
+      await reloadCoach({blocking: false});
       try {
         const customBg = await getCompanionBgUri();
-        // 注意：无自定义背景时不能 return——否则会跳过开场问候/主动陪伴，页面像死机。
+        // 自定义背景立刻 set，勿等 Image.getSize（会拖慢首屏）
         if (aliveRef.current && customBg) {
-          Image.getSize(
-            customBg,
-            () => {
-              if (aliveRef.current) setBgUri(customBg);
-            },
-            async () => {
-              try {
-                await setCompanionBgUri(null);
-              } catch (e) {}
-              if (aliveRef.current) setBgUri(null);
-            },
-          );
+          setBgUri(customBg);
         }
       } catch (e) {}
 
@@ -262,7 +266,7 @@ export default function CompanionScreen({navigation}) {
       if (focusCountRef.current <= 1) return;
       aliveRef.current = true;
       pausedRef.current = false;
-      reloadCoach();
+      reloadCoach({blocking: false});
     });
     // 离开本页（去选分身页）时暂停主动陪聊并停掉正在播的语音，避免在选择页说话。
     const unsubBlur = navigation.addListener('blur', () => {
@@ -577,7 +581,6 @@ export default function CompanionScreen({navigation}) {
       {/* 默认钢琴氛围图；长按可换自己的照片 */}
       <View style={styles.bgLayer} pointerEvents="box-none">
         <Image
-          key={bgUri || (avatarUri && !avatarBgFailed ? avatarUri : 'piano')}
           source={bgSource}
           defaultSource={Images.companionPhoto}
           style={bgFillStyle}
@@ -627,10 +630,8 @@ export default function CompanionScreen({navigation}) {
             </Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
-          <TouchableOpacity onPress={changeBackground} style={styles.iconCircle}>
-            <Text style={styles.bgBtnText}>背景</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={showMyCode} style={[styles.iconCircle, {marginLeft: 10}]}>
+          {/* 蓝湖仅「学生码 + 音量」；换背景走长按背景图（见上方） */}
+          <TouchableOpacity onPress={showMyCode} style={styles.iconCircle}>
             <Image source={Images.companionCode} style={styles.headerIcon} resizeMode="contain" />
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleMute} style={[styles.iconCircle, {marginLeft: 10}]}>
@@ -759,39 +760,41 @@ const makeStyles = colors =>
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
-  bubbleAi: {alignSelf: 'flex-start', backgroundColor: 'rgba(26,26,26,0.88)'},
+  // 蓝湖气泡正文 13；AI 底 #1A1A1A
+  bubbleAi: {alignSelf: 'flex-start', backgroundColor: '#1A1A1A'},
   bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
-  bubbleAiText: {color: '#fff', fontSize: 15, lineHeight: 22},
-  bubbleUserText: {color: '#fff', fontSize: 15, lineHeight: 22},
+  bubbleAiText: {color: '#fff', fontSize: 13, lineHeight: 20},
+  bubbleUserText: {color: '#fff', fontSize: 13, lineHeight: 20},
   metro: {marginBottom: 10, marginHorizontal: 14},
   inputBar: {
     backgroundColor: 'transparent',
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     paddingVertical: 10,
   },
+  // 蓝湖输入壳 345×40（屏宽缩放由外层 padding 承担）
   inputShell: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 22,
+    borderRadius: 20,
     paddingLeft: 18,
-    paddingRight: 8,
-    minHeight: 44,
+    paddingRight: 6,
+    height: 40,
   },
   input: {
     flex: 1,
     maxHeight: 100,
-    paddingVertical: 10,
+    paddingVertical: 0,
     paddingRight: 8,
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnDisabled: {opacity: 0.4},
-  sendIcon: {width: 26, height: 26},
+  sendIcon: {width: 28, height: 28},
   });

@@ -737,7 +737,7 @@ const DetectionScreen = ({navigation, route}) => {
       />
       <SafeAreaView style={styles.safe}>
       <ScreenHeader
-        title={premium ? 'AI手型陪练' : '智能手型检测'}
+        title={premium ? '智能AI陪练' : '手型检测'}
         onBack={handleBack}
         onTitleLongPress={() => setShowSettings(true)}
         variant="detect"
@@ -1413,8 +1413,8 @@ const makeStyles = (colors, mode) =>
     paddingTop: 8,
   },
   ctaOuter: {
-    height: 52,
-    borderRadius: 26,
+    height: 44,
+    borderRadius: 22,
     overflow: 'hidden',
     justifyContent: 'center',
   },

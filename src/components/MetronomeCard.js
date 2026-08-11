@@ -99,10 +99,10 @@ export default function MetronomeCard({style, variant = 'companion'}) {
         backgroundColor: '#FFFFFF',
         borderColor: 'rgba(240,59,97,0.2)',
       }
-    : detect
+      : detect
       ? {
-          backgroundColor: 'rgba(26,26,26,0.6)',
-          borderColor: 'rgba(255,255,255,0.1)',
+          backgroundColor: '#131444',
+          borderColor: 'transparent',
         }
       : null;
   const titleColor = detectLight ? '#1A1A1A' : '#fff';
@@ -110,11 +110,11 @@ export default function MetronomeCard({style, variant = 'companion'}) {
     ? detectAccent
     : 'rgba(255,255,255,0.7)';
   const bpmColor = detect ? detectAccent : '#fff';
-  // 蓝湖连续轨道：detect 浅粉 / 深半透明；companion 深半透明条
+  // 蓝湖连续轨道：detect 浅粉 / t1 紫 10%；companion 深半透明条
   const trackTone = detectLight
     ? {backgroundColor: '#FFE1E8'}
     : detect
-      ? {backgroundColor: 'rgba(255,255,255,0.1)'}
+      ? {backgroundColor: 'rgba(181,149,255,0.1)'}
       : {backgroundColor: 'rgba(0,0,0,0.28)'};
   const circleTone = detect
     ? {
@@ -258,8 +258,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   bpm: {
-    fontSize: 26,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#fff',
     textAlign: 'center',
     minWidth: 52,

@@ -236,12 +236,16 @@ const makeStyles = (colors, dark) =>
       borderWidth: 1.5,
       borderColor: dark ? colors.cardBorder : '#EEE',
     },
-    planCardSelected: {borderColor: colors.primary, borderWidth: 2, backgroundColor: dark ? colors.cardAlt : colors.card},
+    planCardSelected: {
+      borderColor: colors.primary,
+      borderWidth: 2,
+      backgroundColor: dark ? colors.cardAlt : '#FFF5F7',
+    },
     planName: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
     originalPrice: {fontSize: 12, color: '#A6A6A6', textDecorationLine: 'line-through', marginTop: 4},
     priceRow: {flexDirection: 'row', alignItems: 'flex-end', marginTop: 4},
-    priceCurrency: {fontSize: 15, fontWeight: '600', color: '#A6A6A6', marginBottom: 3},
-    priceValue: {fontSize: 22, fontWeight: '600', color: '#A6A6A6'},
+    priceCurrency: {fontSize: 15, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216', marginBottom: 3},
+    priceValue: {fontSize: 22, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216'},
     priceOn: {color: colors.primary},
     agreementRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(22)},
     checkbox: {
@@ -260,7 +264,7 @@ const makeStyles = (colors, dark) =>
     agreementText: {flex: 1, fontSize: 12, color: colors.textPrimary},
     agreementLink: {color: colors.primary},
     footerSafe: {position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 15, paddingBottom: 8},
-    purchaseOuter: {height: 52, borderRadius: 26, overflow: 'hidden', justifyContent: 'center', alignItems: 'center'},
+    purchaseOuter: {height: px(44), borderRadius: px(22), overflow: 'hidden', justifyContent: 'center', alignItems: 'center'},
     purchaseBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   });
 

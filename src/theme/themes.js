@@ -31,11 +31,11 @@ export const lightColors = {
   cardBorder: '#F0DCE2',
   inputBg: '#F7F7F7',
 
-  // 主色（粉）— CTA 竖向 #FF3761→#FF7797；强调 #FF355F
+  // 主色（粉）— CTA 竖向 #FF7A9A→#FF355F（蓝湖会员/确认按钮）
   primary: '#FF355F',
   primaryDark: '#FF3761',
-  primaryGradientStart: '#FF3761',
-  primaryGradientEnd: '#FF7797',
+  primaryGradientStart: '#FF7A9A',
+  primaryGradientEnd: '#FF355F',
   onPrimary: '#FFFFFF',
   accent: '#FF5F83',
 

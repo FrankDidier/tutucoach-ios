@@ -9,6 +9,7 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
@@ -26,9 +27,8 @@ const PracticeScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
-  // MUSIC / CHAT 大字水印现为 Arial Black 精确渐变贴图（wm_music_*/wm_chat），不再用文本着色。
-  // 磁贴内 VIP/FREE 水印已烘焙进贴图。
-  const innerRow = dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,120,150,0.08)';
+  // 蓝湖 练琴_t1 矩形965：rgba(181,149,255,0.1)；t2 为浅紫→白渐变（见下方 LinearGradient）
+  const companionRowBg = dark ? 'rgba(181,149,255,0.1)' : 'transparent';
 
   return (
     <View style={styles.root}>
@@ -46,7 +46,7 @@ const PracticeScreen = ({navigation}) => {
       />
 
       <SafeAreaView style={styles.safe}>
-        {/* 导航标题 练琴：18/600，左边距 30 */}
+        {/* 导航标题 练琴：18/600，蓝湖 x=15 */}
         <Text style={styles.screenTitle}>练琴</Text>
 
         {/* 顶部问候区：左文案 + 右上角兔子（216x217，压住卡片顶部缺口） */}
@@ -95,7 +95,7 @@ const PracticeScreen = ({navigation}) => {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Detection', {premium: true})}>
               <Image source={dark ? Images.practiceTileVipDark : Images.practiceTileVipLight} style={styles.tileImg} resizeMode="stretch" />
-              <Text style={styles.tileTitle}>AI手型陪练</Text>
+              <Text style={styles.tileTitle}>智能AI陪练</Text>
               <Text style={styles.tileSub}>会员专属</Text>
             </TouchableOpacity>
 
@@ -105,15 +105,24 @@ const PracticeScreen = ({navigation}) => {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Detection', {premium: false})}>
               <Image source={dark ? Images.practiceTileFreeDark : Images.practiceTileFreeLight} style={styles.tileImg} resizeMode="stretch" />
-              <Text style={styles.tileTitle}>智能手型检测</Text>
-              <Text style={styles.tileSub}>免费检测</Text>
+              <Text style={[styles.tileTitle, styles.tileTitleFree]}>智能手型检测</Text>
+              <Text style={[styles.tileSub, styles.tileSubFree]}>免费检测</Text>
             </TouchableOpacity>
 
-            {/* AI陪练模式 行 (卡内下部) */}
+            {/* AI陪练模式 行：蓝湖 (30,456) 315×100 → 卡内 (15,188) */}
             <TouchableOpacity
-              style={[styles.companionRow, {backgroundColor: innerRow}]}
+              style={[styles.companionRow, dark && {backgroundColor: companionRowBg}]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Companion')}>
+              {!dark && (
+                <LinearGradient
+                  colors={['#F9EFFF', '#FFFFFF']}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+              )}
               <Image
                 source={dark ? Images.wmChat : Images.wmChatLight}
                 style={styles.chatWatermark}
@@ -125,7 +134,7 @@ const PracticeScreen = ({navigation}) => {
                 style={styles.chatHeart}
                 resizeMode="contain"
               />
-              <Text style={styles.companionTitle}>AI陪伴模式</Text>
+              <Text style={styles.companionTitle}>AI陪练模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
             </TouchableOpacity>
           </View>
@@ -143,21 +152,33 @@ const makeStyles = (colors, dark) =>
       fontSize: 18,
       fontWeight: '600',
       color: colors.textPrimary,
-      marginTop: 8,
-      marginLeft: 30,
-      marginBottom: 4,
+      marginTop: px(8),
+      marginLeft: px(15),
+      marginBottom: px(4),
+      lineHeight: px(25),
     },
     // 兔子 216x217 在 (159,89)；hero 高度容纳兔子并让文案居左。
     hero: {
       position: 'relative',
       height: px(200),
-      paddingLeft: 24,
+      paddingLeft: px(24),
     },
     heroCopy: {marginTop: px(52), maxWidth: px(200)},
     heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
-    heroLine1: {fontSize: 24, fontWeight: '600', color: colors.textPrimary},
+    heroLine1: {
+      fontSize: 24,
+      fontWeight: '600',
+      lineHeight: px(38),
+      color: colors.textPrimary,
+    },
     heroSparkle: {width: px(24), height: px(24), marginLeft: px(8)},
-    heroLine2: {fontSize: 20, fontWeight: '600', color: colors.textPrimary, marginTop: 6},
+    heroLine2: {
+      fontSize: 20,
+      fontWeight: '600',
+      lineHeight: px(38),
+      color: colors.textPrimary,
+      marginTop: 0,
+    },
     mascot: {
       position: 'absolute',
       top: px(-8),
@@ -181,15 +202,21 @@ const makeStyles = (colors, dark) =>
       height: px(CARD_H),
       zIndex: 1,
     },
+    // 蓝湖 tuzi (31,281)→卡内 (16,13)；图标 20×20
     selLabelRow: {
       position: 'absolute',
-      left: px(26),
-      top: px(8),
+      left: px(16),
+      top: px(13),
       flexDirection: 'row',
       alignItems: 'center',
     },
-    selIcon: {width: px(18), height: px(18), marginRight: px(6)},
-    selLabel: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
+    selIcon: {width: px(20), height: px(20), marginRight: px(5)},
+    selLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      lineHeight: px(26),
+      color: colors.textPrimary,
+    },
     tile: {
       position: 'absolute',
       top: px(48),
@@ -209,23 +236,27 @@ const makeStyles = (colors, dark) =>
       top: px(10),
       fontSize: 15,
       fontWeight: '600',
+      lineHeight: px(24),
       color: colors.textPrimary,
     },
+    // 免费磁贴标题：蓝湖卡内 x=190 → tile(180)+10
+    tileTitleFree: {left: px(10)},
     tileSub: {
       position: 'absolute',
       left: px(12),
       top: px(36),
       fontSize: 12,
       fontWeight: '400',
+      lineHeight: px(17),
       color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
     },
-    // AI陪练模式 内行：卡内 (12,187)~(333,300)
+    tileSubFree: {left: px(10)},
+    // AI陪练模式：蓝湖 (30,456) 315×100 → 卡内 (15,188)
     companionRow: {
       position: 'absolute',
-      left: px(12),
-      right: px(12),
-      top: px(187),
-      // 蓝湖 矩形966 高 100
+      left: px(15),
+      width: px(315),
+      top: px(188),
       height: px(100),
       borderRadius: px(16),
       overflow: 'hidden',
@@ -236,6 +267,7 @@ const makeStyles = (colors, dark) =>
       top: px(14),
       fontSize: 15,
       fontWeight: '600',
+      lineHeight: px(24),
       color: colors.textPrimary,
       zIndex: 2,
     },
@@ -245,7 +277,7 @@ const makeStyles = (colors, dark) =>
       top: px(40),
       fontSize: 12,
       fontWeight: '400',
-      // 蓝湖副文案 opacity 0.4
+      lineHeight: px(17),
       color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
       zIndex: 2,
     },
@@ -259,14 +291,13 @@ const makeStyles = (colors, dark) =>
       opacity: 1,
       zIndex: 0,
     },
-    // 右下角玻璃爱心（Iconly/Glass/Heart，1:1 蓝湖）：贴右下角、按 85x63 比例放大，
-    // 圆角溢出裁切（与蓝湖一致：浅紫副心被卡片右下圆角裁掉一角）。
+    // 蓝湖 Iconly/Glass/Heart (260,493) 85×63 → 行内右下
     chatHeart: {
       position: 'absolute',
       right: 0,
       bottom: 0,
-      width: px(104),
-      height: px(72),
+      width: px(85),
+      height: px(63),
     },
   });
 
