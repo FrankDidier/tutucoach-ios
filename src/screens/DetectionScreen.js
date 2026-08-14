@@ -716,9 +716,6 @@ const DetectionScreen = ({navigation, route}) => {
     }
   };
 
-  const correctSec = Math.round((elapsedSec * matchRate) / 100);
-  const incorrectSec = Math.max(0, elapsedSec - correctSec);
-
   return (
     <View style={styles.container}>
       <StatusBar
@@ -876,10 +873,9 @@ const DetectionScreen = ({navigation, route}) => {
               {hasTemplate ? '已设置' : '未设置'}
             </Text>
           </View>
-          <Text style={styles.statsPink}>
-            正确：{correctSec}s｜不正确：{incorrectSec}s｜占比：
-            {Math.round(matchRate)}%
-          </Text>
+          {/* 蓝湖「目标手型模版」为静态模版参数展示（与安卓 activity_main 硬编码一致）：
+              正确 30s｜不正确 10s｜占比 20%。实时统计走结束后的总结弹窗，不占此行。 */}
+          <Text style={styles.statsPink}>正确：30s｜不正确：10s｜占比：20%</Text>
         </View>
         <MetronomeCard variant="detect" style={styles.metroDetect} />
       </View>

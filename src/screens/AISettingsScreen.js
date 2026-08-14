@@ -423,7 +423,7 @@ const AISettingsScreen = ({navigation, route}) => {
                 <View style={{flex: 1, paddingRight: 8}}>
                   <Text style={styles.fieldLabel}>陪练提示设置</Text>
                   <Text style={styles.hintMuted}>
-                    按学生·按曲目设置「AI陪伴模式」重点播报内容
+                    按学生·按曲目设置「AI陪练模式」重点播报内容
                   </Text>
                 </View>
                 <Text style={styles.chevron}>›</Text>

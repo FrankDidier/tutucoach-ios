@@ -34,16 +34,27 @@ const PracticeScreen = ({navigation}) => {
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} />
       {/* 背景：暗色整屏渐变；浅色为顶部渐变 + 页面浅粉底 */}
-      <Image
-        source={dark ? Images.practiceBgDark : Images.practiceBgLight}
-        style={
-          dark
-            ? StyleSheet.absoluteFill
-            : {position: 'absolute', top: 0, left: 0, right: 0, height: px(400)}
-        }
-        resizeMode="cover"
-        pointerEvents="none"
-      />
+      {dark ? (
+        // 暗色：紫色光晕只落在顶部，其余用根底色 #020014（正是贴图渐隐到的黑），与安卓一致
+        // （光晕聚顶、下方纯黑、无接缝）。整屏 cover 会居中裁切把光晕铺满全屏、整屏发紫且左侧起缝；
+        // 这里用定高裁剪容器（overflow hidden）承载「按原始比例、顶部对齐」的整图，只露顶部光晕。
+        <View
+          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(300), overflow: 'hidden'}}
+          pointerEvents="none">
+          <Image
+            source={Images.practiceBgDark}
+            style={{width: '100%', height: px(812)}}
+            resizeMode="cover"
+          />
+        </View>
+      ) : (
+        <Image
+          source={Images.practiceBgLight}
+          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(400)}}
+          resizeMode="cover"
+          pointerEvents="none"
+        />
+      )}
 
       <SafeAreaView style={styles.safe}>
         {/* 导航标题 练琴：18/600，蓝湖 x=15 */}
@@ -157,13 +168,19 @@ const makeStyles = (colors, dark) =>
       marginBottom: px(4),
       lineHeight: px(25),
     },
-    // 兔子 216x217 在 (159,89)；hero 高度容纳兔子并让文案居左。
+    // 兔子 216x217 在 (159,89)；hero 高度决定其后卡片的起点。蓝湖卡顶 y=268（状态栏下 224），
+    // 原 height=200 让卡顶落在 237（偏低 13），与兔子(压顶)间出现空档；改 187 让卡顶回到 224，
+    // 兔子下沿(262)与卡顶重叠 38，1:1 蓝湖。
     hero: {
       position: 'relative',
-      height: px(200),
+      height: px(187),
       paddingLeft: px(24),
+      // 兔子压在卡片之上（对齐安卓：兔子为最后子视图 + elevation）。蓝湖卡顶右侧有缺口，
+      // 兔子在前时整只身体（含裙摆/脚）露出、卡缺口收边，1:1 蓝湖；否则卡会盖住兔子下半身。
+      zIndex: 2,
     },
-    heroCopy: {marginTop: px(52), maxWidth: px(200)},
+    // 蓝湖 HI~ y=141（状态栏下 97）→ marginTop 60（hero 顶 37 + 60）。
+    heroCopy: {marginTop: px(60), maxWidth: px(200)},
     heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
     heroLine1: {
       fontSize: 24,
@@ -179,14 +196,15 @@ const makeStyles = (colors, dark) =>
       color: colors.textPrimary,
       marginTop: 0,
     },
+    // 蓝湖兔子盒 (159,89) 216×217：右对齐(right:0 → x=159)，盒顶状态栏下 45 → hero顶37 + top 8。
     mascot: {
       position: 'absolute',
-      top: px(-8),
+      top: px(8),
       right: 0,
       width: px(216),
       height: px(217),
     },
-    cardOuter: {position: 'relative', alignItems: 'center'},
+    cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
     // 母图 1x=362x81（含描边留白），glyph 宽≈352；left 微调到 px(12) 让字身对齐 x16。
     musicWatermark: {
@@ -291,13 +309,14 @@ const makeStyles = (colors, dark) =>
       opacity: 1,
       zIndex: 0,
     },
-    // 蓝湖 Iconly/Glass/Heart (260,493) 85×63 → 行内右下
+    // 玻璃爱心「+紫色高光块」导出资源本身为 104×72（安卓即用原始尺寸并 1:1 蓝湖）。
+    // 之前用 85×63 让爱心整体偏小、右下角留空；改回资源原始 104×72，贴卡片右下角填满。
     chatHeart: {
       position: 'absolute',
       right: 0,
       bottom: 0,
-      width: px(85),
-      height: px(63),
+      width: px(104),
+      height: px(72),
     },
   });
 
