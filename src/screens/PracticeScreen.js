@@ -35,11 +35,12 @@ const PracticeScreen = ({navigation}) => {
       <StatusBar barStyle={colors.statusBarStyle} />
       {/* 背景：暗色整屏渐变；浅色为顶部渐变 + 页面浅粉底 */}
       {dark ? (
-        // 暗色：紫色光晕只落在顶部，其余用根底色 #020014（正是贴图渐隐到的黑），与安卓一致
-        // （光晕聚顶、下方纯黑、无接缝）。整屏 cover 会居中裁切把光晕铺满全屏、整屏发紫且左侧起缝；
-        // 这里用定高裁剪容器（overflow hidden）承载「按原始比例、顶部对齐」的整图，只露顶部光晕。
+        // 暗色：紫色光晕只落在顶部，其余用根底色 #020014（正是贴图渐隐到的黑），与安卓一致。
+        // 定高裁剪容器承载「按原始比例、顶部对齐」的整图，只露顶部光晕。
+        // 关键：裁剪高度必须落在贴图「已渐隐到 #020014」的暗区（约原图 30% 处），否则会切到贴图
+        // 左右边缘约 37% 处的残余侧光晕，在左右两侧留下一条亮→黑的硬接缝。故 300→240。
         <View
-          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(300), overflow: 'hidden'}}
+          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(240), overflow: 'hidden'}}
           pointerEvents="none">
           <Image
             source={Images.practiceBgDark}
@@ -89,7 +90,7 @@ const PracticeScreen = ({navigation}) => {
           <View style={styles.card}>
             <Image
               source={dark ? Images.practiceCardDark : Images.practiceCardLight}
-              style={StyleSheet.absoluteFill}
+              style={styles.cardBg}
               resizeMode="stretch"
               pointerEvents="none"
             />
@@ -137,7 +138,7 @@ const PracticeScreen = ({navigation}) => {
               <Image
                 source={dark ? Images.wmChat : Images.wmChatLight}
                 style={styles.chatWatermark}
-                resizeMode="contain"
+                resizeMode="stretch"
                 pointerEvents="none"
               />
               <Image
@@ -175,9 +176,9 @@ const makeStyles = (colors, dark) =>
       position: 'relative',
       height: px(187),
       paddingLeft: px(24),
-      // 兔子压在卡片之上（对齐安卓：兔子为最后子视图 + elevation）。蓝湖卡顶右侧有缺口，
-      // 兔子在前时整只身体（含裙摆/脚）露出、卡缺口收边，1:1 蓝湖；否则卡会盖住兔子下半身。
-      zIndex: 2,
+      // 兔子在卡片之后（对齐安卓：imgPracticeRabbit 画在主卡之前、无 elevation）。
+      // 卡顶右侧有缺口，兔子上半身从缺口/卡顶之上露出，下半身（裙摆/脚）被主卡盖住，1:1 蓝湖。
+      zIndex: 0,
     },
     // 蓝湖 HI~ y=141（状态栏下 97）→ marginTop 60（hero 顶 37 + 60）。
     heroCopy: {marginTop: px(60), maxWidth: px(200)},
@@ -196,13 +197,16 @@ const makeStyles = (colors, dark) =>
       color: colors.textPrimary,
       marginTop: 0,
     },
-    // 蓝湖兔子盒 (159,89) 216×217：右对齐(right:0 → x=159)，盒顶状态栏下 45 → hero顶37 + top 8。
+    // 蓝湖兔子盒 (159,89) 216×217，右对齐(right 边=375)。iOS APNG(480×552) 与蓝湖切图在
+    // 「脸宽/盒宽」比例上一致(≈0.483)，故盒宽=蓝湖设计 214 时，脸宽自然=蓝湖封面实测 103。
+    // aspectFit 无 letterbox 需盒比≈0.866(=480/552)，故 214×246。APNG 上留白19% → 用 top 上移把
+    // 耳顶顶到蓝湖 y≈90、脸中线 y≈218、中心 x≈268(右对齐)。目标全部取自 design-data 封面实测。
     mascot: {
       position: 'absolute',
-      top: px(8),
-      right: 0,
-      width: px(216),
-      height: px(217),
+      top: px(-35),
+      right: px(0),
+      width: px(214),
+      height: px(246),
     },
     cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
@@ -219,6 +223,16 @@ const makeStyles = (colors, dark) =>
       width: px(CARD_W),
       height: px(CARD_H),
       zIndex: 1,
+      // 卡片贴图必须严格约束在 345×305 内，防止 stretch 时溢出到卡底之下把页底铺成卡色。
+      overflow: 'hidden',
+    },
+    // 容器贴图：显式给定与卡片一致的尺寸（此前用 absoluteFill 在本机被拉伸到 ~411×531 溢出卡底）。
+    cardBg: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: px(CARD_W),
+      height: px(CARD_H),
     },
     // 蓝湖 tuzi (31,281)→卡内 (16,13)；图标 20×20
     selLabelRow: {
@@ -229,9 +243,10 @@ const makeStyles = (colors, dark) =>
       alignItems: 'center',
     },
     selIcon: {width: px(20), height: px(20), marginRight: px(5)},
+    // 蓝湖「选择您的模型进行练习」加粗（对齐安卓 textStyle=bold）。
     selLabel: {
       fontSize: 14,
-      fontWeight: '500',
+      fontWeight: '700',
       lineHeight: px(26),
       color: colors.textPrimary,
     },
@@ -299,24 +314,26 @@ const makeStyles = (colors, dark) =>
       color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(38,18,22,0.4)',
       zIndex: 2,
     },
-    // 蓝湖 练琴_t1 Chat：相对卡片 (12,51) 147×49，层 opacity 0.6 已烘焙进贴图
+    // 蓝湖 练琴_t1 Chat：实测封面字形 卡内 x[12-154] y[69-100]（宽≈142、高≈30、底与卡底齐平）。
+    // 贴图字形占竖向上 88%（底部 12% 透明），故盒高 35 → 字形≈31，底 +4 溢出被卡片圆角裁掉，字形底贴卡底(≈100)。
+    // 贴图已按安卓最终版（渐变 129→82 + 1px 亮描边）生成；opacity 0.88 对齐安卓淡水印观感。stretch 铺满，字形左对齐卡内 12。
     chatWatermark: {
       position: 'absolute',
       left: px(12),
-      top: px(51),
+      top: px(69),
       width: px(147),
-      height: px(49),
-      opacity: 1,
+      height: px(35),
+      opacity: 0.88,
       zIndex: 0,
     },
-    // 玻璃爱心「+紫色高光块」导出资源本身为 104×72（安卓即用原始尺寸并 1:1 蓝湖）。
-    // 之前用 85×63 让爱心整体偏小、右下角留空；改回资源原始 104×72，贴卡片右下角填满。
+    // 玻璃爱心「+紫色高光块」：对齐安卓最终版 118×82 且右/下各外溢 14（marginEnd/Bottom=-14），
+    // 由 companionRow 的 overflow:hidden + 圆角裁掉外溢角，爱心整体更大、紧贴卡片右下角填满，1:1 蓝湖。
     chatHeart: {
       position: 'absolute',
-      right: 0,
-      bottom: 0,
-      width: px(104),
-      height: px(72),
+      right: px(-14),
+      bottom: px(-14),
+      width: px(118),
+      height: px(82),
     },
   });
 
