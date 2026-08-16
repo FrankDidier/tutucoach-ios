@@ -57,19 +57,11 @@ function fmtMinutes(min) {
   return `${Math.floor(m / 60)}小时${m % 60}分钟`;
 }
 
-// 老师可切换查看的练琴时长区间。
-const RANGES = [
-  {key: 'week', label: '1周', field: 'weekMinutes', title: '本周练习'},
-  {key: 'month', label: '1个月', field: 'monthMinutes', title: '本月练习'},
-  {key: 'all', label: '所有', field: 'totalMinutes', title: '累计练习'},
-];
-
 const ClassManageScreen = ({navigation}) => {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [students, setStudents] = useState([]);
   const [query, setQuery] = useState('');
-  const [range, setRange] = useState('all'); // 默认看「所有」
 
   const load = useCallback(async () => {
     const tid = getDeviceId();
@@ -421,8 +413,6 @@ const ClassManageScreen = ({navigation}) => {
     );
   }, [students, query]);
 
-  const rangeCfg = RANGES.find(r => r.key === range) || RANGES[2];
-
   const renderStudent = ({item}) => (
     <TouchableOpacity
       style={styles.card}
@@ -466,16 +456,10 @@ const ClassManageScreen = ({navigation}) => {
       ) : (
         <View style={styles.practiceBar}>
           <Text style={styles.practiceLine}>
-            <Text style={styles.practiceLabel}>{rangeCfg.title}时长：</Text>
+            <Text style={styles.practiceLabel}>本周练习时长：</Text>
             <Text style={styles.practiceValue}>
-              {fmtMinutes(item[rangeCfg.field])}
+              {fmtMinutes(item.weekMinutes)}
             </Text>
-            {item.avgRate != null ? (
-              <Text style={styles.practiceLabel}>
-                {'   '}正确率：
-                <Text style={styles.practiceValue}>{item.avgRate}%</Text>
-              </Text>
-            ) : null}
           </Text>
         </View>
       )}
@@ -488,9 +472,13 @@ const ClassManageScreen = ({navigation}) => {
 
       <ScreenHeader title="班级管理" onBack={() => navigation?.goBack?.()} />
 
+      {/* 蓝湖 组2491 搜索框 345×44 @ (15,98)：内含 search-2-line 图标(20×20)+「搜索学生」 */}
       <View style={styles.searchBar}>
         <View style={styles.searchShell}>
-          <Text style={styles.searchGlyph}>⌕</Text>
+          <View style={styles.searchIcon}>
+            <View style={styles.searchRing} />
+            <View style={styles.searchHandle} />
+          </View>
           <TextInput
             style={styles.searchInput}
             placeholder="搜索学生"
@@ -501,24 +489,6 @@ const ClassManageScreen = ({navigation}) => {
         </View>
       </View>
 
-      {/* 练琴时长区间：产品功能，始终展示（蓝湖稿无此行，但业务需要） */}
-      <View style={styles.rangeRow}>
-        {RANGES.map(r => {
-          const on = range === r.key;
-          return (
-            <TouchableOpacity
-              key={r.key}
-              style={[styles.rangeChip, on && styles.rangeChipOn]}
-              activeOpacity={0.85}
-              onPress={() => setRange(r.key)}>
-              <Text style={[styles.rangeChipText, on && styles.rangeChipTextOn]}>
-                {r.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
       <View style={styles.listHeaderRow}>
         <Image
           source={Images.studentListCap}
@@ -527,9 +497,6 @@ const ClassManageScreen = ({navigation}) => {
         />
         <Text style={styles.listHeader}>学生列表({filtered.length})</Text>
       </View>
-      <Text style={styles.emptyHint}>
-        点学生可移出班级；长按也可移除。不会删除学生本人账号。
-      </Text>
 
       <FlatList
         data={filtered}
@@ -568,11 +535,31 @@ const makeStyles = colors =>
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardAlt,
     },
-    searchGlyph: {
-      fontSize: 18,
-      color: colors.textMuted,
+    // 蓝湖 search-2-line 20×20：用两枚 View 画描边放大镜（环 + 手柄），随主题取色、任意密度清晰。
+    searchIcon: {
+      width: 18,
+      height: 18,
       marginRight: 8,
-      marginTop: -1,
+    },
+    searchRing: {
+      position: 'absolute',
+      top: 1,
+      left: 1,
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      borderWidth: 1.6,
+      borderColor: colors.textMuted,
+    },
+    searchHandle: {
+      position: 'absolute',
+      right: 1.5,
+      bottom: 2,
+      width: 6,
+      height: 1.6,
+      borderRadius: 1,
+      backgroundColor: colors.textMuted,
+      transform: [{rotate: '45deg'}],
     },
     searchInput: {
       flex: 1,
@@ -580,32 +567,6 @@ const makeStyles = colors =>
       fontSize: 15,
       color: colors.textPrimary,
       paddingVertical: 0,
-    },
-    rangeRow: {
-      flexDirection: 'row',
-      paddingHorizontal: 16,
-      paddingBottom: 10,
-      gap: 8,
-    },
-    rangeChip: {
-      paddingHorizontal: 16,
-      paddingVertical: 7,
-      borderRadius: 16,
-      backgroundColor: colors.card,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.cardAlt,
-    },
-    rangeChipOn: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    rangeChipText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-      fontWeight: '600',
-    },
-    rangeChipTextOn: {
-      color: '#FFFFFF',
     },
     listHeaderRow: {
       flexDirection: 'row',

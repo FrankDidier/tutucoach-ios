@@ -39,11 +39,9 @@ const AIListScreen = ({navigation}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
     const admin = await isAdminRole();
-    setIsAdmin(admin);
     const r = await listAllCoaches();
     if (r && r.ok && Array.isArray(r.coaches)) {
       const list = admin
@@ -117,9 +115,6 @@ const AIListScreen = ({navigation}) => {
             <ScrollView
               contentContainerStyle={styles.scroll}
               showsVerticalScrollIndicator={false}>
-              {isAdmin ? (
-                <Text style={styles.adminHint}>管理员 · 可编辑全部角色</Text>
-              ) : null}
               {coaches.length === 0 ? (
                 <Text style={styles.empty}>
                   你还没有创建 AI 分身{'\n'}点下方「新建」，给 TA 起个名字，
@@ -228,12 +223,6 @@ const makeStyles = (colors, dark) =>
     topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
     center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
     scroll: {paddingHorizontal: px(15), paddingBottom: 16, paddingTop: 4},
-    adminHint: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginBottom: 8,
-      marginTop: 4,
-    },
     empty: {
       marginTop: 80,
       textAlign: 'center',
