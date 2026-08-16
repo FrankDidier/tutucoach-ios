@@ -46,10 +46,26 @@ function stripParentheticals(s) {
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+
+// 从分身人设(systemPrompt)里的「语言：中文/英语/日语/韩语」一行解析朗读语言。
+// 与 AISettingsScreen.parseSpeakLang 保持一致：海马濑人=日语，须念日文开场白才正确。
+function parseSpeakLang(persona) {
+  const m = String(persona || '').match(
+    /(?:^|\n)\s*语言\s*[：:]\s*([^\n；;，,。]+)/,
+  );
+  if (!m) return 'zh';
+  const v = m[1].trim().toLowerCase();
+  if (/英|en/.test(v)) return 'en';
+  if (/日|ja|jp/.test(v)) return 'ja';
+  if (/韩|ko|kr/.test(v)) return 'ko';
+  return 'zh';
+}
 import {
   getSelectedCoachId,
   getCachedCoachAvatarUri,
   setCachedCoachAvatarUri,
+  getCachedCoachProfile,
+  setCachedCoachProfile,
   profileById,
   isVoiceEnabled,
 } from '../services/coachPrefs';
@@ -142,6 +158,19 @@ export default function CompanionScreen({navigation}) {
         setAvatarBgFailed(false);
       }
     } catch (e) {}
+    // 瞬时：用上次成功缓存的分身资料补上正确的开场白/语言（自定义分身不在内置列表里，
+    // 否则会先说 coach_pro 的默认开场白）。服务器刷新会在其后覆盖为最新。
+    try {
+      const cp = await getCachedCoachProfile(id);
+      if (cp) {
+        profileRef.current = {
+          ...base,
+          ...cp,
+          id,
+        };
+        if (aliveRef.current && cp.displayName) setCoachName(cp.displayName);
+      }
+    } catch (e) {}
 
     const refreshFromServer = async () => {
       try {
@@ -149,15 +178,22 @@ export default function CompanionScreen({navigation}) {
         const list = (res && (res.coaches || res.data)) || [];
         const sc = list.find(c => c.id === id);
         if (!aliveRef.current || !sc) return;
+        const persona = sc.systemPrompt || sc.system_prompt || base.systemPrompt;
         profileRef.current = {
           ...base,
           id: sc.id || id || base.id,
           displayName: sc.name || base.displayName,
           greeting: sc.greeting || base.greeting,
+          systemPrompt: persona,
+          speakLang: parseSpeakLang(persona),
           speechRate: sc.speechRate || base.speechRate || 1.0,
           pitch: sc.pitch || base.pitch || 1.0,
           voiceId: sc.voiceId || 0,
         };
+        // 写回缓存，供下次瞬时使用正确开场白/语言。
+        try {
+          await setCachedCoachProfile(id, profileRef.current);
+        } catch (e) {}
         setCoachName(profileRef.current.displayName);
         if (sc.avatarUrl) {
           const uri = /^https?:/.test(sc.avatarUrl)
@@ -203,15 +239,18 @@ export default function CompanionScreen({navigation}) {
     } catch (e) {}
     (async () => {
       studentIdRef.current = getDeviceId();
-      // 非阻塞：本地 id + 缓存头像立刻铺上；服务器刷新在后台
-      await reloadCoach({blocking: false});
+      // 先铺自定义背景（本地读取，瞬时），保证首屏不因等网络而空白。
       try {
         const customBg = await getCompanionBgUri();
-        // 自定义背景立刻 set，勿等 Image.getSize（会拖慢首屏）
         if (aliveRef.current && customBg) {
           setBgUri(customBg);
         }
       } catch (e) {}
+
+      // 头像从缓存瞬时铺上；开场白必须等分身资料就绪再念——自定义分身(刁王/海马濑人)
+      // 的开场白/语言只在缓存或服务器里，若不等就会念成 coach_pro 的默认「同学你好…」。
+      // （1.5.100 起改成非阻塞导致开场白抢跑说了默认句，这里改回「等资料就绪再开场」。）
+      await reloadCoach({blocking: true});
 
       const von = await isVoiceEnabled();
       mutedRef.current = !von;

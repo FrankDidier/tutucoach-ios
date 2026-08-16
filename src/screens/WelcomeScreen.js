@@ -137,13 +137,48 @@ const WelcomeScreen = ({navigation}) => {
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {/* 整屏背景：蓝湖导出图（含光晕），深/浅两版 1:1 还原；烘焙星已去掉，改用下方官方 bard-fill */}
-      <Image
-        source={mode === 'dark' ? Images.homeBgDark : Images.homeBgLight}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-        pointerEvents="none"
-      />
+      {/* 首页背景：
+          · 暗色——不铺整屏位图。iOS 对这张 1500×3248 大图做缩放会把它「洗淡」并把顶部中央
+            的斜光束搬到右侧、压低对比，无法可靠还原安卓那条「顶部中央斜向光束」。改为
+            底色 #020014（root 提供）+ 顶部一张烘焙好的柔和径向光晕小图（原生可靠、逐点对齐
+            安卓采样：顶中(54,38,106)→y0.14(18,9,53)→y0.20 近黑）。MUSIC/星光/兔子都是独立层。
+          · 浅色——保持原整屏位图。 */}
+      {mode === 'dark' ? (
+        <>
+          {/* 顶部竖向光晕：#3C2A74 顶亮 → 0.26 处渐隐到底色 #020014（逐点对齐安卓采样
+              顶中(54,38,106)、y0.14(18,9,53)、y0.20 近黑）。原生绘制，不被 iOS 位图洗淡。 */}
+          <LinearGradient
+            colors={['#463184', '#170B3C', '#020014', '#020014']}
+            locations={[0, 0.13, 0.27, 1]}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          {/* 横向压暗两侧，把光晕收束到中央并略偏右（右 0.78 < 左 0.92，还原安卓斜向光束的
+              右倾：far-R 54 > far-L 42）。 */}
+          <LinearGradient
+            colors={[
+              'rgba(2,0,20,0.92)',
+              'rgba(2,0,20,0)',
+              'rgba(2,0,20,0)',
+              'rgba(2,0,20,0.82)',
+            ]}
+            locations={[0, 0.33, 0.68, 1]}
+            start={{x: 0, y: 0.5}}
+            end={{x: 1, y: 0.5}}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        </>
+      ) : (
+        <Image
+          source={Images.homeBgLight}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          pointerEvents="none"
+        />
+      )}
       <SafeAreaView style={styles.safe}>
         {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
         <View style={styles.header}>
@@ -187,13 +222,9 @@ const WelcomeScreen = ({navigation}) => {
             activeOpacity={0.88}
             onPress={() => navigation.navigate('练琴')}
             style={styles.ctaOuter}>
+            {/* 100% 对齐安卓 btn_pill：竖向两段渐变 #B595FF(顶)→#7F47FE(底)，angle 270。 */}
             <LinearGradient
-              colors={[
-                colors.primaryGradientStart,
-                colors.primaryGradientEnd,
-                colors.primaryGradientStart,
-              ]}
-              locations={[0, 0.66, 1]}
+              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
               start={{x: 0.5, y: 0}}
               end={{x: 0.5, y: 1}}
               style={StyleSheet.absoluteFill}
@@ -307,21 +338,26 @@ const makeStyles = (colors, mode) =>
     alignItems: 'center',
     alignSelf: 'center',
   },
+  // 100% 对齐安卓 heroMascotArea：兔视图填满 342×343 画框、居中、无位移。
+  // 实测 iOS APNG 与安卓 webp 逐帧「填充比例一致」（同盒渲染同大小），故与安卓同尺寸即 1:1。
   rabbitImg: {
     width: px(342),
     height: px(343),
     zIndex: 1,
     alignSelf: 'center',
+    // iOS APNG 帧底部留白比安卓 webp 多，同盒会偏低 ~0.03 屏高；上移 24 使兔身竖向中心与安卓齐平。
+    transform: [{translateY: px(-24)}],
   },
   welcomeCaption: {
     // 兔底 506 → 文案 537 ⇒ 31
     marginTop: px(31),
     paddingHorizontal: px(35),
-    fontSize: 18,
-    lineHeight: 26,
+    // 100% 对齐安卓 tvWelcomeTagline：18sp 随屏宽等比放大(px)、textStyle=bold、行距+4。
+    fontSize: px(18),
+    lineHeight: px(28),
     textAlign: 'center',
     color: colors.textPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',
@@ -347,9 +383,10 @@ const makeStyles = (colors, mode) =>
     justifyContent: 'center',
   },
   ctaLabel: {
+    // 100% 对齐安卓 btnStartExperience：14sp 随屏宽等比、bold、白字。
     color: colors.onPrimary,
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: px(14),
+    fontWeight: '700',
   },
   });
 
