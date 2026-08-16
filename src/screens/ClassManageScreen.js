@@ -691,9 +691,11 @@ const makeStyles = colors =>
       color: colors.textPrimary,
     },
     practiceValue: {
+      // 蓝湖 班级管理 时长值实测 ≈ #B090F8 淡紫（非主色 #7F47FE 深紫）。用 accent(#B595FF) 对齐蓝湖，
+      // 与安卓 practiceSpan 值色 #B595FF 保持两端一致。
       fontSize: 13,
       fontWeight: '600',
-      color: colors.primary,
+      color: colors.accent,
     },
   });
 
