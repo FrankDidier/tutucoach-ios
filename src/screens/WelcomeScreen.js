@@ -138,39 +138,46 @@ const WelcomeScreen = ({navigation}) => {
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       {/* 首页背景：
-          · 暗色——不铺整屏位图。iOS 对这张 1500×3248 大图做缩放会把它「洗淡」并把顶部中央
-            的斜光束搬到右侧、压低对比，无法可靠还原安卓那条「顶部中央斜向光束」。改为
-            底色 #020014（root 提供）+ 顶部一张烘焙好的柔和径向光晕小图（原生可靠、逐点对齐
-            安卓采样：顶中(54,38,106)→y0.14(18,9,53)→y0.20 近黑）。MUSIC/星光/兔子都是独立层。
+          · 暗色——与「练琴」页同法（客户认可练琴页背景 1:1 还原安卓）：底色 #020014（root 提供）
+            + 顶部一段「定高裁剪」的整图，只露顶部斜向光束。iOS 会把整屏大位图「洗淡」，但被洗淡
+            的是中下部近黑区；只显示顶部光束条、其余用纯色 #020014 兜底，即可避开洗淡、逐点对齐
+            安卓 centerCrop（安卓光束约在屏高 25% 处渐隐到近黑）。MUSIC/星光/兔子都是独立层。
           · 浅色——保持原整屏位图。 */}
       {mode === 'dark' ? (
-        <>
-          {/* 顶部竖向光晕：#3C2A74 顶亮 → 0.26 处渐隐到底色 #020014（逐点对齐安卓采样
-              顶中(54,38,106)、y0.14(18,9,53)、y0.20 近黑）。原生绘制，不被 iOS 位图洗淡。 */}
+        // home_bg_dark 与 practice_bg_dark 是「不同」的贴图（同尺寸、不同光晕分布），故练琴页
+        // 那个「定高硬裁 240」的裁剪点在首页会切到残余侧光晕、左右留下亮→黑硬接缝（客户反馈）。
+        // 改为：整图顶部对齐后，底部用一段 透明→#020014 的渐变把光晕「柔和收进」纯色底，
+        // 无论光晕落在何处都不会出现硬边，逐点顺滑还原安卓 centerCrop 观感。
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: px(360),
+            overflow: 'hidden',
+          }}
+          pointerEvents="none">
+          <Image
+            source={Images.homeBgDark}
+            style={{width: '100%', height: px(812)}}
+            resizeMode="cover"
+          />
           <LinearGradient
-            colors={['#463184', '#170B3C', '#020014', '#020014']}
-            locations={[0, 0.13, 0.27, 1]}
+            colors={['transparent', colors.bg, colors.bg]}
+            locations={[0, 0.92, 1]}
             start={{x: 0.5, y: 0}}
             end={{x: 0.5, y: 1}}
-            style={StyleSheet.absoluteFill}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: px(200),
+            }}
             pointerEvents="none"
           />
-          {/* 横向压暗两侧，把光晕收束到中央并略偏右（右 0.78 < 左 0.92，还原安卓斜向光束的
-              右倾：far-R 54 > far-L 42）。 */}
-          <LinearGradient
-            colors={[
-              'rgba(2,0,20,0.92)',
-              'rgba(2,0,20,0)',
-              'rgba(2,0,20,0)',
-              'rgba(2,0,20,0.82)',
-            ]}
-            locations={[0, 0.33, 0.68, 1]}
-            start={{x: 0, y: 0.5}}
-            end={{x: 1, y: 0.5}}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        </>
+        </View>
       ) : (
         <Image
           source={Images.homeBgLight}
@@ -349,8 +356,10 @@ const makeStyles = (colors, mode) =>
     transform: [{translateY: px(-24)}],
   },
   welcomeCaption: {
-    // 兔底 506 → 文案 537 ⇒ 31
-    marginTop: px(31),
+    // 蓝湖设计 兔底 506 → 文案 537 ⇒ 31。但 iOS APNG 帧底部留白比安卓 webp 多 + 兔子 translateY(-24)，
+    // 使兔身可视底比安卓偏高，若仍用 31 则「兔↔文案」空档比安卓大 ~0.03 屏高（实测 iOS 0.081 vs 安卓 0.048）。
+    // 收紧到 6 让空档回到安卓同款，1:1。
+    marginTop: px(6),
     paddingHorizontal: px(35),
     // 100% 对齐安卓 tvWelcomeTagline：18sp 随屏宽等比放大(px)、textStyle=bold、行距+4。
     fontSize: px(18),

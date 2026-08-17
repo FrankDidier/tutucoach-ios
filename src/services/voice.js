@@ -63,15 +63,33 @@ function iosNativeTts() {
   return m && typeof m.ttsSpeak === 'function' ? m : null;
 }
 
+// 按「实际要念的这句文字」判断语种（逐句判定，而不是锁死角色配置的语种）。
+// 这样才能同时修好两个问题：
+//   ① 日语角色偶发「个别字念成中文」——只要句子含假名，就强制 Japanese boost，
+//      不再交给后端 auto 识别（auto 对共享汉字常回退成中文读音）。
+//   ② 学生在聊天框要求 AI「用别的语言说」——AI 回复变成该语言后，这里据文字识别出
+//      对应语种朗读（此前锁死角色语种，导致英文/日文回复仍被按原语种念，客户反馈「AI 不听了」）。
+// 返回 'ja' | 'ko' | 'zh' | 'en' | ''（空=交给调用方/后端决定）。
+export function detectSpeakLang(text) {
+  const s = String(text || '');
+  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(s)) return 'ja'; // 平/片假名 → 日语
+  if (/[\uac00-\ud7a3\u1100-\u11ff]/.test(s)) return 'ko'; // 谚文 → 韩语
+  if (/[\u4e00-\u9fff]/.test(s)) return 'zh'; // 含汉字（且无假名/谚文）→ 中文
+  if (/[a-zA-Z]/.test(s)) return 'en'; // 纯拉丁字母 → 英语
+  return '';
+}
+
 // rate: 语速倍率（安卓 speechRate，默认 1.0）。pitch: 音高（默认 1.0）。
 // coachId: 角色 id —— 新版走 MiniMax（本人克隆音色优先，否则按风格用预置音色兜底），
-//          支持中/英/日/韩。lang 默认 'auto'（后端自动识别语种）。
+//          支持中/英/日/韩。lang 默认 'auto'；实际按上面 detectSpeakLang 逐句判定。
 // voiceId: 旧版百度声音复刻音色 ID（仅兼容老逻辑；有 coachId 时优先走 coachId）。
 export function speak(
   text,
   {rate = 1.0, pitch = 1.0, voiceId = 0, coachId = '', lang = 'auto', flush = true} = {},
 ) {
   if (!text) return;
+  // 逐句语种优先：文字里已经能确定语种时以文字为准；否则退回调用方传入的 lang（角色配置）。
+  const effLang = detectSpeakLang(text) || lang || 'auto';
   // iOS 首选原生合成器/声音复刻。
   const native = iosNativeTts();
   if (native) {
@@ -88,7 +106,7 @@ export function speak(
           rate || 1.0,
           pitch || 1.0,
           BASE_URL,
-          lang || 'auto',
+          effLang || 'auto',
         );
         return;
       }

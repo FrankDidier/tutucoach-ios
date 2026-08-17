@@ -40,11 +40,16 @@ const PracticeScreen = ({navigation}) => {
         // 关键：裁剪高度必须落在贴图「已渐隐到 #020014」的暗区（约原图 30% 处），否则会切到贴图
         // 左右边缘约 37% 处的残余侧光晕，在左右两侧留下一条亮→黑的硬接缝。故 300→240。
         <View
-          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(240), overflow: 'hidden'}}
+          // 容器原裁到 240（0.296屏高），使卡右侧/顶角的背景在 240px 处硬切为纯黑，而安卓那里
+          // 仍有淡紫辉光延续到 ~0.40。源图 practice_bg_dark 的辉光自然延伸到 design-y≈380 才淡出到
+          // 背景色 #020014，故容器高度 240→380：既补上安卓同款辉光、又因源图自然收尾而无接缝。
+          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(380), overflow: 'hidden'}}
           pointerEvents="none">
           <Image
             source={Images.practiceBgDark}
-            style={{width: '100%', height: px(812)}}
+            // 背景里烘焙的星星原落在屏幕 0.154，安卓同款星星在 0.135。整图上移 15(设计px≈0.019 屏高)，
+            // 让 iOS 星星与安卓对齐到 0.135，从而「兔耳=星星」与安卓绝对位置同时成立。顶部被裁的是暗边，无碍。
+            style={{position: 'absolute', top: -px(15), left: 0, width: '100%', height: px(812)}}
             resizeMode="cover"
           />
         </View>
@@ -174,14 +179,21 @@ const makeStyles = (colors, dark) =>
     // 兔子下沿(262)与卡顶重叠 38，1:1 蓝湖。
     hero: {
       position: 'relative',
-      height: px(187),
+      // iOS 刘海安全区把整块内容下移，主卡「选择您的模型」原落在 0.36（安卓 0.315）。收紧 hero 高度
+      // 把主卡上提到安卓同款 0.315（用户确认对齐安卓）。HI~/教练(heroCopy marginTop 60) 与兔子
+      // (mascot 绝对 top) 均相对 hero 顶定位、不随高度变化，故只上移主卡。187→150（≈上提 37 设计px）。
+      // 用户高亮：iOS 主卡比安卓略高（0.3162 vs 0.3217），需把卡下压 ~5px 到安卓同款高度，
+      // 使「教练↔主卡」间距与安卓一致（略拉长）。150→156。
+      height: px(156),
       paddingLeft: px(24),
       // 兔子在卡片之后（对齐安卓：imgPracticeRabbit 画在主卡之前、无 elevation）。
       // 卡顶右侧有缺口，兔子上半身从缺口/卡顶之上露出，下半身（裙摆/脚）被主卡盖住，1:1 蓝湖。
       zIndex: 0,
     },
-    // 蓝湖 HI~ y=141（状态栏下 97）→ marginTop 60（hero 顶 37 + 60）。
-    heroCopy: {marginTop: px(60), maxWidth: px(200)},
+    // 蓝湖 HI~ y=141。iOS 刘海把 HI~/教练 整体压低约 0.04 屏高，主卡已上提到安卓位；若不动文案，
+    // 「教练↔主卡」间距会被压得过窄(实测 iOS 0.052 vs 安卓 0.092)。故把文案块上移 32（60→28），
+    // 使该 padding 与安卓 1:1（用户高亮项）。兔子/主卡不动。
+    heroCopy: {marginTop: px(28), maxWidth: px(200)},
     heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
     heroLine1: {
       fontSize: 24,
@@ -197,16 +209,21 @@ const makeStyles = (colors, dark) =>
       color: colors.textPrimary,
       marginTop: 0,
     },
-    // 蓝湖兔子盒 (159,89) 216×217，右对齐(right 边=375)。iOS APNG(480×552) 与蓝湖切图在
-    // 「脸宽/盒宽」比例上一致(≈0.483)，故盒宽=蓝湖设计 214 时，脸宽自然=蓝湖封面实测 103。
-    // aspectFit 无 letterbox 需盒比≈0.866(=480/552)，故 214×246。APNG 上留白19% → 用 top 上移把
-    // 耳顶顶到蓝湖 y≈90、脸中线 y≈218、中心 x≈268(右对齐)。目标全部取自 design-data 封面实测。
+    // 兔子盒与安卓 1:1：安卓 imgPracticeRabbit 为 216×217、top|end、scaleType=fitCenter，
+    // 播放 rabbit-stand.webp(480×552)。iOS 原生 TutuRabbitView 用 kCAGravityResizeAspect
+    // (=fitCenter)，且 APNG 与安卓 webp 逐帧完全一致(480×552、同留白)。故只要盒尺寸取安卓同款
+    // 216×217，两端「等比内嵌」出的可见兔子尺寸/位置像素级一致（此前用 230×265 恰好等于帧比例，
+    // 无 letterbox，兔子被整体放大、偏大）。
+    // 定位（蓝湖 练琴_t1）：盒 (159,89)216×217，右缘齐屏右(right:0)；盒底(hero 内 8+217=225)压到
+    // 卡顶(hero 内 187)之后 38，兔子裙摆/脚被主卡盖住、只露上半身与琴谱，1:1 蓝湖/安卓。
     mascot: {
       position: 'absolute',
-      top: px(-35),
+      // 背景星星已上移到安卓位(0.135)。兔子对齐到安卓绝对兔耳顶(多帧均值 0.123)，使「兔尺寸/上下左右
+      // 留白/兔耳=星星」与安卓逐点一致。实测斜率 0.00141/设计px：从 -11(耳0.138)再上移 12→ -23(耳≈0.123)。
+      top: px(-23),
       right: px(0),
-      width: px(214),
-      height: px(246),
+      width: px(216),
+      height: px(217),
     },
     cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
