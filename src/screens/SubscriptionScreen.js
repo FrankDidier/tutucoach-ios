@@ -81,7 +81,20 @@ const SubscriptionScreen = ({navigation}) => {
       <Image
         source={dark ? Images.subTopDark : Images.subTopLight}
         style={styles.topBg}
-        resizeMode="cover"
+        resizeMode="stretch"
+        pointerEvents="none"
+      />
+      {dark ? (
+        <LinearGradient
+          colors={['rgba(14,10,35,0)', colors.bg]}
+          style={styles.topBgFade}
+          pointerEvents="none"
+        />
+      ) : null}
+      <Image
+        source={dark ? Images.subCornerLines : Images.subCornerLinesLight}
+        style={styles.cornerLines}
+        resizeMode="stretch"
         pointerEvents="none"
       />
 
@@ -126,7 +139,7 @@ const SubscriptionScreen = ({navigation}) => {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>选择套餐</Text>
+        <Text style={[styles.sectionTitle, styles.plansTitle]}>选择套餐</Text>
         <View style={styles.plansRow}>
           {plans.map(plan => {
             const on = selected === plan.id;
@@ -178,6 +191,27 @@ const makeStyles = (colors, dark) =>
   StyleSheet.create({
     root: {flex: 1, backgroundColor: colors.bg},
     topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
+    // 贴图底沿是 #0E0A23，页底是蓝湖 #020014，iOS 会在 VIP→权益空隙里切出一条硬边。
+    // 安卓同一张图在空隙里仍带着紫光；这里把最后一段溶进页底，只深色。
+    // 浅色不另铺白雾：安卓也没有 overlay。右白来自蓝湖「背景」白底 + 圆形 2
+    // (188,-85,187×187, #FFE1E8, blur 92) 已烤进 sub_top_light，以及 VIP 卡
+    // 矩形 14 对角渐变 #FFE5EA → #FFFFFF。
+    topBgFade: {
+      position: 'absolute',
+      top: px(168),
+      left: 0,
+      right: 0,
+      height: px(92),
+    },
+    // 安卓：match_parent × 220dp、gravity=top、scaleType=fitXY。
+    // 宽按屏宽、高按 375 稿 220 等比（px(220)），stretch=fitXY，从根视图 top:0 铺（与 topBg 同起点）。
+    cornerLines: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: SCREEN_W,
+      height: px(220),
+    },
     headerSafe: {},
     header: {
       height: 44,
@@ -188,13 +222,25 @@ const makeStyles = (colors, dark) =>
     },
     backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
     backChevron: {fontSize: 30, fontWeight: '400', color: colors.textPrimary, marginTop: -4},
-    headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
-    scroll: {flex: 1},
-    scrollContent: {paddingHorizontal: 15, paddingTop: px(24), paddingBottom: px(110)},
-    // VIP 卡片
-    vipCard: {height: px(80), marginBottom: px(30)},
-    vipCardBg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: px(80), borderRadius: px(12)},
-    vipDiamond: {position: 'absolute', right: px(18), top: px(2), width: px(64), height: px(64)},
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      ...(dark ? {lineHeight: 25} : null),
+    },
+    scroll: {flex: 1, backgroundColor: 'transparent'},
+    // 蓝湖 t1/t2：内容左右 15；导航底 y=88 → VIP y=111 → paddingTop 23
+    scrollContent: {
+      paddingHorizontal: 15,
+      paddingTop: px(23),
+      paddingBottom: px(110),
+    },
+    // VIP 卡片 345×80 @ y=111；下沿 191 → 会员权益 y=240 → 49
+    // 安卓 vipCard：clipChildren=false，贴图 ImageView fitXY、无 cornerRadius。
+    // PNG 自带右上切口、1px 白边、矩形 14 左粉右白对角渐变；圆角会裁掉右面白纱。
+    vipCard: {height: px(80), marginBottom: px(49), overflow: 'visible'},
+    vipCardBg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: px(80)},
+    vipDiamond: {position: 'absolute', right: px(18), top: 0, width: px(64), height: px(64)},
     vipSvip: {position: 'absolute', left: px(16), top: px(19), width: px(47), height: px(13), tintColor: colors.textPrimary},
     vipBadge: {
       position: 'absolute',
@@ -207,17 +253,36 @@ const makeStyles = (colors, dark) =>
     },
     vipBadgeText: {fontSize: 11, color: '#261216'},
     vipDate: {position: 'absolute', left: px(16), top: px(44), fontSize: 12, color: colors.textPrimary},
-    sectionRow: {flexDirection: 'row', alignItems: 'center', marginBottom: px(12)},
-    sectionTitle: {fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginBottom: px(12)},
-    sectionStar: {width: 18, height: 18, marginLeft: 4, marginBottom: px(12)},
+    // 会员权益 17 高 @ y=240（星 18）；权益卡 y=273 → 行下 15
+    sectionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: px(15),
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginBottom: 0,
+      ...(dark ? {lineHeight: 17} : null),
+    },
+    sectionStar: {
+      width: 18,
+      height: 18,
+      marginLeft: 3,
+      marginBottom: 0,
+    },
+    // 选择套餐 y=363；权益卡下沿 343 → 上 20；套餐卡 y=395 → 标题下 15
+    plansTitle: {marginBottom: px(15)},
     benefitCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.card,
+      backgroundColor: dark ? colors.card : '#FFF5F7',
       borderRadius: 16,
-      paddingVertical: 14,
-      paddingHorizontal: 13,
-      marginBottom: px(22),
+      paddingVertical: 13,
+      paddingHorizontal: 15,
+      marginBottom: px(20),
+      height: px(70),
       borderWidth: dark ? 1 : 0,
       borderColor: colors.cardBorder,
     },
@@ -225,11 +290,11 @@ const makeStyles = (colors, dark) =>
     benefitTextCol: {flex: 1},
     benefitTitle: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
     benefitSub: {fontSize: 11, color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(38,18,22,0.6)', marginTop: 4},
-    plansRow: {flexDirection: 'row', gap: 8},
+    plansRow: {flexDirection: 'row', gap: 15},
     planCard: {
       flex: 1,
-      height: px(105),
-      backgroundColor: colors.card,
+      height: px(100),
+      backgroundColor: dark ? colors.card : '#FFFFFF',
       borderRadius: 12,
       paddingVertical: 10,
       paddingHorizontal: 8,
@@ -247,7 +312,7 @@ const makeStyles = (colors, dark) =>
     priceCurrency: {fontSize: 15, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216', marginBottom: 3},
     priceValue: {fontSize: 22, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216'},
     priceOn: {color: colors.primary},
-    agreementRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(22)},
+    agreementRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(15)},
     checkbox: {
       width: 18,
       height: 18,
@@ -263,7 +328,14 @@ const makeStyles = (colors, dark) =>
     checkboxMark: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
     agreementText: {flex: 1, fontSize: 12, color: colors.textPrimary},
     agreementLink: {color: colors.primary},
-    footerSafe: {position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 15, paddingBottom: 8},
+    footerSafe: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
     purchaseOuter: {height: px(44), borderRadius: px(22), overflow: 'hidden', justifyContent: 'center', alignItems: 'center'},
     purchaseBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   });

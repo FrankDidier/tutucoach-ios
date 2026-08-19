@@ -179,12 +179,36 @@ const WelcomeScreen = ({navigation}) => {
           />
         </View>
       ) : (
-        <Image
-          source={Images.homeBgLight}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          pointerEvents="none"
-        />
+        <>
+          <Image
+            source={Images.homeBgLight}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            pointerEvents="none"
+          />
+          {/* 下方色差校正：本机 cover 把整屏位图按高对齐后，屏底落在原图「偏粉」段，无法像
+              安卓 centerCrop/蓝湖那样渐隐到近白 rgb(252,248,250)（客户反馈「下方色差偏粉」）。
+              叠一层 透明→#FCF8FA 的纵向渐变把屏幕下半部柔和收白，逐点对齐安卓/蓝湖底色，
+              渐变跨度≈半屏无硬边接缝。仅浅色主题。 */}
+          <LinearGradient
+            colors={[
+              'rgba(252,248,250,0)',
+              'rgba(252,248,250,0)',
+              'rgba(252,248,250,1)',
+            ]}
+            locations={[0, 0.4, 1]}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: '58%',
+            }}
+            pointerEvents="none"
+          />
+        </>
       )}
       <SafeAreaView style={styles.safe}>
         {/* 蓝湖 首页_t1：标题 y=54 → 兔 y=163/342×343 → 文案 y=537 → 按钮 y=601/210×44 */}
@@ -220,7 +244,12 @@ const WelcomeScreen = ({navigation}) => {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.welcomeCaption}>
+        <Text
+          style={[
+            styles.welcomeCaption,
+            // 蓝湖 文案字重：浅色 PingFang SC Medium(500)、深色 SemiBold(600)。此前统一 700 过粗。
+            {fontWeight: mode === 'dark' ? '600' : '500'},
+          ]}>
           欢迎使用全球第一款智能手型检测软件
         </Text>
 
@@ -352,18 +381,20 @@ const makeStyles = (colors, mode) =>
     height: px(343),
     zIndex: 1,
     alignSelf: 'center',
-    // iOS APNG 帧底部留白比安卓 webp 多，同盒会偏低 ~0.03 屏高；上移 24 使兔身竖向中心与安卓齐平。
-    transform: [{translateY: px(-24)}],
+    // 蓝湖兔子填满 342×343 画框：耳顶 y163、脚底 y494、内容高 ~330。打包 APNG 兔子偏瘦高，
+    // 若按宽度放大会过高（脚底落到 512、脚下留白被吃掉、与文案挤在一起）。故以“高度=330”为准
+    // 等比缩放：scale 1.117 使渲染高≈330、耳顶≈163、脚底≈494，脚底→文案间距回到蓝湖 ~55。
+    // transform 不影响布局，文案/按钮位置不变。
+    transform: [{translateY: px(-25)}, {scale: 1.117}],
   },
   welcomeCaption: {
-    // 蓝湖设计 兔底 506 → 文案 537 ⇒ 31。但 iOS APNG 帧底部留白比安卓 webp 多 + 兔子 translateY(-24)，
-    // 使兔身可视底比安卓偏高，若仍用 31 则「兔↔文案」空档比安卓大 ~0.03 屏高（实测 iOS 0.081 vs 安卓 0.048）。
-    // 收紧到 6 让空档回到安卓同款，1:1。
-    marginTop: px(6),
+    // 蓝湖 首页：兔底 506 → 文案 537 ⇒ 31（与安卓 tvWelcomeTagline marginTop=31 完全一致）。
+    marginTop: px(31),
     paddingHorizontal: px(35),
-    // 100% 对齐安卓 tvWelcomeTagline：18sp 随屏宽等比放大(px)、textStyle=bold、行距+4。
+    // 蓝湖 文案节点：fontSize 18、lineHeight 38、box h38（居中）。行高 38 让字形下移并把按钮压到 y601，
+    // 与蓝湖 首页 完全一致（此前 28 会让按钮偏高 ~10px）。
     fontSize: px(18),
-    lineHeight: px(28),
+    lineHeight: px(38),
     textAlign: 'center',
     color: colors.textPrimary,
     fontWeight: '700',

@@ -29,6 +29,7 @@ import {initDeviceId, getDeviceId} from './src/services/device';
 import {registerAccount} from './src/services/account';
 import {registerWeChat} from './src/services/wechat';
 import {ThemeProvider, useTheme} from './src/theme/ThemeContext';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -209,9 +210,11 @@ function AppInner(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   return (
-    <ThemeProvider>
-      <AppInner />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppInner />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

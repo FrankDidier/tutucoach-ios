@@ -16,6 +16,9 @@ export const Images = {
   // 练琴页（蓝湖 1:1）：背景、带缺口卡片容器、VIP/免费磁贴
   practiceBgDark: require('./img/practice_bg_dark.png'),
   practiceBgLight: require('./img/practice_bg_light.png'),
+  // 浅色练琴页整屏背景：直接复用安卓 bg_practice（mdpi/xhdpi/xxhdpi=@1x/2x/3x），整屏 cover，
+  // 使 粉→白渐变沿整屏铺开（与安卓 centerCrop 一致），上半区保持较深的粉，不再被压缩到顶部而发白。
+  practiceBgFullLight: require('./img/practice_bg_full_light.png'),
   practiceCardDark: require('./img/practice_card_dark.png'),
   practiceCardLight: require('./img/practice_card_light.png'),
   practiceTileVip: require('./img/practice_tile_vip.png'),
@@ -41,6 +44,11 @@ export const Images = {
   // 会员订阅页（蓝湖 1:1）
   subTopDark: require('./img/sub_top_dark.png'),
   subTopLight: require('./img/sub_top_light.png'),
+  // 会员订阅顶栏折线：蓝湖「分组 12」187×220 @ (188,-33)。
+  // t1 深色：7 条 1px 白→透明纵向渐变描边，opacity 0.2。
+  // t2 浅色：7 条 1px 纯白描边，opacity 0.4。
+  subCornerLines: require('./img/sub_corner_lines.png'),
+  subCornerLinesLight: require('./img/sub_corner_lines_light.png'),
   subVipDark: require('./img/sub_vip_dark.png'),
   subVipLight: require('./img/sub_vip_light.png'),
   subDiamondDark: require('./img/sub_diamond_dark.png'),

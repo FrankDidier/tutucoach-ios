@@ -15,7 +15,7 @@ import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
 
 // 蓝湖设计稿基准宽度 375pt；按屏宽等比缩放，保证与设计稿 1:1 的相对尺寸/间距。
-const {width: SCREEN_W} = Dimensions.get('window');
+const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
 const S = SCREEN_W / 375;
 const px = n => Math.round(n * S);
 
@@ -54,9 +54,12 @@ const PracticeScreen = ({navigation}) => {
           />
         </View>
       ) : (
+        // 浅色：改为「整屏」背景（复用安卓 bg_practice），cover 铺满全屏。原先只铺顶部 400 设计px，
+        // 把 粉→白 渐变压缩到上半屏，导致到「HI~/教练」处粉色已淡出发白；安卓是整屏铺开渐变，故上区更粉。
+        // 现与安卓一致：整屏 cover → 上半区保持同款较深的粉。仅浅色，深色分支不变。
         <Image
-          source={Images.practiceBgLight}
-          style={{position: 'absolute', top: 0, left: 0, right: 0, height: px(400)}}
+          source={Images.practiceBgFullLight}
+          style={{position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: SCREEN_H}}
           resizeMode="cover"
           pointerEvents="none"
         />
@@ -79,7 +82,6 @@ const PracticeScreen = ({navigation}) => {
             </View>
             <Text style={styles.heroLine2}>我是你的兔兔教练</Text>
           </View>
-          <RabbitMascot loopAction="stand" style={styles.mascot} />
         </View>
 
         {/* MUSIC 大字水印（衔接处，压在卡片之后只露上沿）——1:1 蓝湖：Arial Black 空心/渐变贴图 */}
@@ -90,6 +92,10 @@ const PracticeScreen = ({navigation}) => {
             resizeMode="contain"
             pointerEvents="none"
           />
+
+          {/* 兔子：夹在 MUSIC 水印(zIndex0) 与 主卡(zIndex2) 之间 → 兔子在 MUSIC 之前、主卡之后。
+              位置与之前一致（原在 hero 内 top:-23；移入 cardOuter 后 top = -23 - hero高156 = -179）。 */}
+          <RabbitMascot loopAction="stand" style={styles.mascot} />
 
           {/* 主卡片：带缺口的容器贴图 + 内部绝对定位 */}
           <View style={styles.card}>
@@ -141,7 +147,7 @@ const PracticeScreen = ({navigation}) => {
                 />
               )}
               <Image
-                source={dark ? Images.wmChat : Images.wmChatLight}
+                source={Images.wmChat}
                 style={styles.chatWatermark}
                 resizeMode="stretch"
                 pointerEvents="none"
@@ -149,7 +155,7 @@ const PracticeScreen = ({navigation}) => {
               <Image
                 source={dark ? Images.companionHeartDark : Images.companionHeartLight}
                 style={styles.chatHeart}
-                resizeMode="contain"
+                resizeMode={dark ? 'contain' : 'stretch'}
               />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
@@ -218,12 +224,14 @@ const makeStyles = (colors, dark) =>
     // 卡顶(hero 内 187)之后 38，兔子裙摆/脚被主卡盖住、只露上半身与琴谱，1:1 蓝湖/安卓。
     mascot: {
       position: 'absolute',
-      // 背景星星已上移到安卓位(0.135)。兔子对齐到安卓绝对兔耳顶(多帧均值 0.123)，使「兔尺寸/上下左右
-      // 留白/兔耳=星星」与安卓逐点一致。实测斜率 0.00141/设计px：从 -11(耳0.138)再上移 12→ -23(耳≈0.123)。
-      top: px(-23),
+      // 兔子移入 cardOuter：原在 hero 内 top:-23；cardOuter 顶=hero 底(hero 高 156)，
+      // 故等价屏幕位置 top = -23 - 156 = -179。right:0 对齐屏右不变。
+      // zIndex 1 → 位于 MUSIC 水印(0) 之上、主卡(2) 之下（用户要求：MUSIC < 兔子 < 卡片）。
+      top: px(-179),
       right: px(0),
       width: px(216),
       height: px(217),
+      zIndex: 1,
     },
     cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
@@ -239,7 +247,8 @@ const makeStyles = (colors, dark) =>
     card: {
       width: px(CARD_W),
       height: px(CARD_H),
-      zIndex: 1,
+      // zIndex 2 → 主卡在兔子(1) 之上，兔子裙摆/脚被主卡盖住（用户要求：兔子在卡片之后）。
+      zIndex: 2,
       // 卡片贴图必须严格约束在 345×305 内，防止 stretch 时溢出到卡底之下把页底铺成卡色。
       overflow: 'hidden',
     },
@@ -333,24 +342,28 @@ const makeStyles = (colors, dark) =>
     },
     // 蓝湖 练琴_t1 Chat：实测封面字形 卡内 x[12-154] y[69-100]（宽≈142、高≈30、底与卡底齐平）。
     // 贴图字形占竖向上 88%（底部 12% 透明），故盒高 35 → 字形≈31，底 +4 溢出被卡片圆角裁掉，字形底贴卡底(≈100)。
-    // 贴图已按安卓最终版（渐变 129→82 + 1px 亮描边）生成；opacity 0.88 对齐安卓淡水印观感。stretch 铺满，字形左对齐卡内 12。
+    // 统一用 wm_chat（与安卓同一贴图，峰值 alpha≈178）。浅色原先用 wm_chat_light（峰值 alpha≈61 太淡→CHAT 发虚），
+    // 现改为与安卓一致：浅色 opacity 1.0（安卓 ImageView 无额外 alpha），深色沿用 0.88 不变。stretch 铺满，左对齐卡内 12。
     chatWatermark: {
       position: 'absolute',
       left: px(12),
       top: px(69),
       width: px(147),
       height: px(35),
-      opacity: 0.88,
+      opacity: dark ? 0.88 : 1.0,
       zIndex: 0,
     },
     // 玻璃爱心「+紫色高光块」：对齐安卓最终版 118×82 且右/下各外溢 14（marginEnd/Bottom=-14），
     // 由 companionRow 的 overflow:hidden + 圆角裁掉外溢角，爱心整体更大、紧贴卡片右下角填满，1:1 蓝湖。
+    // 玻璃爱心：蓝湖可见内容（爱心+右侧发光块+火花点）落在 AI卡内 x[233.5..314.5] y[40..99.5]，
+    // 浅色：蓝湖贴图节点 frame=95×73，且右/下边缘与卡片(30,456,315,100)右下角(345,556)齐平，
+    // 故盒 95×73、right/bottom=0（贴角）。用 stretch 铺满盒。之前 87×70 偏窄导致视觉变窄；
+    // 深色保持原样（用户仅要求改浅色）。
     chatHeart: {
       position: 'absolute',
-      right: px(-14),
-      bottom: px(-14),
-      width: px(118),
-      height: px(82),
+      ...(dark
+        ? {right: px(-14), bottom: px(-14), width: px(118), height: px(82)}
+        : {right: px(0), bottom: px(0), width: px(103), height: px(73)}),
     },
   });
 
