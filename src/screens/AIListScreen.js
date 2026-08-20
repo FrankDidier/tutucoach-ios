@@ -218,7 +218,7 @@ const AIListScreen = ({navigation}) => {
 
 const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
+    container: {flex: 1, backgroundColor: colors.aiPageBg || colors.bg},
     safe: {flex: 1},
     topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
     center: {flex: 1, justifyContent: 'center', alignItems: 'center'},

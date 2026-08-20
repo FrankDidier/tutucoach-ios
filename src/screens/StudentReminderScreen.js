@@ -718,7 +718,7 @@ export default function StudentReminderScreen({navigation}) {
 
 const makeStyles = colors =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
+    container: {flex: 1, backgroundColor: colors.aiPageBg || colors.bg},
     flex: {flex: 1},
     center: {paddingVertical: 40, alignItems: 'center', justifyContent: 'center'},
     scroll: {padding: 16, paddingBottom: 40},

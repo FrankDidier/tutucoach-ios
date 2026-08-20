@@ -9,6 +9,9 @@ export const Images = {
   // 首页整屏背景（蓝湖导出，含右上角星光；深/浅两版，1:1 还原）
   homeBgDark: require('./img/home_bg_dark.png'),
   homeBgLight: require('./img/home_bg_light.png'),
+  // 蓝湖 首页_t2：底软盘 image (14,489,342×235) opacity 0.6；兔脚阴影 圆形29 (132,489,108×10) blur6
+  homeSoftBottom: require('./img/home_soft_bottom.png'),
+  homeRabbitShadow: require('./img/home_rabbit_shadow.png'),
   homeSparkleLight: require('./img/ic_home_sparkle_light.png'),
   homeSparkleDark: require('./img/ic_home_sparkle_dark.png'),
   detectCoachHeadLight: require('./img/ic_det_coach_head_light.png'),

@@ -358,7 +358,7 @@ const AISettingsScreen = ({navigation, route}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.aiPageBg || colors.bg} />
       <ScreenHeader title="AI分身设置" onBack={() => navigation?.goBack?.()} />
 
       {loading ? (
@@ -572,7 +572,7 @@ const AISettingsScreen = ({navigation, route}) => {
 
 const makeStyles = colors =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
+    container: {flex: 1, backgroundColor: colors.aiPageBg || colors.bg},
     flex: {flex: 1},
     center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
     scroll: {paddingHorizontal: 16, paddingBottom: 40, paddingTop: 4},

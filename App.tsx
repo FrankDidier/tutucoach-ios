@@ -75,14 +75,14 @@ function MainTabs({route}: {route?: {params?: {screen?: string}}}) {
           paddingTop: 6,
           backgroundColor: colors.tabBarBg,
           borderTopWidth: 0.5,
-          borderTopColor: colors.divider,
+          borderTopColor: colors.tabBarBorder || colors.divider,
           elevation: 8,
           shadowColor: '#000',
           shadowOpacity: colors.mode === 'dark' ? 0.3 : 0.06,
           shadowRadius: 8,
           shadowOffset: {width: 0, height: -2},
         },
-        tabBarLabelStyle: {fontSize: 11, fontWeight: '600'},
+        tabBarLabelStyle: {fontSize: 10, fontWeight: '400'},
       })}>
       <Tab.Screen name="首页" component={WelcomeScreen} />
       <Tab.Screen name="练琴" component={PracticeScreen} />

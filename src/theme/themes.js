@@ -20,10 +20,12 @@ export const lightColors = {
   mode: 'light',
   statusBarStyle: 'dark-content',
 
-  // 背景（蓝湖 t2）
-  bg: '#FAFAFA',
-  bgGradientTop: '#FFE5EC',
-  bgGradientBottom: '#FAFAFA',
+  // 背景（蓝湖 t2）：底色/渐隐终点 #FCF8FA（rgba 252,248,250），顶粉 #FFE5EB
+  bg: '#FCF8FA',
+  bgGradientTop: '#FFE5EB',
+  bgGradientBottom: '#FCF8FA',
+  // 蓝湖 ai设置_t2 / ai分身设置_t2 页底 #FAFAFA
+  aiPageBg: '#FAFAFA',
 
   // 卡片 / 表面
   card: '#FFFFFF',
@@ -31,11 +33,11 @@ export const lightColors = {
   cardBorder: '#F0DCE2',
   inputBg: '#F7F7F7',
 
-  // 主色（粉）— CTA 竖向 #FF7A9A→#FF355F（蓝湖会员/确认按钮）
+  // 主色（粉）— 蓝湖 t2 CTA 竖向：顶 #FF3761 → 底 #FF7797
   primary: '#FF355F',
   primaryDark: '#FF3761',
-  primaryGradientStart: '#FF7A9A',
-  primaryGradientEnd: '#FF355F',
+  primaryGradientStart: '#FF3761',
+  primaryGradientEnd: '#FF7797',
   onPrimary: '#FFFFFF',
   accent: '#FF5F83',
 
@@ -44,9 +46,10 @@ export const lightColors = {
   textSecondary: '#979797',
   textMuted: '#A6A6A6',
 
-  // 分隔线 / tab
+  // 分隔线 / tab（蓝湖 首页_t2 tab 顶发丝线 #F8F8F8）
   divider: '#E5E5E5',
   tabBarBg: '#FFFFFF',
+  tabBarBorder: '#F8F8F8',
   tabActive: '#F03B61',
   tabInactive: '#D9B4C0',
 
@@ -64,6 +67,8 @@ export const darkColors = {
   bg: '#020014',
   bgGradientTop: '#241A46',
   bgGradientBottom: '#020014',
+  // 蓝湖 ai设置_t1 页底 #020014
+  aiPageBg: '#020014',
 
   // 卡片 / 表面
   card: '#040428',
@@ -87,6 +92,7 @@ export const darkColors = {
   // 分隔线 / tab
   divider: 'rgba(255,255,255,0.08)',
   tabBarBg: '#0C0820',
+  tabBarBorder: 'rgba(255,255,255,0.08)',
   tabActive: '#B595FF',
   tabInactive: '#5D4F7E',
 
