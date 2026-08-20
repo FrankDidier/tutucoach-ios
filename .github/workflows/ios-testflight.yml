@@ -141,6 +141,101 @@ jobs:
           echo "::error::altool upload failed after $max attempts"
           exit 1
 
+      # altool only uploads. Without assigning to beta groups + submitting
+      # external Beta App Review, clients never see the build in TestFlight
+      # (build stays READY_FOR_BETA_SUBMISSION).
+      - name: Assign to TestFlight groups + submit Beta Review
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUNDLE_ID: com.impit.tutucoach
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os, time, urllib.error, urllib.request
+          try:
+              import jwt
+          except ImportError:
+              import subprocess, sys
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "PyJWT", "cryptography", "-q"])
+              import jwt
+
+          key_id = os.environ["ASC_KEY_ID"]
+          issuer = os.environ["ASC_ISSUER_ID"]
+          p8 = base64.b64decode(os.environ["ASC_KEY_P8_BASE64"]).decode()
+          token = jwt.encode(
+              {"iss": issuer, "iat": int(time.time()) - 10, "exp": int(time.time()) + 18 * 60, "aud": "appstoreconnect-v1"},
+              p8, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"},
+          )
+          if isinstance(token, bytes):
+              token = token.decode()
+
+          def api(method, url, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  url, data=data, method=method,
+                  headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      body = r.read().decode() or "{}"
+                      return r.status, json.loads(body) if body.strip() else {}
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode()
+                  try:
+                      j = json.loads(body)
+                  except Exception:
+                      j = {"raw": body}
+                  return e.code, j
+
+          bundle = os.environ["BUNDLE_ID"]
+          st, apps = api("GET", f"https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]={bundle}")
+          assert st == 200 and apps.get("data"), apps
+          app_id = apps["data"][0]["id"]
+
+          build_id = None
+          build_ver = None
+          for _ in range(36):  # wait up to ~18 min for processing
+              st, builds = api("GET", f"https://api.appstoreconnect.apple.com/v1/builds?filter[app]={app_id}&sort=-uploadedDate&limit=5")
+              assert st == 200, builds
+              for b in builds["data"]:
+                  a = b["attributes"]
+                  if a.get("processingState") == "VALID" and not a.get("expired"):
+                      build_id = b["id"]
+                      build_ver = a.get("version")
+                      break
+              if build_id:
+                  break
+              print("waiting for VALID build…")
+              time.sleep(30)
+          assert build_id, "no VALID build found after upload"
+          print(f"using build {build_ver} id={build_id}")
+
+          st, groups = api("GET", f"https://api.appstoreconnect.apple.com/v1/apps/{app_id}/betaGroups?limit=20")
+          assert st == 200, groups
+          for g in groups["data"]:
+              name = g["attributes"].get("name")
+              st, res = api("POST", f"https://api.appstoreconnect.apple.com/v1/betaGroups/{g['id']}/relationships/builds",
+                            {"data": [{"type": "builds", "id": build_id}]})
+              print(f"assign {name}: HTTP {st}")
+
+          st, detail = api("GET", f"https://api.appstoreconnect.apple.com/v1/builds/{build_id}?include=buildBetaDetail")
+          ext = None
+          for inc in detail.get("included") or []:
+              if inc["type"] == "buildBetaDetails":
+                  ext = inc["attributes"].get("externalBuildState")
+          print(f"externalBuildState={ext}")
+          if ext in (None, "READY_FOR_BETA_SUBMISSION", "READY_FOR_BETA_TESTING"):
+              st, sub = api("POST", "https://api.appstoreconnect.apple.com/v1/betaAppReviewSubmissions", {
+                  "data": {"type": "betaAppReviewSubmissions",
+                           "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}
+              })
+              print(f"beta review submit: HTTP {st} {json.dumps(sub, ensure_ascii=False)[:400]}")
+          else:
+              print("skip beta review submit; already in progress/testing")
+          PY
+
       - name: Upload IPA artifact
         if: always()
         uses: actions/upload-artifact@v4
