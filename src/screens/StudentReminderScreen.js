@@ -413,6 +413,14 @@ export default function StudentReminderScreen({navigation}) {
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
+            {/* 说明：与安卓陪练提示页一致（去掉图标） */}
+            <View style={styles.tipCard}>
+              <Text style={styles.tipTitle}>每个学生单独设置</Text>
+              <Text style={styles.tipBody}>
+                陪练模式里，AI 分身会按你设置的「频率」不定时把这些重点念给学生听，并结合个性主动陪聊。可从班级名册直接选学生；需要学生在陪练模式点「学生码」发给你。
+              </Text>
+            </View>
+
             {/* 选择学生 */}
             <Text style={styles.sectionLabel}>选择学生</Text>
             <TouchableOpacity
@@ -465,7 +473,7 @@ export default function StudentReminderScreen({navigation}) {
               </Text>
             ) : (
               <Text style={styles.emptyHint}>
-                点上方按钮可一键从班级名册选人；也可直接点下方姓名芯片。看到 id 尾号的可点「✎ 备注名」起名。
+                点上方按钮可一键从班级名册选人；也可直接点下方姓名芯片。看到 id 尾号的可点「备注名」起名。
               </Text>
             )}
 
@@ -482,7 +490,7 @@ export default function StudentReminderScreen({navigation}) {
                       当前学生：{sel.name}
                     </Text>
                     <TouchableOpacity onPress={() => renameStudent(sel)} activeOpacity={0.8}>
-                      <Text style={styles.renameBtn}>✎ 备注名</Text>
+                      <Text style={styles.renameBtn}>备注名</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -722,6 +730,23 @@ const makeStyles = colors =>
     flex: {flex: 1},
     center: {paddingVertical: 40, alignItems: 'center', justifyContent: 'center'},
     scroll: {padding: 16, paddingBottom: 40},
+    tipCard: {
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      padding: 16,
+      marginBottom: 16,
+    },
+    tipTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    tipBody: {
+      fontSize: 13,
+      lineHeight: 20,
+      color: colors.textSecondary,
+    },
     sectionLabel: {
       fontSize: 13,
       fontWeight: '700',
