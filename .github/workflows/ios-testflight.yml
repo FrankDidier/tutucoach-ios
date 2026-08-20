@@ -152,14 +152,14 @@ jobs:
           BUNDLE_ID: com.impit.tutucoach
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          # Homebrew Python on macos-15 is PEP 668 — use a venv for PyJWT.
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          # shellcheck disable=SC1091
+          source "$RUNNER_TEMP/asc-venv/bin/activate"
+          pip install -q PyJWT cryptography
+          python - <<'PY'
           import base64, json, os, time, urllib.error, urllib.request
-          try:
-              import jwt
-          except ImportError:
-              import subprocess, sys
-              subprocess.check_call([sys.executable, "-m", "pip", "install", "PyJWT", "cryptography", "-q"])
-              import jwt
+          import jwt
 
           key_id = os.environ["ASC_KEY_ID"]
           issuer = os.environ["ASC_ISSUER_ID"]
