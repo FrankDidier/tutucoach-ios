@@ -3,7 +3,7 @@
 // - 一键选取曲目重点：从「陪练重点」里直接挑一首已设曲目的重点填进来，教案会据此调整、呼应。
 // - 内置多套排版样式（清新 / 雅致 / 简约），一键切换，无需外部 UI 设计。
 // - 点任一板块 → 弹出「板块详解」页，AI 就该板块展开更细致的讲解。
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import {
 } from '../services/companionChat';
 import {listStudents} from '../services/students';
 import {getDeviceId} from '../services/device';
+import {setKeepAwake} from '../services/voice';
 
 /** 服务端偶发只回 raw（```json ...```）；剥围栏再解析，避免整页原文。 */
 function normalizeRecommendResult(r) {
@@ -210,6 +211,19 @@ export default function LessonPlanScreen({navigation}) {
   const [recLoading, setRecLoading] = useState(false);
   const [recResult, setRecResult] = useState(null); // {technique,musicality,niche,raw}
   const [recAvoid, setRecAvoid] = useState([]); // 最近已推荐曲名，降低重复
+
+  // 教案/推荐/板块详解生成较慢，期间禁止自动锁屏，避免黑屏待机打断请求。
+  useEffect(() => {
+    const busy = loading || recLoading || detailLoading;
+    try {
+      setKeepAwake(busy);
+    } catch (e) {}
+    return () => {
+      try {
+        setKeepAwake(false);
+      } catch (e) {}
+    };
+  }, [loading, recLoading, detailLoading]);
 
   const pickGrade = n => {
     setRecGradeChip(n);
