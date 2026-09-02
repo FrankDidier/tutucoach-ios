@@ -137,20 +137,22 @@ export async function uploadAvatar(coachId, uri, mime = 'image/jpeg') {
   return postForm('/api/coach/upload_avatar', fd, await authHeader());
 }
 
-/** 上传一段本人录音，后端自动「大模型声音复刻」生成专属音色并写回 voiceId。
- * 优先用 base64 走 JSON 上传（更稳，规避 file:// multipart 在部分机型发不出去的问题）；
- * 没有 base64 时回退到 multipart 文件上传（安卓/旧路径）。 */
+/** 上传一段本人录音。老师端 → 提交审核；管理员 → 立即生成。
+ * 优先用 base64 走 JSON；没有 base64 时回退 multipart。 */
 export async function cloneVoice(coachId, uri, mime = 'audio/mp4', base64 = '') {
+  const {getDeviceId} = require('./device');
+  const ownerId = getDeviceId();
   if (base64) {
     return postJson(
       '/api/coach/clone_voice',
-      {id: coachId, audioBase64: base64},
+      {id: coachId, audioBase64: base64, ownerId},
       await authHeader(),
-      120000, // 服务端要调百度，给足 120s
+      120000,
     );
   }
   const fd = new FormData();
   fd.append('id', coachId);
+  fd.append('ownerId', ownerId || '');
   fd.append('file', {uri, type: mime, name: 'voice.m4a'});
   return postForm('/api/coach/clone_voice', fd, await authHeader());
 }

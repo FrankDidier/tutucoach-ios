@@ -17,14 +17,14 @@ import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {getMembership} from '../services/account';
 import {payWithWeChat} from '../services/wechat';
+import {getJson} from '../services/api';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 const S = SCREEN_W / 375;
 const px = n => Math.round(n * S);
 
-// iOS（Apple 渠道）定价：年 888 / 季 228 / 月 88。服务端按 platform=ios 取 PLANS_IOS 下单，
-// 与此处展示一致；App 只传 plan 标识，服务端仍是定价权威。
-const plans = [
+// 默认展示价（服务端拉取失败时回退）；真实扣款仍以服务端为准。
+const DEFAULT_PLANS = [
   {id: 'yearly', name: '年卡', price: '888', original: '¥1188.00'},
   {id: 'quarterly', name: '季卡', price: '228', original: '¥299.00'},
   {id: 'monthly', name: '月卡', price: '88', original: '¥128.00'},
@@ -37,6 +37,7 @@ const SubscriptionScreen = ({navigation}) => {
   const [selected, setSelected] = useState('yearly');
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
 
   useEffect(() => {
     let alive = true;
@@ -44,6 +45,24 @@ const SubscriptionScreen = ({navigation}) => {
       try {
         const m = await getMembership(getDeviceId());
         if (alive && m && m.ok) setVip(m);
+      } catch (e) {}
+      try {
+        const j = await getJson('/api/pay/plans?platform=ios');
+        if (alive && j && j.ok && Array.isArray(j.plans) && j.plans.length) {
+          const monthly = j.plans.find(p => p.id === 'monthly');
+          const mAmt = monthly ? parseFloat(monthly.amount || monthly.price) : 88;
+          setPlans(
+            j.plans.map(p => {
+              const amt = parseFloat(p.amount || p.price || '0');
+              const price = String(Math.round(amt));
+              let original = '';
+              if (p.id === 'yearly') original = `¥${Math.round(mAmt * 12)}.00`;
+              else if (p.id === 'quarterly') original = `¥${Math.round(mAmt * 3)}.00`;
+              else original = `¥${Math.round(mAmt * 1.2)}.00`;
+              return {id: p.id, name: p.name || p.id, price, original};
+            }),
+          );
+        }
       } catch (e) {}
     })();
     return () => {

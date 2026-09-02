@@ -254,7 +254,12 @@ const AISettingsScreen = ({navigation, route}) => {
       const up = await uploadAvatar(draft.id, r.uri);
       if (up && up.ok) {
         set('avatarUrl', up.avatarUrl || draft.avatarUrl);
-        Alert.alert('头像已更新');
+        Alert.alert(
+          '头像已上传',
+          up.pending
+            ? '头像已进入待审核，角色审核通过后学生对端才会看到新头像。'
+            : '头像已更新。',
+        );
       } else {
         Alert.alert('上传失败', (up && up.error) || '请重试');
       }
@@ -327,8 +332,15 @@ const AISettingsScreen = ({navigation, route}) => {
       const path = r.path.startsWith('file://') ? r.path : 'file://' + r.path;
       const cv = await cloneVoice(draft.id, path, 'audio/mp4', r.base64);
       if (cv && cv.ok) {
-        set('mmVoice', cv.mmVoice || cv.voiceId || draft.mmVoice);
-        Alert.alert('音色已生成', '本人专属音色已应用，支持中/英/日/韩四语言 ✓');
+        if (cv.pending) {
+          Alert.alert(
+            '已提交审核',
+            '音色已进入审核队列，管理员通过后才会生成并生效（通常 1–3 个工作日）。',
+          );
+        } else {
+          set('mmVoice', cv.mmVoice || cv.voiceId || draft.mmVoice);
+          Alert.alert('音色已生成', '本人专属音色已应用，支持中/英/日/韩四语言 ✓');
+        }
       } else if (cv && cv.error === 'voice_no_permission') {
         Alert.alert(
           '声音复刻未开通',
@@ -336,8 +348,12 @@ const AISettingsScreen = ({navigation, route}) => {
         );
       } else if (cv && cv.error === 'speech_not_configured') {
         Alert.alert('暂未配置', '服务器尚未配置语音密钥，请联系管理员。');
+      } else if (cv && cv.error === 'quota_exceeded') {
+        Alert.alert('次数已满', (cv && cv.detail) || '声音复刻次数已达上限，请联系管理员。');
+      } else if (cv && cv.error === 'already_pending') {
+        Alert.alert('审核中', (cv && cv.detail) || '该角色已有待审核申请，请等待处理。');
       } else {
-        Alert.alert('生成失败', (cv && cv.detail) || (cv && cv.error) || '请重试');
+        Alert.alert('提交失败', (cv && cv.detail) || (cv && cv.error) || '请重试');
       }
     } catch (e) {
       Alert.alert('生成失败', '网络异常，请重试');
