@@ -83,16 +83,21 @@ export async function generateLessonPlan(
   existingFocus = '',
   category = 'general',
 ) {
-  try {
-    const body = {piece: piece || '', composer: composer || ''};
-    if (existingFocus) body.existing_focus = existingFocus;
-    if (category) body.category = category;
-    // 服务端用大模型生成较长内容，最长约 100s；给 115s 客户端超时。
-    const resp = await postJson('/api/coach/lesson_plan', body, null, 115000);
-    return {ok: !!(resp && resp.ok && resp.text), text: (resp && resp.text) || ''};
-  } catch (e) {
-    return {ok: false, text: ''};
+  // 服务端生成 8 板块教案可能需 120~180s（含续写）；客户端给足 180s，失败自动重试一次。
+  const body = {piece: piece || '', composer: composer || ''};
+  if (existingFocus) body.existing_focus = existingFocus;
+  if (category) body.category = category;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await postJson('/api/coach/lesson_plan', body, null, 180000);
+      if (resp && resp.ok && resp.text) {
+        return {ok: true, text: resp.text};
+      }
+    } catch (e) {
+      if (attempt === 1) return {ok: false, text: ''};
+    }
   }
+  return {ok: false, text: ''};
 }
 
 /**

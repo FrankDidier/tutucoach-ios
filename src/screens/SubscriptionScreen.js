@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import {useFocusEffect} from '@react-navigation/native';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
@@ -30,6 +31,21 @@ const DEFAULT_PLANS = [
   {id: 'monthly', name: '月卡', price: '88', original: '¥128.00'},
 ];
 
+function parsePlansFromApi(j) {
+  if (!j || !j.ok || !Array.isArray(j.plans) || !j.plans.length) return null;
+  const monthly = j.plans.find(p => p.id === 'monthly');
+  const mAmt = monthly ? parseFloat(monthly.amount || monthly.price) : 88;
+  return j.plans.map(p => {
+    const amt = parseFloat(p.amount || p.price || '0');
+    const price = String(Math.round(amt));
+    let original = '';
+    if (p.id === 'yearly') original = `¥${Math.round(mAmt * 12)}.00`;
+    else if (p.id === 'quarterly') original = `¥${Math.round(mAmt * 3)}.00`;
+    else original = `¥${Math.round(mAmt * 1.2)}.00`;
+    return {id: p.id, name: p.name || p.id, price, original};
+  });
+}
+
 const SubscriptionScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
@@ -39,6 +55,17 @@ const SubscriptionScreen = ({navigation}) => {
   const [vip, setVip] = useState(null);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
 
+  const refreshPlans = useCallback(async () => {
+    try {
+      const j = await getJson('/api/pay/plans', {
+        platform: 'ios',
+        _t: Date.now(),
+      });
+      const parsed = parsePlansFromApi(j);
+      if (parsed) setPlans(parsed);
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -46,29 +73,18 @@ const SubscriptionScreen = ({navigation}) => {
         const m = await getMembership(getDeviceId());
         if (alive && m && m.ok) setVip(m);
       } catch (e) {}
-      try {
-        const j = await getJson('/api/pay/plans?platform=ios');
-        if (alive && j && j.ok && Array.isArray(j.plans) && j.plans.length) {
-          const monthly = j.plans.find(p => p.id === 'monthly');
-          const mAmt = monthly ? parseFloat(monthly.amount || monthly.price) : 88;
-          setPlans(
-            j.plans.map(p => {
-              const amt = parseFloat(p.amount || p.price || '0');
-              const price = String(Math.round(amt));
-              let original = '';
-              if (p.id === 'yearly') original = `¥${Math.round(mAmt * 12)}.00`;
-              else if (p.id === 'quarterly') original = `¥${Math.round(mAmt * 3)}.00`;
-              else original = `¥${Math.round(mAmt * 1.2)}.00`;
-              return {id: p.id, name: p.name || p.id, price, original};
-            }),
-          );
-        }
-      } catch (e) {}
+      if (alive) await refreshPlans();
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [refreshPlans]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPlans();
+    }, [refreshPlans]),
+  );
 
   const onPurchase = async () => {
     if (!agreed) {

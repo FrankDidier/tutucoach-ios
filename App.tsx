@@ -22,6 +22,7 @@ import StudentEntryScreen from './src/screens/StudentEntryScreen';
 import CompanionScreen from './src/screens/CompanionScreen';
 import StudentReminderScreen from './src/screens/StudentReminderScreen';
 import LessonPlanScreen from './src/screens/LessonPlanScreen';
+import LegalScreen from './src/screens/LegalScreen';
 
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
@@ -201,6 +202,7 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="AISettings" component={AISettingsScreen} />
         <Stack.Screen name="StudentReminder" component={StudentReminderScreen} />
         <Stack.Screen name="LessonPlan" component={LessonPlanScreen} />
+        <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
       </Stack.Navigator>

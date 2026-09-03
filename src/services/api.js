@@ -33,7 +33,9 @@ export async function getJson(path, params, headers) {
         .join('&')
     : '';
   const res = await withTimeout(
-    fetch(BASE_URL + path + qs, headers ? {headers} : undefined),
+    fetch(BASE_URL + path + qs, {
+      headers: {'Cache-Control': 'no-cache', ...(headers || {})},
+    }),
     TIMEOUT_MS,
   );
   return res.json();
