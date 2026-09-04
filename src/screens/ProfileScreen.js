@@ -258,14 +258,8 @@ const ProfileScreen = ({navigation}) => {
           <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfHelp}
-            label="隐私政策"
-            onPress={() => navigation.navigate('Legal', {doc: 'privacy'})}
-          />
-          <View style={styles.menuDivider} />
-          <MenuRow
-            icon={Images.pfHelp}
-            label="用户服务协议"
-            onPress={() => navigation.navigate('Legal', {doc: 'terms'})}
+            label="隐私与用户协议"
+            onPress={() => navigation.navigate('Legal')}
           />
           <View style={styles.menuDivider} />
           <MenuRow

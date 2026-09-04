@@ -10,6 +10,8 @@
 @property(nonatomic, strong) AVCaptureVideoDataOutput *videoOutput;
 @property(nonatomic, strong) dispatch_queue_t cameraQueue;
 @property(nonatomic, strong) MPPHandLandmarker *liveLandmarker;
+@property(nonatomic, strong) AVCaptureDevice *currentDevice;
+@property(nonatomic, strong) id rotationCoordinator;  // AVCaptureDeviceRotationCoordinator (iOS 17+)
 @property(nonatomic, assign) BOOL configured;
 @property(nonatomic, assign) NSInteger frameTimestampMs;
 // YES 表示视图正在/已被销毁：用于抑制销毁后到达的相机帧 / MediaPipe 回调，
@@ -39,6 +41,8 @@
 - (void)layoutSubviews {
   [super layoutSubviews];
   _previewLayer.frame = self.bounds;
+  // 布局变化后重刷方向，避免首帧 bounds=0 时 connection 未正确落地。
+  [self refreshPreviewOrientation];
 }
 
 // active 只切换「是否跑 MediaPipe 打分」（对应安卓 isMonitoring）。
@@ -142,6 +146,12 @@
       if (![s.session isRunning]) {
         [s.session startRunning];
       }
+      // startRunning 之后预览连接才稳定，必须再刷一次方向（客户真机颠倒根因之一）。
+      dispatch_async(dispatch_get_main_queue(), ^{
+        TutuDetectorView *s2 = weakSelf;
+        if (s2 == nil || s2.tornDown) return;
+        [s2 refreshPreviewOrientation];
+      });
       // 通知 JS 预览已就绪（隐藏「相机预览」占位）。即便没在打分也会发。
       if ([s.session isRunning]) {
         [s emit:@{@"previewReady": @YES}];
@@ -208,20 +218,34 @@
     [_session addOutput:_videoOutput];
   }
 
-  // 送入 MediaPipe 的取样连接：仅设竖屏，不做连接级镜像（前置镜像交给 MPPImage 朝向）。
-  [self applyConnection:[_videoOutput connectionWithMediaType:AVMediaTypeVideo] mirror:NO];
+  _currentDevice = device;
+
+  // 取样连接：不做方向/镜像（传感器原生横屏缓冲）。竖屏正立与前置镜像一律交给
+  // MPPImage 的 orientation（Right / LeftMirrored），与安卓 preprocessFrame 分工一致。
+  // 切勿在此设 Portrait —— 否则会与 MPPImage 朝向叠成双重旋转。
+  AVCaptureConnection *sampleConn = [_videoOutput connectionWithMediaType:AVMediaTypeVideo];
+  if (sampleConn != nil) {
+    if (sampleConn.isVideoMirroringSupported) {
+      sampleConn.automaticallyAdjustsVideoMirroring = NO;
+      sampleConn.videoMirrored = NO;
+    }
+  }
 
   // 预览层（铺满，等比裁剪）。用 weakSelf 避免“点启动后立刻返回”时在已销毁视图上操作图层而崩溃。
-  BOOL front = _useFrontCamera;
   __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     TutuDetectorView *s = weakSelf;
     if (s == nil || s.tornDown) return;
-    s.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:s.session];
-    s.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+    if (s.previewLayer == nil) {
+      s.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:s.session];
+      s.previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+      [s.layer insertSublayer:s.previewLayer atIndex:0];
+    } else {
+      s.previewLayer.session = s.session;
+    }
     s.previewLayer.frame = s.bounds;
-    [s applyConnection:s.previewLayer.connection mirror:front];
-    [s.layer insertSublayer:s.previewLayer atIndex:0];
+    [s setupRotationCoordinator];
+    [s refreshPreviewOrientation];
   });
 
   [self setupLiveLandmarker];
@@ -244,17 +268,66 @@
   return device;
 }
 
-// 设置连接的方向（竖屏）；mirror=YES 时水平镜像。
-// 注意：只对「预览连接」镜像；送入 MediaPipe 的取样缓冲不靠连接镜像（本机型管线不生效），
-// 而是在 captureOutput 里用 MPPImage 朝向 .leftMirrored 处理，二者保持一致，避免双重镜像。
-- (void)applyConnection:(AVCaptureConnection *)conn mirror:(BOOL)mirror {
-  if (conn == nil) return;
-  if (conn.isVideoOrientationSupported) {
-    conn.videoOrientation = AVCaptureVideoOrientationPortrait;
+- (void)setupRotationCoordinator {
+  if (@available(iOS 17.0, *)) {
+    AVCaptureDevice *dev = _currentDevice;
+    if (dev == nil || _previewLayer == nil) return;
+    // RotationCoordinator 按重力给出预览应使用的旋转角，避免写死 Portrait 在部分机型颠倒。
+    _rotationCoordinator =
+        [[AVCaptureDeviceRotationCoordinator alloc] initWithDevice:dev
+                                                      previewLayer:_previewLayer];
   }
-  if (mirror && conn.isVideoMirroringSupported) {
+}
+
+// 刷新预览连接的方向 + 镜像。客户反馈写死 Portrait 仍颠倒：优先用 RotationCoordinator；
+// 回退时用「竖屏正立」对应的旋转角。切换后置必须显式 videoMirrored=NO。
+//
+// 额外：在 RN UIView 上挂 AVCaptureVideoPreviewLayer 时，部分机型会出现稳定的 180°
+// 颠倒（客户截图天花板在底部）。连接方向设对后仍颠倒，故对 previewLayer 再旋 180°。
+- (void)refreshPreviewOrientation {
+  if (_previewLayer == nil) return;
+  AVCaptureConnection *conn = _previewLayer.connection;
+  if (conn == nil) {
+    // connection 尚未就绪时也先摆正 transform，待下次 layout/startRunning 再刷。
+    _previewLayer.affineTransform = CGAffineTransformMakeRotation((CGFloat)M_PI);
+    return;
+  }
+
+  BOOL mirror = _useFrontCamera;
+  if (@available(iOS 17.0, *)) {
+    CGFloat angle = 90.0;
+    if (_rotationCoordinator != nil) {
+      AVCaptureDeviceRotationCoordinator *coord =
+          (AVCaptureDeviceRotationCoordinator *)_rotationCoordinator;
+      angle = coord.videoRotationAngleForHorizonLevelPreview;
+    }
+    // App 锁定竖屏：重力角异常（0）时强制 90°。
+    if (angle < 1.0) angle = 90.0;
+    if ([conn isVideoRotationAngleSupported:angle]) {
+      conn.videoRotationAngle = angle;
+    }
+  } else if (conn.isVideoOrientationSupported) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    conn.videoOrientation = AVCaptureVideoOrientationPortrait;
+#pragma clang diagnostic pop
+  }
+
+  if (conn.isVideoMirroringSupported) {
     conn.automaticallyAdjustsVideoMirroring = NO;
-    conn.videoMirrored = YES;
+    conn.videoMirrored = mirror;
+  }
+
+  // 纠正 RN 子图层 180° 颠倒（见方法注释）。
+  _previewLayer.affineTransform = CGAffineTransformMakeRotation((CGFloat)M_PI);
+}
+
+// 取样连接：仅清镜像，不改方向（见 configureIfNeeded 注释）。
+- (void)applySampleConnection:(AVCaptureConnection *)conn {
+  if (conn == nil) return;
+  if (conn.isVideoMirroringSupported) {
+    conn.automaticallyAdjustsVideoMirroring = NO;
+    conn.videoMirrored = NO;
   }
 }
 
@@ -273,6 +346,10 @@
 
 - (void)switchCameraInput {
   if (_session == nil) return;
+  BOOL wasRunning = _session.isRunning;
+  if (wasRunning) {
+    [_session stopRunning];
+  }
   [_session beginConfiguration];
   for (AVCaptureInput *in in [_session.inputs copy]) {
     if ([in isKindOfClass:[AVCaptureDeviceInput class]]) {
@@ -280,20 +357,35 @@
     }
   }
   AVCaptureDevice *device = [self cameraDevice];
+  _currentDevice = device;
   NSError *err = nil;
   AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&err];
   if (input && [_session canAddInput:input]) {
     [_session addInput:input];
   }
-  [self applyConnection:[_videoOutput connectionWithMediaType:AVMediaTypeVideo] mirror:NO];
+  // 取样连接：始终不镜像（前置靠 MPPImage LeftMirrored）
+  [self applySampleConnection:[_videoOutput connectionWithMediaType:AVMediaTypeVideo]];
   [_session commitConfiguration];
-  // 预览连接的镜像必须在主线程更新。
-  BOOL front = _useFrontCamera;
+  if (wasRunning) {
+    [_session startRunning];
+  }
+  // 预览连接的方向/镜像必须在主线程、且在 commit 之后重新应用（连接可能重建）。
   __weak TutuDetectorView *weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     TutuDetectorView *s = weakSelf;
     if (s == nil || s.tornDown) return;
-    [s applyConnection:s.previewLayer.connection mirror:front];
+    if (s.previewLayer) {
+      s.previewLayer.frame = s.bounds;
+      [s setupRotationCoordinator];
+      [s refreshPreviewOrientation];
+      // 再延迟一帧，部分机型 commit 后 connection 尚未就绪
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)),
+                     dispatch_get_main_queue(), ^{
+        TutuDetectorView *s2 = weakSelf;
+        if (s2 == nil || s2.tornDown || s2.previewLayer == nil) return;
+        [s2 refreshPreviewOrientation];
+      });
+    }
   });
   // 相机几何变化，重置统计（模板不受影响，仍按已设侧比对）。
   [[TutuDetectorEngine shared] startSession];

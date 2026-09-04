@@ -29,53 +29,56 @@ function stripHtml(html) {
     .trim();
 }
 
-const LegalScreen = ({route}) => {
-  const doc = route?.params?.doc || 'privacy';
+async function loadDoc(doc) {
+  try {
+    const j = await getJson(`/api/legal/${doc}`);
+    if (j && j.ok && j.html) return stripHtml(j.html);
+  } catch (e) {}
+  try {
+    const res = await fetch(
+      `https://tutujiaolian.com/${doc === 'terms' ? 'terms' : 'privacy'}.html`,
+    );
+    const html = await res.text();
+    if (html) return stripHtml(html);
+  } catch (e) {}
+  return '';
+}
+
+/** 合并展示隐私政策 + 用户服务协议（公安合规：App 内可查阅）。 */
+const LegalScreen = () => {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [title, setTitle] = useState(doc === 'terms' ? '用户服务协议' : '隐私政策');
-  const [body, setBody] = useState('');
+  const [privacy, setPrivacy] = useState('');
+  const [terms, setTerms] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
-      try {
-        const j = await getJson(`/api/legal/${doc}`);
-        if (alive && j && j.ok && j.html) {
-          setTitle(j.title || title);
-          setBody(stripHtml(j.html));
-          return;
-        }
-        // 兜底：直接拉官网 HTML
-        const res = await fetch(
-          `https://tutujiaolian.com/${doc === 'terms' ? 'terms' : 'privacy'}.html`,
-        );
-        const html = await res.text();
-        if (alive && html) setBody(stripHtml(html));
-      } catch (e) {
-        if (alive) {
-          setBody('内容加载失败，请检查网络后重试，或访问 tutujiaolian.com 查看。');
-        }
-      } finally {
-        if (alive) setLoading(false);
-      }
+      const [p, t] = await Promise.all([loadDoc('privacy'), loadDoc('terms')]);
+      if (!alive) return;
+      setPrivacy(p || '隐私政策加载失败，请访问 tutujiaolian.com/privacy.html');
+      setTerms(t || '用户服务协议加载失败，请访问 tutujiaolian.com/terms.html');
+      setLoading(false);
     })();
     return () => {
       alive = false;
     };
-  }, [doc, title]);
+  }, []);
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <ScreenHeader title={title} />
+      <ScreenHeader title="隐私与用户协议" />
       {loading ? (
         <ActivityIndicator style={styles.loader} color={colors.accent} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator>
-          <Text style={styles.body}>{body}</Text>
+          <Text style={styles.sectionTitle}>一、隐私政策</Text>
+          <Text style={styles.body}>{privacy}</Text>
+          <Text style={[styles.sectionTitle, styles.sectionGap]}>二、用户服务协议</Text>
+          <Text style={styles.body}>{terms}</Text>
         </ScrollView>
       )}
     </View>
@@ -87,6 +90,13 @@ const makeStyles = colors =>
     root: {flex: 1, backgroundColor: colors.bg},
     loader: {marginTop: 48},
     scroll: {paddingHorizontal: 20, paddingBottom: 40},
+    sectionTitle: {
+      color: colors.textPrimary,
+      fontSize: 17,
+      fontWeight: '600',
+      marginBottom: 10,
+    },
+    sectionGap: {marginTop: 28},
     body: {
       color: colors.textPrimary,
       fontSize: 14,
