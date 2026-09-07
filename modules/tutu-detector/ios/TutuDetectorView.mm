@@ -10,8 +10,6 @@
 @property(nonatomic, strong) AVCaptureVideoDataOutput *videoOutput;
 @property(nonatomic, strong) dispatch_queue_t cameraQueue;
 @property(nonatomic, strong) MPPHandLandmarker *liveLandmarker;
-@property(nonatomic, strong) AVCaptureDevice *currentDevice;
-@property(nonatomic, strong) id rotationCoordinator;  // AVCaptureDeviceRotationCoordinator (iOS 17+)
 @property(nonatomic, assign) BOOL configured;
 @property(nonatomic, assign) NSInteger frameTimestampMs;
 // YES 表示视图正在/已被销毁：用于抑制销毁后到达的相机帧 / MediaPipe 回调，
@@ -218,8 +216,6 @@
     [_session addOutput:_videoOutput];
   }
 
-  _currentDevice = device;
-
   // 取样连接：不做方向/镜像（传感器原生横屏缓冲）。竖屏正立与前置镜像一律交给
   // MPPImage 的 orientation（Right / LeftMirrored），与安卓 preprocessFrame 分工一致。
   // 切勿在此设 Portrait —— 否则会与 MPPImage 朝向叠成双重旋转。
@@ -244,7 +240,6 @@
       s.previewLayer.session = s.session;
     }
     s.previewLayer.frame = s.bounds;
-    [s setupRotationCoordinator];
     [s refreshPreviewOrientation];
   });
 
@@ -268,41 +263,19 @@
   return device;
 }
 
-- (void)setupRotationCoordinator {
-  if (@available(iOS 17.0, *)) {
-    AVCaptureDevice *dev = _currentDevice;
-    if (dev == nil || _previewLayer == nil) return;
-    // RotationCoordinator 按重力给出预览应使用的旋转角，避免写死 Portrait 在部分机型颠倒。
-    _rotationCoordinator =
-        [[AVCaptureDeviceRotationCoordinator alloc] initWithDevice:dev
-                                                      previewLayer:_previewLayer];
-  }
-}
-
-// 刷新预览连接的方向 + 镜像。客户反馈写死 Portrait 仍颠倒：优先用 RotationCoordinator；
-// 回退时用「竖屏正立」对应的旋转角。切换后置必须显式 videoMirrored=NO。
-//
-// 额外：在 RN UIView 上挂 AVCaptureVideoPreviewLayer 时，部分机型会出现稳定的 180°
-// 颠倒（客户截图天花板在底部）。连接方向设对后仍颠倒，故对 previewLayer 再旋 180°。
+// 刷新预览连接的方向 + 镜像。
+// 不再叠加 previewLayer 的 180° transform，只通过 connection 设置方向；
+// 这样可避免在部分真机上被“二次补偿”成整幅画面倒置。
 - (void)refreshPreviewOrientation {
   if (_previewLayer == nil) return;
   AVCaptureConnection *conn = _previewLayer.connection;
-  if (conn == nil) {
-    // connection 尚未就绪时也先摆正 transform，待下次 layout/startRunning 再刷。
-    _previewLayer.affineTransform = CGAffineTransformMakeRotation((CGFloat)M_PI);
-    return;
-  }
+  if (conn == nil) return;
 
   BOOL mirror = _useFrontCamera;
   if (@available(iOS 17.0, *)) {
+    // 回到更接近旧版稳定行为的统一 90° 旋转；
+    // 前后摄只在镜像上区分，避免后摄再被单独走一条易回归的角度分支。
     CGFloat angle = 90.0;
-    if (_rotationCoordinator != nil) {
-      AVCaptureDeviceRotationCoordinator *coord =
-          (AVCaptureDeviceRotationCoordinator *)_rotationCoordinator;
-      angle = coord.videoRotationAngleForHorizonLevelPreview;
-    }
-    // App 锁定竖屏：重力角异常（0）时强制 90°。
-    if (angle < 1.0) angle = 90.0;
     if ([conn isVideoRotationAngleSupported:angle]) {
       conn.videoRotationAngle = angle;
     }
@@ -317,9 +290,6 @@
     conn.automaticallyAdjustsVideoMirroring = NO;
     conn.videoMirrored = mirror;
   }
-
-  // 纠正 RN 子图层 180° 颠倒（见方法注释）。
-  _previewLayer.affineTransform = CGAffineTransformMakeRotation((CGFloat)M_PI);
 }
 
 // 取样连接：仅清镜像，不改方向（见 configureIfNeeded 注释）。
@@ -357,7 +327,6 @@
     }
   }
   AVCaptureDevice *device = [self cameraDevice];
-  _currentDevice = device;
   NSError *err = nil;
   AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:&err];
   if (input && [_session canAddInput:input]) {
@@ -376,7 +345,6 @@
     if (s == nil || s.tornDown) return;
     if (s.previewLayer) {
       s.previewLayer.frame = s.bounds;
-      [s setupRotationCoordinator];
       [s refreshPreviewOrientation];
       // 再延迟一帧，部分机型 commit 后 connection 尚未就绪
       dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)),
