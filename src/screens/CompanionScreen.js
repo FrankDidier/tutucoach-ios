@@ -684,9 +684,22 @@ export default function CompanionScreen({navigation}) {
 
         {/* 曲目选择条 */}
         {pieces.length > 0 && (
-          <TouchableOpacity style={styles.pieceBar} onPress={pickPiece}>
-            <Text style={styles.pieceText}>🎵 当前曲目：{pieceName}  ▾</Text>
-          </TouchableOpacity>
+          <View style={styles.pieceBar}>
+            <TouchableOpacity style={{flex: 1}} onPress={pickPiece}>
+              <Text style={styles.pieceText}>🎵 当前曲目：{pieceName}  ▾</Text>
+            </TouchableOpacity>
+            {pieceIdx >= 0 && pieceIdx < pieces.length ? (
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('ScoreViewer', {
+                    studentId: studentIdRef.current,
+                    pieceName,
+                  })
+                }>
+                <Text style={styles.pieceViewBtn}>看乐谱</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         )}
 
         {/* 对话区 */}
@@ -794,8 +807,15 @@ const makeStyles = colors =>
   },
   bgBtnText: {color: '#fff', fontSize: 10, fontWeight: '600'},
   headerIcon: {width: 18, height: 18},
-  pieceBar: {backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 16, paddingVertical: 8},
+  pieceBar: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   pieceText: {color: '#fff', fontSize: 13},
+  pieceViewBtn: {color: '#FFE3A1', fontSize: 12.5, fontWeight: '700', marginLeft: 10},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},

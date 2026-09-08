@@ -537,6 +537,17 @@ export default function StudentReminderScreen({navigation}) {
                             <TouchableOpacity onPress={() => openEditor(idx)}>
                               <Text style={styles.pieceEdit}>编辑</Text>
                             </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() =>
+                                navigation.navigate('ScoreEditor', {
+                                  studentId: sel.id,
+                                  studentName: sel.name,
+                                  pieceName: p.name,
+                                  lines: p.lines || [],
+                                })
+                              }>
+                              <Text style={styles.pieceEdit}>乐谱</Text>
+                            </TouchableOpacity>
                             <TouchableOpacity onPress={() => deletePiece(idx)}>
                               <Text style={styles.pieceDelete}>删除</Text>
                             </TouchableOpacity>

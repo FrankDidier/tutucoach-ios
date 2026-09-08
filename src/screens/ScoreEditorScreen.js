@@ -1,0 +1,454 @@
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  TouchableOpacity,
+  StatusBar,
+  Image,
+  ActivityIndicator,
+  TextInput,
+  Modal,
+  PanResponder,
+  Alert,
+  useWindowDimensions,
+} from 'react-native';
+import {useTheme} from '../theme/ThemeContext';
+import ScreenHeader from '../components/ScreenHeader';
+import {getDeviceId} from '../services/device';
+import {pickFromGallery} from '../services/imagePicker';
+import {pickPdf} from '../services/documentPicker';
+import {fetchScore, saveScore, suggestScore, uploadScore} from '../services/score';
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function DraggableBox({box, pageW, pageH, onOpen, onMove}) {
+  const startRef = useRef({x: box.x || 0, y: box.y || 0});
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRef.current = {x: box.x || 0, y: box.y || 0};
+      },
+      onPanResponderRelease: (_, g) => {
+        const nx = clamp(startRef.current.x + g.dx / pageW, 0, 0.92);
+        const ny = clamp(startRef.current.y + g.dy / pageH, 0, 0.92);
+        if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) {
+          onOpen(box);
+          return;
+        }
+        onMove(box.id, nx, ny);
+      },
+    }),
+  ).current;
+  return (
+    <View
+      {...responder.panHandlers}
+      style={[
+        styles.box,
+        {
+          left: (box.x || 0) * pageW,
+          top: (box.y || 0) * pageH,
+          width: clamp(box.w || 0.5, 0.12, 0.95) * pageW,
+          height: clamp(box.h || 0.1, 0.06, 0.5) * pageH,
+        },
+      ]}>
+      <Text style={styles.boxLabel} numberOfLines={2}>
+        {box.label || '重点'}
+      </Text>
+    </View>
+  );
+}
+
+export default function ScoreEditorScreen({navigation, route}) {
+  const {colors} = useTheme();
+  const ui = useMemo(() => makeStyles(colors), [colors]);
+  const {width: winW} = useWindowDimensions();
+  const pageW = winW - 32;
+  const {studentId = '', studentName = '', pieceName = '', lines = []} = route?.params || {};
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [manifest, setManifest] = useState(null);
+  const [terms, setTerms] = useState([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [label, setLabel] = useState('');
+  const [note, setNote] = useState('');
+  const [termOpen, setTermOpen] = useState(false);
+  const [termIdx, setTermIdx] = useState(-1);
+  const [termKey, setTermKey] = useState('');
+  const [termValue, setTermValue] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetchScore(studentId, pieceName, getDeviceId());
+      const m = r?.manifest || null;
+      setManifest(m);
+      setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
+    } catch (e) {
+      setManifest(null);
+      setTerms([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId, pieceName]);
+
+  const doUpload = async picker => {
+    const file = await picker();
+    if (!file || file.cancelled) return;
+    if (file.error || !file.uri) {
+      Alert.alert('上传失败', '未能读取文件，请重试。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await uploadScore(getDeviceId(), studentId, pieceName, file);
+      if (r?.ok && r?.manifest) {
+        setManifest(r.manifest);
+        setTerms(r.manifest.term_translations || []);
+      } else {
+        Alert.alert('上传失败', '服务端未接受该文件。');
+      }
+    } catch (e) {
+      Alert.alert('上传失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSuggest = async () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传乐谱。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await suggestScore(getDeviceId(), studentId, pieceName, lines);
+      if (r?.ok) {
+        setManifest(prev => ({
+          ...(prev || {}),
+          annotations: Array.isArray(r.annotations) ? r.annotations : [],
+        }));
+        if (Array.isArray(r.term_translations)) {
+          setTerms(r.term_translations);
+        }
+      } else {
+        Alert.alert('生成失败', 'AI 暂时没生成出建议框，请稍后再试。');
+      }
+    } catch (e) {
+      Alert.alert('生成失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openEdit = box => {
+    setEditing(box);
+    setLabel(box?.label || '');
+    setNote(box?.note || '');
+    setEditOpen(true);
+  };
+
+  const updateBox = next => {
+    setManifest(prev => {
+      const annotations = (prev?.annotations || []).map(b => (b.id === next.id ? next : b));
+      return {...(prev || {}), annotations};
+    });
+  };
+
+  const moveBox = (id, x, y) => {
+    setManifest(prev => ({
+      ...(prev || {}),
+      annotations: (prev?.annotations || []).map(b => (b.id === id ? {...b, x, y} : b)),
+    }));
+  };
+
+  const addBox = pageIdx => {
+    const next = {
+      id: `box_${Date.now()}`,
+      page: pageIdx,
+      x: 0.08,
+      y: 0.16,
+      w: 0.84,
+      h: 0.1,
+      label: '新重点',
+      note: '',
+      status: 'confirmed',
+    };
+    setManifest(prev => ({
+      ...(prev || {}),
+      annotations: [...(prev?.annotations || []), next],
+    }));
+    openEdit(next);
+  };
+
+  const removeBox = () => {
+    if (!editing) return;
+    setManifest(prev => ({
+      ...(prev || {}),
+      annotations: (prev?.annotations || []).filter(b => b.id !== editing.id),
+    }));
+    setEditOpen(false);
+  };
+
+  const saveAll = async () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传乐谱。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const annotations = (manifest.annotations || []).map(b => ({
+        ...b,
+        label: String(b.label || '').trim().slice(0, 18),
+        note: String(b.note || '').trim().slice(0, 36),
+        status: 'confirmed',
+      }));
+      const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms);
+      if (r?.ok) {
+        setManifest(r.manifest || {...manifest, annotations});
+        Alert.alert('已保存', '学生端进入该曲目后即可查看乐谱和重点框。');
+      } else {
+        Alert.alert('保存失败', '请稍后重试。');
+      }
+    } catch (e) {
+      Alert.alert('保存失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openTerm = (item, idx) => {
+    setTermIdx(idx);
+    setTermKey(item?.term || '');
+    setTermValue(item?.translation || '');
+    setTermOpen(true);
+  };
+
+  const saveTerm = () => {
+    const term = termKey.trim();
+    const translation = termValue.trim();
+    if (!term || !translation) {
+      Alert.alert('提示', '请填写术语和翻译。');
+      return;
+    }
+    setTerms(prev => {
+      const next = [...prev];
+      const item = {term, translation};
+      if (termIdx >= 0) next[termIdx] = item;
+      else next.push(item);
+      return next;
+    });
+    setTermOpen(false);
+  };
+
+  return (
+    <SafeAreaView style={ui.container}>
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+      <ScreenHeader title="乐谱上传与重点框" onBack={() => navigation.goBack()} />
+      <ScrollView contentContainerStyle={ui.scroll}>
+        <View style={ui.card}>
+          <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
+          <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
+          <Text style={ui.help}>
+            先上传照片或 PDF，再生成 AI 建议重点框。框可以直接拖动，点一下可改文字。
+          </Text>
+          <View style={ui.row}>
+            <TouchableOpacity style={ui.btn} onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}))}>
+              <Text style={ui.btnText}>上传照片</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf)}>
+              <Text style={ui.btnText}>上传 PDF</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
+            <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
+              <Text style={ui.btnGhostText}>AI 建议重点框</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={ui.btn} onPress={saveAll}>
+              <Text style={ui.btnText}>保存确认</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {loading || busy ? (
+          <ActivityIndicator color={colors.primary} style={{marginTop: 24}} />
+        ) : null}
+
+        {(manifest?.pages || []).map(page => {
+          const pageH = page.width ? Math.max(120, pageW * (page.height / page.width)) : pageW * 1.35;
+          const boxes = (manifest.annotations || []).filter(b => (b.page || 0) === page.index);
+          return (
+            <View key={page.name} style={ui.pageCard}>
+              <View style={ui.pageHead}>
+                <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
+                <TouchableOpacity onPress={() => addBox(page.index)}>
+                  <Text style={ui.pageAction}>＋ 手动加框</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{width: pageW, height: pageH}}>
+                <Image source={{uri: `https://tutujiaolian.com${page.url}`}} style={{width: pageW, height: pageH, borderRadius: 12}} resizeMode="contain" />
+                {boxes.map(box => (
+                  <DraggableBox
+                    key={box.id}
+                    box={box}
+                    pageW={pageW}
+                    pageH={pageH}
+                    onOpen={openEdit}
+                    onMove={moveBox}
+                  />
+                ))}
+              </View>
+            </View>
+          );
+        })}
+
+        {manifest?.pages?.length ? (
+          <View style={ui.card}>
+            <View style={ui.pageHead}>
+              <Text style={ui.section}>音乐术语翻译</Text>
+              <TouchableOpacity onPress={() => openTerm(null, -1)}>
+                <Text style={ui.pageAction}>＋ 添加术语</Text>
+              </TouchableOpacity>
+            </View>
+            {terms.length ? terms.map((term, idx) => (
+              <TouchableOpacity key={`${term.term}_${idx}`} onPress={() => openTerm(term, idx)}>
+                <Text style={ui.termLine}>
+                  {term.term}：{term.translation}
+                </Text>
+              </TouchableOpacity>
+            )) : <Text style={ui.help}>暂未自动识别到术语，可手动补充后一起保存。</Text>}
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+        <View style={ui.modalMask}>
+          <View style={ui.modalCard}>
+            <Text style={ui.section}>编辑重点框</Text>
+            <TextInput style={ui.input} value={label} onChangeText={setLabel} placeholder="重点标题" placeholderTextColor={colors.textSecondary} />
+            <TextInput
+              style={[ui.input, ui.noteInput]}
+              value={note}
+              onChangeText={setNote}
+              placeholder="补充说明（可选）"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+            />
+            <View style={ui.row}>
+              <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={removeBox}>
+                <Text style={ui.btnText}>删除</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={ui.btn}
+                onPress={() => {
+                  if (editing) updateBox({...editing, label, note, status: 'confirmed'});
+                  setEditOpen(false);
+                }}>
+                <Text style={ui.btnText}>确定</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={termOpen} transparent animationType="fade" onRequestClose={() => setTermOpen(false)}>
+        <View style={ui.modalMask}>
+          <View style={ui.modalCard}>
+            <Text style={ui.section}>编辑术语翻译</Text>
+            <TextInput style={ui.input} value={termKey} onChangeText={setTermKey} placeholder="术语" placeholderTextColor={colors.textSecondary} />
+            <TextInput style={[ui.input, ui.noteInput]} value={termValue} onChangeText={setTermValue} placeholder="中文解释" placeholderTextColor={colors.textSecondary} multiline />
+            <View style={ui.row}>
+              {termIdx >= 0 ? (
+                <TouchableOpacity
+                  style={[ui.btn, ui.btnDanger]}
+                  onPress={() => {
+                    setTerms(prev => prev.filter((_, i) => i !== termIdx));
+                    setTermOpen(false);
+                  }}>
+                  <Text style={ui.btnText}>删除</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={() => setTermOpen(false)}>
+                  <Text style={ui.btnGhostText}>取消</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={ui.btn} onPress={saveTerm}>
+                <Text style={ui.btnText}>确定</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  box: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: '#FFB300',
+    backgroundColor: 'rgba(255,179,0,0.18)',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
+});
+
+const makeStyles = colors =>
+  StyleSheet.create({
+    container: {flex: 1, backgroundColor: colors.bg},
+    scroll: {padding: 16, paddingBottom: 32},
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 14,
+    },
+    title: {fontSize: 17, fontWeight: '800', color: colors.textPrimary},
+    sub: {fontSize: 12.5, color: colors.textSecondary, marginTop: 4},
+    help: {fontSize: 12.5, lineHeight: 19, color: colors.textSecondary, marginTop: 8},
+    row: {flexDirection: 'row', gap: 10, marginTop: 12},
+    btn: {
+      flex: 1,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    btnGhost: {backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder},
+    btnDanger: {backgroundColor: '#D14343'},
+    btnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+    btnGhostText: {color: colors.textPrimary, fontSize: 14, fontWeight: '700'},
+    pageCard: {marginBottom: 16},
+    pageHead: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8},
+    pageTitle: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
+    pageAction: {fontSize: 13, fontWeight: '700', color: colors.accent},
+    section: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 10},
+    termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},
+    modalMask: {flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 20},
+    modalCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16},
+    input: {
+      backgroundColor: colors.bg,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.textPrimary,
+      marginBottom: 10,
+    },
+    noteInput: {minHeight: 88, textAlignVertical: 'top'},
+  });

@@ -23,6 +23,8 @@ import CompanionScreen from './src/screens/CompanionScreen';
 import StudentReminderScreen from './src/screens/StudentReminderScreen';
 import LessonPlanScreen from './src/screens/LessonPlanScreen';
 import LegalScreen from './src/screens/LegalScreen';
+import ScoreEditorScreen from './src/screens/ScoreEditorScreen';
+import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
 
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
@@ -146,6 +148,8 @@ function AppInner(): React.JSX.Element {
           'MainTabs',
           'StudentReminder',
           'StudentEntry',
+          'ScoreEditor',
+          'ScoreViewer',
         ].includes(boot)
       ) {
         setInitialRoute(boot);
@@ -205,6 +209,8 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
+        <Stack.Screen name="ScoreEditor" component={ScoreEditorScreen} />
+        <Stack.Screen name="ScoreViewer" component={ScoreViewerScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
