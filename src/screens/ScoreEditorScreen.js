@@ -20,47 +20,85 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery} from '../services/imagePicker';
 import {pickPdf} from '../services/documentPicker';
-import {fetchScore, saveScore, suggestScore, uploadScore} from '../services/score';
+import {
+  fetchScore,
+  saveScore,
+  suggestScore,
+  uploadScore,
+  recognizeScoreTerms,
+} from '../services/score';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-function DraggableBox({box, pageW, pageH, onOpen, onMove}) {
-  const startRef = useRef({x: box.x || 0, y: box.y || 0});
+function EditableBox({box, pageW, pageH, onOpen, onChange}) {
+  const liveRef = useRef({x: box.x || 0, y: box.y || 0, w: box.w || 0.84, h: box.h || 0.1});
+  const startRef = useRef({...liveRef.current});
+  const modeRef = useRef('move');
+  const [live, setLive] = useState(liveRef.current);
+
+  useEffect(() => {
+    const next = {x: box.x || 0, y: box.y || 0, w: box.w || 0.84, h: box.h || 0.1};
+    liveRef.current = next;
+    setLive(next);
+  }, [box.x, box.y, box.w, box.h, box.id]);
+
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        startRef.current = {x: box.x || 0, y: box.y || 0};
+      onPanResponderGrant: evt => {
+        startRef.current = {...liveRef.current};
+        const {locationX, locationY} = evt.nativeEvent;
+        const w = (liveRef.current.w || 0.84) * pageW;
+        const h = (liveRef.current.h || 0.1) * pageH;
+        modeRef.current = locationX > w - 28 && locationY > h - 28 ? 'resize' : 'move';
+      },
+      onPanResponderMove: (_, g) => {
+        let next;
+        if (modeRef.current === 'resize') {
+          next = {
+            ...startRef.current,
+            w: clamp(startRef.current.w + g.dx / pageW, 0.12, 0.95),
+            h: clamp(startRef.current.h + g.dy / pageH, 0.06, 0.5),
+          };
+        } else {
+          next = {
+            ...startRef.current,
+            x: clamp(startRef.current.x + g.dx / pageW, 0, 0.92),
+            y: clamp(startRef.current.y + g.dy / pageH, 0, 0.92),
+          };
+        }
+        liveRef.current = next;
+        setLive(next);
       },
       onPanResponderRelease: (_, g) => {
-        const nx = clamp(startRef.current.x + g.dx / pageW, 0, 0.92);
-        const ny = clamp(startRef.current.y + g.dy / pageH, 0, 0.92);
         if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) {
           onOpen(box);
           return;
         }
-        onMove(box.id, nx, ny);
+        onChange(box.id, liveRef.current);
       },
     }),
   ).current;
+
   return (
     <View
       {...responder.panHandlers}
       style={[
         styles.box,
         {
-          left: (box.x || 0) * pageW,
-          top: (box.y || 0) * pageH,
-          width: clamp(box.w || 0.5, 0.12, 0.95) * pageW,
-          height: clamp(box.h || 0.1, 0.06, 0.5) * pageH,
+          left: (live.x || 0) * pageW,
+          top: (live.y || 0) * pageH,
+          width: clamp(live.w || 0.5, 0.12, 0.95) * pageW,
+          height: clamp(live.h || 0.1, 0.06, 0.5) * pageH,
         },
       ]}>
       <Text style={styles.boxLabel} numberOfLines={2}>
         {box.label || '重点'}
       </Text>
+      <View style={styles.handle} />
     </View>
   );
 }
@@ -87,7 +125,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetchScore(studentId, pieceName, getDeviceId());
+      const r = await fetchScore(studentId, pieceName, getDeviceId(), 'teacher');
       const m = r?.manifest || null;
       setManifest(m);
       setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
@@ -104,7 +142,11 @@ export default function ScoreEditorScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, pieceName]);
 
-  const doUpload = async picker => {
+  const doUpload = async (picker, mode = 'replace') => {
+    if (mode === 'append' && !manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传第 1 页。');
+      return;
+    }
     const file = await picker();
     if (!file || file.cancelled) return;
     if (file.error || !file.uri) {
@@ -113,7 +155,10 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
     setBusy(true);
     try {
-      const r = await uploadScore(getDeviceId(), studentId, pieceName, file);
+      const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
+        mode,
+        uploader: 'teacher',
+      });
       if (r?.ok && r?.manifest) {
         setManifest(r.manifest);
         setTerms(r.manifest.term_translations || []);
@@ -153,6 +198,33 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
+  const onRecognizeTerms = async () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传乐谱。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
+      if (r?.ok) {
+        if (r.manifest) setManifest(r.manifest);
+        setTerms(Array.isArray(r.term_translations) ? r.term_translations : []);
+        Alert.alert(
+          '识别完成',
+          (r.term_translations || []).length
+            ? `已识别 ${(r.term_translations || []).length} 个术语，可点开修改。`
+            : '未识别到术语，可手动添加。',
+        );
+      } else {
+        Alert.alert('识别失败', '请稍后重试，或手动添加术语。');
+      }
+    } catch (e) {
+      Alert.alert('识别失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openEdit = box => {
     setEditing(box);
     setLabel(box?.label || '');
@@ -167,10 +239,10 @@ export default function ScoreEditorScreen({navigation, route}) {
     });
   };
 
-  const moveBox = (id, x, y) => {
+  const changeBoxGeom = (id, geom) => {
     setManifest(prev => ({
       ...(prev || {}),
-      annotations: (prev?.annotations || []).map(b => (b.id === id ? {...b, x, y} : b)),
+      annotations: (prev?.annotations || []).map(b => (b.id === id ? {...b, ...geom} : b)),
     }));
   };
 
@@ -185,6 +257,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       label: '新重点',
       note: '',
       status: 'confirmed',
+      kind: 'phrase',
     };
     setManifest(prev => ({
       ...(prev || {}),
@@ -202,7 +275,7 @@ export default function ScoreEditorScreen({navigation, route}) {
     setEditOpen(false);
   };
 
-  const saveAll = async () => {
+  const saveAll = async (approvePending = false) => {
     if (!manifest?.pages?.length) {
       Alert.alert('提示', '请先上传乐谱。');
       return;
@@ -215,10 +288,17 @@ export default function ScoreEditorScreen({navigation, route}) {
         note: String(b.note || '').trim().slice(0, 36),
         status: 'confirmed',
       }));
-      const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms);
+      const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms, {
+        approvePending,
+      });
       if (r?.ok) {
         setManifest(r.manifest || {...manifest, annotations});
-        Alert.alert('已保存', '学生端进入该曲目后即可查看乐谱和重点框。');
+        Alert.alert(
+          approvePending ? '已通过并发布' : '已保存',
+          approvePending
+            ? '学生上传的乐谱页已对学生可见。'
+            : '学生端进入该曲目后即可查看乐谱和重点框。',
+        );
       } else {
         Alert.alert('保存失败', '请稍后重试。');
       }
@@ -253,6 +333,8 @@ export default function ScoreEditorScreen({navigation, route}) {
     setTermOpen(false);
   };
 
+  const hasPending = !!(manifest?.has_pending_review || (manifest?.pages || []).some(p => p.pending_review));
+
   return (
     <SafeAreaView style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
@@ -262,24 +344,44 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            先上传照片或 PDF，再生成 AI 建议重点框。框可以直接拖动，点一下可改文字。
+            先上传照片或 PDF；多页用「追加照片」。框可拖动，右下角缩放；点一下改文字。
           </Text>
+          {hasPending ? (
+            <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
+          ) : null}
           <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}))}>
+            <TouchableOpacity
+              style={ui.btn}
+              onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}), 'replace')}>
               <Text style={ui.btnText}>上传照片</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf)}>
+            <TouchableOpacity
+              style={[ui.btn, ui.btnGhost]}
+              onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}), 'append')}>
+              <Text style={ui.btnGhostText}>追加照片</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
+            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf, 'replace')}>
               <Text style={ui.btnText}>上传 PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onRecognizeTerms}>
+              <Text style={ui.btnGhostText}>一键识别术语</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
-              <Text style={ui.btnGhostText}>AI 建议重点框</Text>
+              <Text style={ui.btnGhostText}>AI 乐句/乐段框</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={ui.btn} onPress={saveAll}>
+            <TouchableOpacity style={ui.btn} onPress={() => saveAll(false)}>
               <Text style={ui.btnText}>保存确认</Text>
             </TouchableOpacity>
           </View>
+          {hasPending ? (
+            <TouchableOpacity style={[ui.btn, {marginTop: 12}]} onPress={() => saveAll(true)}>
+              <Text style={ui.btnText}>通过并发布学生上传</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {loading || busy ? (
@@ -289,24 +391,31 @@ export default function ScoreEditorScreen({navigation, route}) {
         {(manifest?.pages || []).map(page => {
           const pageH = page.width ? Math.max(120, pageW * (page.height / page.width)) : pageW * 1.35;
           const boxes = (manifest.annotations || []).filter(b => (b.page || 0) === page.index);
+          const badge = page.pending_review ? ' · 待审' : page.uploaded_by === 'student' ? ' · 学生补传' : '';
           return (
             <View key={page.name} style={ui.pageCard}>
               <View style={ui.pageHead}>
-                <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
+                <Text style={ui.pageTitle}>
+                  第 {page.index + 1} 页{badge}
+                </Text>
                 <TouchableOpacity onPress={() => addBox(page.index)}>
                   <Text style={ui.pageAction}>＋ 手动加框</Text>
                 </TouchableOpacity>
               </View>
               <View style={{width: pageW, height: pageH}}>
-                <Image source={{uri: `https://tutujiaolian.com${page.url}`}} style={{width: pageW, height: pageH, borderRadius: 12}} resizeMode="contain" />
+                <Image
+                  source={{uri: `https://tutujiaolian.com${page.url}`}}
+                  style={{width: pageW, height: pageH, borderRadius: 12}}
+                  resizeMode="contain"
+                />
                 {boxes.map(box => (
-                  <DraggableBox
+                  <EditableBox
                     key={box.id}
                     box={box}
                     pageW={pageW}
                     pageH={pageH}
                     onOpen={openEdit}
-                    onMove={moveBox}
+                    onChange={changeBoxGeom}
                   />
                 ))}
               </View>
@@ -322,13 +431,17 @@ export default function ScoreEditorScreen({navigation, route}) {
                 <Text style={ui.pageAction}>＋ 添加术语</Text>
               </TouchableOpacity>
             </View>
-            {terms.length ? terms.map((term, idx) => (
-              <TouchableOpacity key={`${term.term}_${idx}`} onPress={() => openTerm(term, idx)}>
-                <Text style={ui.termLine}>
-                  {term.term}：{term.translation}
-                </Text>
-              </TouchableOpacity>
-            )) : <Text style={ui.help}>暂未自动识别到术语，可手动补充后一起保存。</Text>}
+            {terms.length ? (
+              terms.map((term, idx) => (
+                <TouchableOpacity key={`${term.term}_${idx}`} onPress={() => openTerm(term, idx)}>
+                  <Text style={ui.termLine}>
+                    {term.term}：{term.translation}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={ui.help}>暂未自动识别到术语，可点「一键识别术语」或手动补充。</Text>
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -337,7 +450,13 @@ export default function ScoreEditorScreen({navigation, route}) {
         <View style={ui.modalMask}>
           <View style={ui.modalCard}>
             <Text style={ui.section}>编辑重点框</Text>
-            <TextInput style={ui.input} value={label} onChangeText={setLabel} placeholder="重点标题" placeholderTextColor={colors.textSecondary} />
+            <TextInput
+              style={ui.input}
+              value={label}
+              onChangeText={setLabel}
+              placeholder="重点标题"
+              placeholderTextColor={colors.textSecondary}
+            />
             <TextInput
               style={[ui.input, ui.noteInput]}
               value={note}
@@ -367,8 +486,21 @@ export default function ScoreEditorScreen({navigation, route}) {
         <View style={ui.modalMask}>
           <View style={ui.modalCard}>
             <Text style={ui.section}>编辑术语翻译</Text>
-            <TextInput style={ui.input} value={termKey} onChangeText={setTermKey} placeholder="术语" placeholderTextColor={colors.textSecondary} />
-            <TextInput style={[ui.input, ui.noteInput]} value={termValue} onChangeText={setTermValue} placeholder="中文解释" placeholderTextColor={colors.textSecondary} multiline />
+            <TextInput
+              style={ui.input}
+              value={termKey}
+              onChangeText={setTermKey}
+              placeholder="术语"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <TextInput
+              style={[ui.input, ui.noteInput]}
+              value={termValue}
+              onChangeText={setTermValue}
+              placeholder="中文解释"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+            />
             <View style={ui.row}>
               {termIdx >= 0 ? (
                 <TouchableOpacity
@@ -406,6 +538,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
+  handle: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: '#FFB300',
+  },
 });
 
 const makeStyles = colors =>
@@ -421,6 +562,15 @@ const makeStyles = colors =>
     title: {fontSize: 17, fontWeight: '800', color: colors.textPrimary},
     sub: {fontSize: 12.5, color: colors.textSecondary, marginTop: 4},
     help: {fontSize: 12.5, lineHeight: 19, color: colors.textSecondary, marginTop: 8},
+    pending: {
+      marginTop: 10,
+      padding: 10,
+      borderRadius: 10,
+      backgroundColor: colors.bg,
+      color: colors.textPrimary,
+      fontSize: 12.5,
+      lineHeight: 18,
+    },
     row: {flexDirection: 'row', gap: 10, marginTop: 12},
     btn: {
       flex: 1,

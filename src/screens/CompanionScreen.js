@@ -112,6 +112,8 @@ export default function CompanionScreen({navigation}) {
   const proactiveTimer = useRef(null);
   const aliveRef = useRef(true);
   const focusCountRef = useRef(0);
+  /** Keep companion TTS running while viewing score. */
+  const scoreViewerOpenRef = useRef(false);
   const sessionStartRef = useRef(0); // 本次陪练开始时间，退出时计入练琴时长
   const activeTimerRef = useRef(null); // 只累计前台时间（切到别的软件不计）
 
@@ -302,13 +304,16 @@ export default function CompanionScreen({navigation}) {
   useEffect(() => {
     const unsubFocus = navigation.addListener('focus', () => {
       focusCountRef.current += 1;
+      scoreViewerOpenRef.current = false;
       if (focusCountRef.current <= 1) return;
       aliveRef.current = true;
       pausedRef.current = false;
       reloadCoach({blocking: false});
     });
     // 离开本页（去选分身页）时暂停主动陪聊并停掉正在播的语音，避免在选择页说话。
+    // 看乐谱时保持语音，不打断陪练。
     const unsubBlur = navigation.addListener('blur', () => {
+      if (scoreViewerOpenRef.current) return;
       pausedRef.current = true;
       try {
         stopSpeak();
@@ -690,12 +695,13 @@ export default function CompanionScreen({navigation}) {
             </TouchableOpacity>
             {pieceIdx >= 0 && pieceIdx < pieces.length ? (
               <TouchableOpacity
-                onPress={() =>
+                onPress={() => {
+                  scoreViewerOpenRef.current = true;
                   navigation.navigate('ScoreViewer', {
                     studentId: studentIdRef.current,
                     pieceName,
-                  })
-                }>
+                  });
+                }}>
                 <Text style={styles.pieceViewBtn}>看乐谱</Text>
               </TouchableOpacity>
             ) : null}

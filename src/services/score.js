@@ -1,10 +1,18 @@
 import {getJson, postForm, postJson} from './api';
 
-export async function uploadScore(teacherId, studentId, pieceName, file) {
+export async function uploadScore(
+  teacherId,
+  studentId,
+  pieceName,
+  file,
+  {mode = 'replace', uploader = 'teacher'} = {},
+) {
   const fd = new FormData();
   fd.append('teacher_id', teacherId || '');
   fd.append('student_id', studentId || '');
   fd.append('piece_name', pieceName || '');
+  fd.append('mode', mode || 'replace');
+  fd.append('uploader', uploader || 'teacher');
   fd.append('file', {
     uri: file.uri,
     type: file.type || 'image/jpeg',
@@ -13,15 +21,23 @@ export async function uploadScore(teacherId, studentId, pieceName, file) {
   return postForm('/api/coach/score/upload', fd);
 }
 
-export async function fetchScore(studentId, pieceName, teacherId = '') {
+export async function fetchScore(studentId, pieceName, teacherId = '', role = '') {
   return getJson('/api/coach/score', {
     student_id: studentId || '',
     piece_name: pieceName || '',
     teacher_id: teacherId || '',
+    role: role || '',
   });
 }
 
-export async function saveScore(teacherId, studentId, pieceName, annotations, termTranslations) {
+export async function saveScore(
+  teacherId,
+  studentId,
+  pieceName,
+  annotations,
+  termTranslations,
+  {approvePending = false} = {},
+) {
   return postJson('/api/coach/score/save', {
     teacher_id: teacherId || '',
     student_id: studentId || '',
@@ -29,16 +45,41 @@ export async function saveScore(teacherId, studentId, pieceName, annotations, te
     annotations: Array.isArray(annotations) ? annotations : [],
     confirmed_annotations: Array.isArray(annotations) ? annotations : [],
     term_translations: Array.isArray(termTranslations) ? termTranslations : [],
+    approve_pending: !!approvePending,
   });
 }
 
 export async function suggestScore(teacherId, studentId, pieceName, existingFocus = []) {
-  return postJson('/api/coach/score/suggest', {
-    teacher_id: teacherId || '',
-    student_id: studentId || '',
-    piece_name: pieceName || '',
-    existing_focus: Array.isArray(existingFocus) ? existingFocus : [],
-  }, null, 60000);
+  return postJson(
+    '/api/coach/score/suggest',
+    {
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+      piece_name: pieceName || '',
+      existing_focus: Array.isArray(existingFocus) ? existingFocus : [],
+    },
+    null,
+    60000,
+  );
 }
 
-export default {uploadScore, fetchScore, saveScore, suggestScore};
+export async function recognizeScoreTerms(teacherId, studentId, pieceName) {
+  return postJson(
+    '/api/coach/score/ocr',
+    {
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+      piece_name: pieceName || '',
+    },
+    null,
+    90000,
+  );
+}
+
+export default {
+  uploadScore,
+  fetchScore,
+  saveScore,
+  suggestScore,
+  recognizeScoreTerms,
+};
