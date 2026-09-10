@@ -90,6 +90,7 @@ export default function ScoreViewerScreen({navigation, route}) {
           const boxes = (manifest.confirmed_annotations || manifest.annotations || []).filter(
             b => (b.page || 0) === page.index,
           );
+          const pageTerms = (manifest.term_overlays || []).filter(t => (t.page || 0) === page.index);
           return (
             <View key={page.name} style={ui.pageCard}>
               <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
@@ -114,13 +115,31 @@ export default function ScoreViewerScreen({navigation, route}) {
                     <Text style={ui.boxLabel}>{box.label}</Text>
                   </View>
                 ))}
+                {pageTerms.map(ov => (
+                  <View
+                    key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                    style={[
+                      ui.termOv,
+                      {
+                        left: (ov.x || 0) * pageW,
+                        top: (ov.y || 0) * pageH,
+                        width: Math.max(36, (ov.w || 0.12) * pageW),
+                        height: Math.max(20, (ov.h || 0.035) * pageH),
+                      },
+                    ]}>
+                    <Text style={ui.termOvText} numberOfLines={1}>
+                      {ov.short || ov.translation || ov.term}
+                    </Text>
+                  </View>
+                ))}
               </View>
             </View>
           );
         })}
         {(manifest?.term_translations || []).length ? (
           <View style={ui.termCard}>
-            <Text style={ui.termTitle}>音乐术语翻译</Text>
+            <Text style={ui.termTitle}>音乐术语（已标在谱面）</Text>
+            <Text style={ui.hint}>蓝色小条覆盖在原文位置；下方为完整列表。</Text>
             {(manifest.term_translations || []).map((term, idx) => (
               <Text key={`${term.term}_${idx}`} style={ui.termLine}>
                 {term.term}：{term.translation}
@@ -161,7 +180,18 @@ const makeStyles = colors =>
       paddingVertical: 4,
     },
     boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
+    termOv: {
+      position: 'absolute',
+      backgroundColor: 'rgba(232,246,255,0.92)',
+      borderWidth: 1,
+      borderColor: '#7EB6D9',
+      borderRadius: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    termOvText: {fontSize: 11, fontWeight: '700', color: '#0B3D5C'},
     termCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 6},
-    termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 10},
+    termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 6},
     termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},
   });

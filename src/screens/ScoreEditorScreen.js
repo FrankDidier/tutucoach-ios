@@ -113,6 +113,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null);
   const [terms, setTerms] = useState([]);
+  const [termOverlays, setTermOverlays] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [label, setLabel] = useState('');
@@ -129,9 +130,11 @@ export default function ScoreEditorScreen({navigation, route}) {
       const m = r?.manifest || null;
       setManifest(m);
       setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
+      setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
     } catch (e) {
       setManifest(null);
       setTerms([]);
+      setTermOverlays([]);
     } finally {
       setLoading(false);
     }
@@ -162,6 +165,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       if (r?.ok && r?.manifest) {
         setManifest(r.manifest);
         setTerms(r.manifest.term_translations || []);
+        setTermOverlays(r.manifest.term_overlays || []);
       } else {
         Alert.alert('上传失败', '服务端未接受该文件。');
       }
@@ -209,10 +213,11 @@ export default function ScoreEditorScreen({navigation, route}) {
       if (r?.ok) {
         if (r.manifest) setManifest(r.manifest);
         setTerms(Array.isArray(r.term_translations) ? r.term_translations : []);
+        setTermOverlays(Array.isArray(r.term_overlays) ? r.term_overlays : (r.manifest?.term_overlays || []));
         Alert.alert(
           '识别完成',
           (r.term_translations || []).length
-            ? `已识别 ${(r.term_translations || []).length} 个术语，可点开修改。`
+            ? `已识别 ${(r.term_translations || []).length} 个术语，已直接标在谱面原文位置。`
             : '未识别到术语，可手动添加。',
         );
       } else {
@@ -391,6 +396,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         {(manifest?.pages || []).map(page => {
           const pageH = page.width ? Math.max(120, pageW * (page.height / page.width)) : pageW * 1.35;
           const boxes = (manifest.annotations || []).filter(b => (b.page || 0) === page.index);
+          const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === page.index);
           const badge = page.pending_review ? ' · 待审' : page.uploaded_by === 'student' ? ' · 学生补传' : '';
           return (
             <View key={page.name} style={ui.pageCard}>
@@ -418,6 +424,23 @@ export default function ScoreEditorScreen({navigation, route}) {
                     onChange={changeBoxGeom}
                   />
                 ))}
+                {pageTerms.map(ov => (
+                  <View
+                    key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                    style={[
+                      styles.termOv,
+                      {
+                        left: (ov.x || 0) * pageW,
+                        top: (ov.y || 0) * pageH,
+                        width: Math.max(36, (ov.w || 0.12) * pageW),
+                        height: Math.max(20, (ov.h || 0.035) * pageH),
+                      },
+                    ]}>
+                    <Text style={styles.termOvText} numberOfLines={1}>
+                      {ov.short || ov.translation || ov.term}
+                    </Text>
+                  </View>
+                ))}
               </View>
             </View>
           );
@@ -426,11 +449,12 @@ export default function ScoreEditorScreen({navigation, route}) {
         {manifest?.pages?.length ? (
           <View style={ui.card}>
             <View style={ui.pageHead}>
-              <Text style={ui.section}>音乐术语翻译</Text>
+              <Text style={ui.section}>音乐术语（已标在谱面）</Text>
               <TouchableOpacity onPress={() => openTerm(null, -1)}>
                 <Text style={ui.pageAction}>＋ 添加术语</Text>
               </TouchableOpacity>
             </View>
+            <Text style={ui.help}>蓝色小条覆盖原文位置；下方列表便于核对修改。</Text>
             {terms.length ? (
               terms.map((term, idx) => (
                 <TouchableOpacity key={`${term.term}_${idx}`} onPress={() => openTerm(term, idx)}>
@@ -547,6 +571,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#FFB300',
   },
+  termOv: {
+    position: 'absolute',
+    backgroundColor: 'rgba(232,246,255,0.92)',
+    borderWidth: 1,
+    borderColor: '#7EB6D9',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  termOvText: {fontSize: 11, fontWeight: '700', color: '#0B3D5C'},
 });
 
 const makeStyles = colors =>
