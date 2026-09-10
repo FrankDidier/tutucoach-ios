@@ -50,19 +50,19 @@ export default function ScoreViewerScreen({navigation, route}) {
   const onStudentUpload = () => {
     Alert.alert('上传乐谱给老师', '请选择来源', [
       {
-        text: '拍照拍谱',
-        onPress: () => doStudentUpload(() => captureFromCamera(SCORE_IMG_OPTS)),
+        text: '拍照拍谱（可连拍）',
+        onPress: () => doStudentCamera(false),
       },
       {
-        text: '从相册选择',
-        onPress: () => doStudentUpload(() => pickFromGallery(SCORE_IMG_OPTS)),
+        text: '从相册多选',
+        onPress: () => doStudentUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0})),
       },
       {text: '取消', style: 'cancel'},
     ]);
   };
 
-  const doStudentUpload = async picker => {
-    const file = await picker();
+  const doStudentCamera = async hasPagesAlready => {
+    const file = await captureFromCamera(SCORE_IMG_OPTS);
     if (!file || file.cancelled) return;
     if (file.error || !file.uri) {
       Alert.alert('上传失败', file.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
@@ -75,11 +75,47 @@ export default function ScoreViewerScreen({navigation, route}) {
         uploader: 'student',
       });
       if (r?.ok) {
-        Alert.alert('已提交', '已发给老师审核，通过后才会显示在乐谱里。');
-        load();
+        await load();
+        Alert.alert('已提交', '按拍照顺序发给老师审核。继续拍下一页？', [
+          {text: '完成', style: 'cancel'},
+          {text: '继续拍', onPress: () => doStudentCamera(true)},
+        ]);
       } else {
-        Alert.alert('上传失败', r?.error === 'missing_teacher' ? '还没绑定老师，请先让老师把你加入班级。' : '请稍后重试。');
+        Alert.alert('上传失败', '请稍后重试。');
       }
+    } catch (e) {
+      Alert.alert('上传失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doStudentUpload = async picker => {
+    const picked = await picker();
+    if (!picked || picked.cancelled) return;
+    if (picked.error) {
+      Alert.alert('上传失败', picked.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
+      return;
+    }
+    const files = picked.files?.length ? picked.files : picked.uri ? [picked] : [];
+    if (!files.length) {
+      Alert.alert('上传失败', '未能读取照片。');
+      return;
+    }
+    setBusy(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const r = await uploadScore('', studentId || getDeviceId(), pieceName, files[i], {
+          mode: 'append',
+          uploader: 'student',
+        });
+        if (!r?.ok) {
+          Alert.alert('上传失败', `第 ${i + 1} 页失败，请稍后重试。`);
+          return;
+        }
+      }
+      Alert.alert('已提交', `已发给老师审核（${files.length} 页），通过后才会显示在乐谱里。`);
+      load();
     } catch (e) {
       Alert.alert('上传失败', '网络异常，请稍后重试。');
     } finally {
@@ -131,23 +167,30 @@ export default function ScoreViewerScreen({navigation, route}) {
                     <Text style={ui.boxLabel}>{box.label}</Text>
                   </View>
                 ))}
-                {pageTerms.map(ov => (
-                  <View
-                    key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                    style={[
-                      ui.termOv,
-                      {
-                        left: (ov.x || 0) * pageW,
-                        top: (ov.y || 0) * pageH,
-                        width: Math.max(36, (ov.w || 0.12) * pageW),
-                        height: Math.max(20, (ov.h || 0.035) * pageH),
-                      },
-                    ]}>
-                    <Text style={ui.termOvText} numberOfLines={1}>
-                      {ov.short || ov.translation || ov.term}
-                    </Text>
-                  </View>
-                ))}
+                {pageTerms.map(ov => {
+                  const fontSize = Math.max(9, Math.min(15, (ov.h || 0.025) * pageH * 0.75));
+                  return (
+                    <View
+                      key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                      pointerEvents="none"
+                      style={[
+                        ui.termOv,
+                        {
+                          left: (ov.x || 0) * pageW,
+                          top: (ov.y || 0) * pageH,
+                          width: Math.max(28, (ov.w || 0.06) * pageW),
+                          height: Math.max(12, (ov.h || 0.02) * pageH),
+                        },
+                      ]}>
+                      <Text
+                        style={[ui.termOvText, {fontSize}]}
+                        numberOfLines={1}
+                        allowFontScaling={false}>
+                        {ov.short || ov.translation || ov.term}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           );
@@ -198,15 +241,19 @@ const makeStyles = colors =>
     boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
     termOv: {
       position: 'absolute',
-      backgroundColor: 'rgba(232,246,255,0.92)',
-      borderWidth: 1,
-      borderColor: '#7EB6D9',
-      borderRadius: 4,
-      alignItems: 'center',
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      alignItems: 'flex-start',
       justifyContent: 'center',
-      paddingHorizontal: 3,
+      paddingHorizontal: 0,
     },
-    termOvText: {fontSize: 11, fontWeight: '700', color: '#0B3D5C'},
+    termOvText: {
+      fontWeight: '500',
+      color: '#1A3A4A',
+      textShadowColor: 'rgba(255,255,255,0.92)',
+      textShadowOffset: {width: 0.6, height: 0.6},
+      textShadowRadius: 1.5,
+    },
     termCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 6},
     termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 6},
     termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},

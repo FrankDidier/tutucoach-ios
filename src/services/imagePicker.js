@@ -8,17 +8,28 @@ try {
   picker = null;
 }
 
+function assetToFile(asset, fallbackName) {
+  if (!asset?.uri) return null;
+  return {
+    uri: asset.uri,
+    type: asset.type || 'image/jpeg',
+    name: asset.fileName || fallbackName || `score_${Date.now()}.jpg`,
+  };
+}
+
 // 相册选图。默认按头像场景压到 ~512；手型模版需要更高清晰度，可传 opts 覆盖。
+// opts.selectionLimit: 0=不限（多选），1=单选（默认）
 export function pickFromGallery(opts = {}) {
   return new Promise(resolve => {
     if (!picker || !picker.launchImageLibrary) {
       resolve({error: 'no_module'});
       return;
     }
+    const limit = opts.selectionLimit == null ? 1 : opts.selectionLimit;
     picker.launchImageLibrary(
       {
         mediaType: 'photo',
-        selectionLimit: 1,
+        selectionLimit: limit,
         maxWidth: opts.maxWidth || 512,
         maxHeight: opts.maxHeight || 512,
         quality: opts.quality || 0.88,
@@ -33,17 +44,21 @@ export function pickFromGallery(opts = {}) {
           resolve({error: response.errorCode});
           return;
         }
-        const asset =
-          response.assets && response.assets.length ? response.assets[0] : null;
-        if (!asset?.uri) {
+        const assets = response.assets || [];
+        if (!assets.length) {
           resolve({uri: null});
           return;
         }
-        resolve({
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || `score_${Date.now()}.jpg`,
-        });
+        if (limit !== 1 && assets.length > 1) {
+          resolve({
+            files: assets
+              .map((a, i) => assetToFile(a, `score_${Date.now()}_${i}.jpg`))
+              .filter(Boolean),
+          });
+          return;
+        }
+        const file = assetToFile(assets[0]);
+        resolve(file || {uri: null});
       },
     );
   });
@@ -77,15 +92,8 @@ export function captureFromCamera(opts = {}) {
         }
         const asset =
           response.assets && response.assets.length ? response.assets[0] : null;
-        if (!asset?.uri) {
-          resolve({uri: null});
-          return;
-        }
-        resolve({
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || `score_${Date.now()}.jpg`,
-        });
+        const file = assetToFile(asset);
+        resolve(file || {uri: null});
       },
     );
   });

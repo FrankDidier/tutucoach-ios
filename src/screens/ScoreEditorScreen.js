@@ -147,35 +147,80 @@ export default function ScoreEditorScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, pieceName]);
 
-  const doUpload = async (picker, mode = 'replace') => {
-    if (mode === 'append' && !manifest?.pages?.length) {
-      Alert.alert('提示', '请先上传第 1 页。');
+  const doUpload = async picker => {
+    const picked = await picker();
+    if (!picked || picked.cancelled) return;
+    if (picked.error) {
+      Alert.alert('上传失败', '未能读取文件，请重试。');
       return;
     }
-    const file = await picker();
-    if (!file || file.cancelled) return;
-    if (file.error || !file.uri) {
+    const files = picked.files?.length
+      ? picked.files
+      : picked.uri
+        ? [picked]
+        : [];
+    if (!files.length) {
       Alert.alert('上传失败', '未能读取文件，请重试。');
       return;
     }
     setBusy(true);
     try {
-      const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
-        mode,
-        uploader: 'teacher',
-      });
-      if (r?.ok && r?.manifest) {
-        setManifest(r.manifest);
-        setTerms(r.manifest.term_translations || []);
-        setTermOverlays(r.manifest.term_overlays || []);
-      } else {
-        Alert.alert('上传失败', '服务端未接受该文件。');
+      const hadPages = !!(manifest?.pages?.length);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const useMode = i === 0 && !hadPages ? 'replace' : 'append';
+        const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
+          mode: useMode,
+          uploader: 'teacher',
+        });
+        if (r?.ok && r?.manifest) {
+          setManifest(r.manifest);
+          setTerms(r.manifest.term_translations || []);
+          setTermOverlays(r.manifest.term_overlays || []);
+        } else {
+          Alert.alert('上传失败', `第 ${i + 1} 页未接受，请重试。`);
+          break;
+        }
       }
     } catch (e) {
       Alert.alert('上传失败', '网络异常，请稍后重试。');
     } finally {
       setBusy(false);
     }
+  };
+
+  const doCameraSequential = () => {
+    const shoot = async hasPagesAlready => {
+      const file = await captureFromCamera(SCORE_IMG_OPTS);
+      if (!file || file.cancelled) return;
+      if (file.error || !file.uri) {
+        Alert.alert('上传失败', '未能读取照片。');
+        return;
+      }
+      setBusy(true);
+      try {
+        const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
+          mode: hasPagesAlready ? 'append' : 'replace',
+          uploader: 'teacher',
+        });
+        if (r?.ok && r?.manifest) {
+          setManifest(r.manifest);
+          setTerms(r.manifest.term_translations || []);
+          setTermOverlays(r.manifest.term_overlays || []);
+          Alert.alert('继续拍下一页？', '按拍照顺序依次添加乐谱页。', [
+            {text: '完成', style: 'cancel'},
+            {text: '继续拍', onPress: () => shoot(true)},
+          ]);
+        } else {
+          Alert.alert('上传失败', '服务端未接受该文件。');
+        }
+      } catch (e) {
+        Alert.alert('上传失败', '网络异常，请稍后重试。');
+      } finally {
+        setBusy(false);
+      }
+    };
+    shoot(!!manifest?.pages?.length);
   };
 
   const onSuggest = async () => {
@@ -193,6 +238,9 @@ export default function ScoreEditorScreen({navigation, route}) {
         }));
         if (Array.isArray(r.term_translations)) {
           setTerms(r.term_translations);
+        }
+        if (Array.isArray(r.term_overlays)) {
+          setTermOverlays(r.term_overlays);
         }
       } else {
         Alert.alert('生成失败', 'AI 暂时没生成出建议框，请稍后再试。');
@@ -351,35 +399,25 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            可直接拍照拍谱，或从相册/PDF 上传；多页用「追加」。框可拖动，右下角缩放；点一下改文字。
+            拍照可连拍多页；相册一次多选（按选中顺序为第1、2、3…页）。框可拖动，右下角缩放；点一下改文字。
           </Text>
           {hasPending ? (
             <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
           ) : null}
           <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => doUpload(() => captureFromCamera(SCORE_IMG_OPTS), 'replace')}>
+            <TouchableOpacity style={ui.btn} onPress={doCameraSequential}>
               <Text style={ui.btnText}>拍照拍谱</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[ui.btn, ui.btnGhost]}
-              onPress={() => doUpload(() => pickFromGallery(SCORE_IMG_OPTS), 'replace')}>
-              <Text style={ui.btnGhostText}>相册</Text>
+              onPress={() =>
+                doUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}))
+              }>
+              <Text style={ui.btnGhostText}>相册多选</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
-            <TouchableOpacity
-              style={[ui.btn, ui.btnGhost]}
-              onPress={() => doUpload(() => captureFromCamera(SCORE_IMG_OPTS), 'append')}>
-              <Text style={ui.btnGhostText}>拍照追加</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[ui.btn, ui.btnGhost]}
-              onPress={() => doUpload(() => pickFromGallery(SCORE_IMG_OPTS), 'append')}>
-              <Text style={ui.btnGhostText}>相册追加</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf, 'replace')}>
+            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf)}>
               <Text style={ui.btnText}>上传 PDF</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onRecognizeTerms}>
@@ -436,23 +474,30 @@ export default function ScoreEditorScreen({navigation, route}) {
                     onChange={changeBoxGeom}
                   />
                 ))}
-                {pageTerms.map(ov => (
-                  <View
-                    key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                    style={[
-                      styles.termOv,
-                      {
-                        left: (ov.x || 0) * pageW,
-                        top: (ov.y || 0) * pageH,
-                        width: Math.max(36, (ov.w || 0.12) * pageW),
-                        height: Math.max(20, (ov.h || 0.035) * pageH),
-                      },
-                    ]}>
-                    <Text style={styles.termOvText} numberOfLines={1}>
-                      {ov.short || ov.translation || ov.term}
-                    </Text>
-                  </View>
-                ))}
+                {pageTerms.map(ov => {
+                  const fontSize = Math.max(9, Math.min(15, (ov.h || 0.025) * pageH * 0.75));
+                  return (
+                    <View
+                      key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                      pointerEvents="none"
+                      style={[
+                        styles.termOv,
+                        {
+                          left: (ov.x || 0) * pageW,
+                          top: (ov.y || 0) * pageH,
+                          width: Math.max(28, (ov.w || 0.06) * pageW),
+                          height: Math.max(12, (ov.h || 0.02) * pageH),
+                        },
+                      ]}>
+                      <Text
+                        style={[styles.termOvText, {fontSize}]}
+                        numberOfLines={1}
+                        allowFontScaling={false}>
+                        {ov.short || ov.translation || ov.term}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           );
@@ -585,15 +630,19 @@ const styles = StyleSheet.create({
   },
   termOv: {
     position: 'absolute',
-    backgroundColor: 'rgba(232,246,255,0.92)',
-    borderWidth: 1,
-    borderColor: '#7EB6D9',
-    borderRadius: 4,
-    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    alignItems: 'flex-start',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 0,
   },
-  termOvText: {fontSize: 11, fontWeight: '700', color: '#0B3D5C'},
+  termOvText: {
+    fontWeight: '500',
+    color: '#1A3A4A',
+    textShadowColor: 'rgba(255,255,255,0.92)',
+    textShadowOffset: {width: 0.6, height: 0.6},
+    textShadowRadius: 1.5,
+  },
 });
 
 const makeStyles = colors =>
