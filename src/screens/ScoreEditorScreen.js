@@ -18,7 +18,7 @@ import {
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
-import {pickFromGallery} from '../services/imagePicker';
+import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {pickPdf} from '../services/documentPicker';
 import {
   fetchScore,
@@ -27,6 +27,8 @@ import {
   uploadScore,
   recognizeScoreTerms,
 } from '../services/score';
+
+const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -349,21 +351,31 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            先上传照片或 PDF；多页用「追加照片」。框可拖动，右下角缩放；点一下改文字。
+            可直接拍照拍谱，或从相册/PDF 上传；多页用「追加」。框可拖动，右下角缩放；点一下改文字。
           </Text>
           {hasPending ? (
             <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
           ) : null}
           <View style={ui.row}>
-            <TouchableOpacity
-              style={ui.btn}
-              onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}), 'replace')}>
-              <Text style={ui.btnText}>上传照片</Text>
+            <TouchableOpacity style={ui.btn} onPress={() => doUpload(() => captureFromCamera(SCORE_IMG_OPTS), 'replace')}>
+              <Text style={ui.btnText}>拍照拍谱</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[ui.btn, ui.btnGhost]}
-              onPress={() => doUpload(() => pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92}), 'append')}>
-              <Text style={ui.btnGhostText}>追加照片</Text>
+              onPress={() => doUpload(() => pickFromGallery(SCORE_IMG_OPTS), 'replace')}>
+              <Text style={ui.btnGhostText}>相册</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
+            <TouchableOpacity
+              style={[ui.btn, ui.btnGhost]}
+              onPress={() => doUpload(() => captureFromCamera(SCORE_IMG_OPTS), 'append')}>
+              <Text style={ui.btnGhostText}>拍照追加</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[ui.btn, ui.btnGhost]}
+              onPress={() => doUpload(() => pickFromGallery(SCORE_IMG_OPTS), 'append')}>
+              <Text style={ui.btnGhostText}>相册追加</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>

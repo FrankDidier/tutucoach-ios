@@ -16,7 +16,9 @@ import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {fetchScore, uploadScore} from '../services/score';
 import {getDeviceId} from '../services/device';
-import {pickFromGallery} from '../services/imagePicker';
+import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
+
+const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
 
 export default function ScoreViewerScreen({navigation, route}) {
   const {colors} = useTheme();
@@ -45,11 +47,25 @@ export default function ScoreViewerScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceName, studentId]);
 
-  const onStudentUpload = async () => {
-    const file = await pickFromGallery({maxWidth: 1800, maxHeight: 2400, quality: 0.92});
+  const onStudentUpload = () => {
+    Alert.alert('上传乐谱给老师', '请选择来源', [
+      {
+        text: '拍照拍谱',
+        onPress: () => doStudentUpload(() => captureFromCamera(SCORE_IMG_OPTS)),
+      },
+      {
+        text: '从相册选择',
+        onPress: () => doStudentUpload(() => pickFromGallery(SCORE_IMG_OPTS)),
+      },
+      {text: '取消', style: 'cancel'},
+    ]);
+  };
+
+  const doStudentUpload = async picker => {
+    const file = await picker();
     if (!file || file.cancelled) return;
     if (file.error || !file.uri) {
-      Alert.alert('上传失败', '未能读取照片。');
+      Alert.alert('上传失败', file.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
       return;
     }
     setBusy(true);
@@ -79,7 +95,7 @@ export default function ScoreViewerScreen({navigation, route}) {
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
         <Text style={ui.hint}>可补拍乐谱页发给老师审核；陪练语音不会因看谱中断。</Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
-          <Text style={ui.uploadText}>{busy ? '上传中…' : '拍照/上传乐谱给老师'}</Text>
+          <Text style={ui.uploadText}>{busy ? '上传中…' : '拍照/选图上传给老师'}</Text>
         </TouchableOpacity>
         {loading ? <ActivityIndicator color={colors.primary} style={{marginTop: 24}} /> : null}
         {!loading && !manifest?.pages?.length ? (

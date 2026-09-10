@@ -35,14 +35,22 @@ export function pickFromGallery(opts = {}) {
         }
         const asset =
           response.assets && response.assets.length ? response.assets[0] : null;
-        resolve({uri: asset ? asset.uri : null});
+        if (!asset?.uri) {
+          resolve({uri: null});
+          return;
+        }
+        resolve({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || `score_${Date.now()}.jpg`,
+        });
       },
     );
   });
 }
 
-// 拍照（手型模板可用：相机）。
-export function captureFromCamera() {
+// 拍照。默认较高分辨率；乐谱可传更大 opts。
+export function captureFromCamera(opts = {}) {
   return new Promise(resolve => {
     if (!picker || !picker.launchCamera) {
       resolve({error: 'no_module'});
@@ -52,9 +60,11 @@ export function captureFromCamera() {
       {
         mediaType: 'photo',
         saveToPhotos: false,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        quality: 0.9,
+        cameraType: 'back',
+        maxWidth: opts.maxWidth || 1280,
+        maxHeight: opts.maxHeight || 1280,
+        quality: opts.quality || 0.9,
+        includeBase64: false,
       },
       response => {
         if (response.didCancel) {
@@ -67,7 +77,15 @@ export function captureFromCamera() {
         }
         const asset =
           response.assets && response.assets.length ? response.assets[0] : null;
-        resolve({uri: asset ? asset.uri : null});
+        if (!asset?.uri) {
+          resolve({uri: null});
+          return;
+        }
+        resolve({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || `score_${Date.now()}.jpg`,
+        });
       },
     );
   });
