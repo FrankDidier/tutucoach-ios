@@ -36,9 +36,9 @@ export async function saveScore(
   pieceName,
   annotations,
   termTranslations,
-  {approvePending = false} = {},
+  {approvePending = false, termOverlays} = {},
 ) {
-  return postJson('/api/coach/score/save', {
+  const body = {
     teacher_id: teacherId || '',
     student_id: studentId || '',
     piece_name: pieceName || '',
@@ -46,7 +46,25 @@ export async function saveScore(
     confirmed_annotations: Array.isArray(annotations) ? annotations : [],
     term_translations: Array.isArray(termTranslations) ? termTranslations : [],
     approve_pending: !!approvePending,
-  });
+  };
+  if (Array.isArray(termOverlays)) {
+    body.term_overlays = termOverlays;
+  }
+  return postJson('/api/coach/score/save', body);
+}
+
+export async function deleteScore(teacherId, studentId, pieceName, pageIndex = null) {
+  const body = {
+    teacher_id: teacherId || '',
+    student_id: studentId || '',
+    piece_name: pieceName || '',
+  };
+  if (pageIndex !== null && pageIndex !== undefined) {
+    body.page_index = pageIndex;
+  } else {
+    body.page_index = 'all';
+  }
+  return postJson('/api/coach/score/delete', body, null, 30000);
 }
 
 export async function suggestScore(teacherId, studentId, pieceName, existingFocus = []) {
@@ -80,6 +98,7 @@ export default {
   uploadScore,
   fetchScore,
   saveScore,
+  deleteScore,
   suggestScore,
   recognizeScoreTerms,
 };

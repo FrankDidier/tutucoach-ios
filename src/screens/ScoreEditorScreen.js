@@ -26,6 +26,7 @@ import {
   suggestScore,
   uploadScore,
   recognizeScoreTerms,
+  deleteScore,
 } from '../services/score';
 
 const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
@@ -147,7 +148,7 @@ export default function ScoreEditorScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, pieceName]);
 
-  const doUpload = async picker => {
+  const doUpload = async (picker, {forceReplace = false} = {}) => {
     const picked = await picker();
     if (!picked || picked.cancelled) return;
     if (picked.error) {
@@ -165,7 +166,7 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
     setBusy(true);
     try {
-      const hadPages = !!(manifest?.pages?.length);
+      const hadPages = !forceReplace && !!(manifest?.pages?.length);
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const useMode = i === 0 && !hadPages ? 'replace' : 'append';
@@ -183,10 +184,79 @@ export default function ScoreEditorScreen({navigation, route}) {
         }
       }
     } catch (e) {
-      Alert.alert('上传失败', '网络异常，请稍后重试。');
+      const msg = String(e?.message || e || '');
+      Alert.alert(
+        '上传失败',
+        msg.includes('timeout') ? '上传超时，请检查网络后重试；大谱可先清空再分批上传。' : '网络异常，请稍后重试。',
+      );
     } finally {
       setBusy(false);
     }
+  };
+
+  const clearAllScores = () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '当前没有乐谱可删。');
+      return;
+    }
+    Alert.alert('清空乐谱', '将删除本曲目全部乐谱页与重点框，确认吗？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '清空',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          try {
+            const r = await deleteScore(getDeviceId(), studentId, pieceName, null);
+            if (r?.ok) {
+              setManifest(null);
+              setTerms([]);
+              setTermOverlays([]);
+              Alert.alert('已清空', '可以重新拍照或从相册上传。');
+            } else {
+              Alert.alert('删除失败', '请稍后重试。');
+            }
+          } catch (e) {
+            Alert.alert('删除失败', '网络异常，请稍后重试。');
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const deletePage = pageIndex => {
+    Alert.alert('删除本页', `确认删除第 ${pageIndex + 1} 页？`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          try {
+            const r = await deleteScore(getDeviceId(), studentId, pieceName, pageIndex);
+            if (r?.ok) {
+              if (r.manifest) {
+                setManifest(r.manifest);
+                setTerms(r.manifest.term_translations || []);
+                setTermOverlays(r.manifest.term_overlays || []);
+              } else {
+                setManifest(null);
+                setTerms([]);
+                setTermOverlays([]);
+              }
+            } else {
+              Alert.alert('删除失败', '请稍后重试。');
+            }
+          } catch (e) {
+            Alert.alert('删除失败', '网络异常，请稍后重试。');
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   const doCameraSequential = () => {
@@ -432,6 +502,11 @@ export default function ScoreEditorScreen({navigation, route}) {
               <Text style={ui.btnText}>保存确认</Text>
             </TouchableOpacity>
           </View>
+          <View style={ui.row}>
+            <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={clearAllScores}>
+              <Text style={ui.btnText}>清空乐谱</Text>
+            </TouchableOpacity>
+          </View>
           {hasPending ? (
             <TouchableOpacity style={[ui.btn, {marginTop: 12}]} onPress={() => saveAll(true)}>
               <Text style={ui.btnText}>通过并发布学生上传</Text>
@@ -440,7 +515,10 @@ export default function ScoreEditorScreen({navigation, route}) {
         </View>
 
         {loading || busy ? (
-          <ActivityIndicator color={colors.primary} style={{marginTop: 24}} />
+          <View style={{marginTop: 24, alignItems: 'center'}}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[ui.sub, {marginTop: 8}]}>{busy ? '处理中，请稍候…' : '加载中…'}</Text>
+          </View>
         ) : null}
 
         {(manifest?.pages || []).map(page => {
@@ -454,9 +532,14 @@ export default function ScoreEditorScreen({navigation, route}) {
                 <Text style={ui.pageTitle}>
                   第 {page.index + 1} 页{badge}
                 </Text>
-                <TouchableOpacity onPress={() => addBox(page.index)}>
-                  <Text style={ui.pageAction}>＋ 手动加框</Text>
-                </TouchableOpacity>
+                <View style={{flexDirection: 'row', gap: 14}}>
+                  <TouchableOpacity onPress={() => deletePage(page.index)}>
+                    <Text style={[ui.pageAction, {color: '#D14343'}]}>删除本页</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addBox(page.index)}>
+                    <Text style={ui.pageAction}>＋ 手动加框</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={{width: pageW, height: pageH}}>
                 <Image
