@@ -76,7 +76,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        Alert.alert('已提交', '按拍照顺序发给老师审核。继续拍下一页？', [
+        Alert.alert('已上传', '这一页已加进乐谱，翻译好的术语马上就能看。继续拍下一页？', [
           {text: '完成', style: 'cancel'},
           {text: '继续拍', onPress: () => doStudentCamera(true)},
         ]);
@@ -114,7 +114,7 @@ export default function ScoreViewerScreen({navigation, route}) {
           return;
         }
       }
-      Alert.alert('已提交', `已发给老师审核（${files.length} 页），通过后才会显示在乐谱里。`);
+      Alert.alert('已上传', `${files.length} 页已加进乐谱，翻译好的术语马上就能看。`);
       load();
     } catch (e) {
       Alert.alert('上传失败', '网络异常，请稍后重试。');
@@ -129,13 +129,13 @@ export default function ScoreViewerScreen({navigation, route}) {
       <ScreenHeader title="乐谱重点" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={ui.scroll}>
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
-        <Text style={ui.hint}>可补拍乐谱页发给老师审核；陪练语音不会因看谱中断。</Text>
+        <Text style={ui.hint}>补拍的乐谱页会立刻加进来并翻译术语，不用等老师审核；陪练语音不会因看谱中断。</Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
-          <Text style={ui.uploadText}>{busy ? '上传中…' : '拍照/选图上传给老师'}</Text>
+          <Text style={ui.uploadText}>{busy ? '上传中…' : '拍照/选图上传乐谱'}</Text>
         </TouchableOpacity>
         {loading ? <ActivityIndicator color={colors.primary} style={{marginTop: 24}} /> : null}
         {!loading && !manifest?.pages?.length ? (
-          <Text style={ui.empty}>这首曲目还没有老师发布的乐谱。你可以先拍照上传，老师审核后就会出现在这里。</Text>
+          <Text style={ui.empty}>这首曲目还没有乐谱。拍照上传后马上就能看到翻译好的术语。</Text>
         ) : null}
         {(manifest?.pages || []).map(page => {
           const pageH = page.width ? Math.max(120, pageW * (page.height / page.width)) : pageW * 1.35;

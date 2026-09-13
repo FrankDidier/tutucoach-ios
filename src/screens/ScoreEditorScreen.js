@@ -199,7 +199,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       Alert.alert('提示', '当前没有乐谱可删。');
       return;
     }
-    Alert.alert('清空乐谱', '将删除本曲目全部乐谱页与重点框，确认吗？', [
+    Alert.alert('删除全部乐谱', '将删除本曲目全部乐谱页与重点框，确认吗？', [
       {text: '取消', style: 'cancel'},
       {
         text: '清空',
@@ -471,6 +471,9 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.help}>
             拍照可连拍多页；相册一次多选（按选中顺序为第1、2、3…页）。框可拖动，右下角缩放；点一下改文字。
           </Text>
+          <Text style={ui.help}>
+            要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
+          </Text>
           {hasPending ? (
             <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
           ) : null}
@@ -504,7 +507,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={clearAllScores}>
-              <Text style={ui.btnText}>清空乐谱</Text>
+              <Text style={ui.btnText}>删除全部乐谱</Text>
             </TouchableOpacity>
           </View>
           {hasPending ? (
