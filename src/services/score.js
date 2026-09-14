@@ -36,7 +36,7 @@ export async function saveScore(
   pieceName,
   annotations,
   termTranslations,
-  {approvePending = false, termOverlays} = {},
+  {approvePending = false, termOverlays, dividers} = {},
 ) {
   const body = {
     teacher_id: teacherId || '',
@@ -49,6 +49,9 @@ export async function saveScore(
   };
   if (Array.isArray(termOverlays)) {
     body.term_overlays = termOverlays;
+  }
+  if (Array.isArray(dividers)) {
+    body.dividers = dividers;
   }
   return postJson('/api/coach/score/save', body);
 }
@@ -81,6 +84,21 @@ export async function suggestScore(teacherId, studentId, pieceName, existingFocu
   );
 }
 
+export async function boxesFromDividers(teacherId, studentId, pieceName, dividers, existingFocus = []) {
+  return postJson(
+    '/api/coach/score/boxes_from_dividers',
+    {
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+      piece_name: pieceName || '',
+      dividers: Array.isArray(dividers) ? dividers : [],
+      existing_focus: Array.isArray(existingFocus) ? existingFocus : [],
+    },
+    null,
+    60000,
+  );
+}
+
 export async function recognizeScoreTerms(teacherId, studentId, pieceName) {
   return postJson(
     '/api/coach/score/ocr',
@@ -100,5 +118,6 @@ export default {
   saveScore,
   deleteScore,
   suggestScore,
+  boxesFromDividers,
   recognizeScoreTerms,
 };

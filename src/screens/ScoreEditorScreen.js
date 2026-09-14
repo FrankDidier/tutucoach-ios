@@ -24,6 +24,7 @@ import {
   fetchScore,
   saveScore,
   suggestScore,
+  boxesFromDividers,
   uploadScore,
   recognizeScoreTerms,
   deleteScore,
@@ -33,6 +34,61 @@ const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
+}
+
+function pageFrameHeight(pageW, page, natural) {
+  const nw = natural?.w || 0;
+  const nh = natural?.h || 0;
+  if (nw > 0 && nh > 0) {
+    return Math.max(160, pageW * (nh / nw));
+  }
+  const w = Number(page?.width) || 0;
+  const h = Number(page?.height) || 0;
+  if (w > 0 && h > 0) {
+    const ratio = h / w;
+    if (ratio >= 0.35 && ratio <= 3.5) {
+      return Math.max(160, pageW * ratio);
+    }
+  }
+  return pageW * 1.35;
+}
+
+function EditableDivider({divider, pageW, pageH, onChange}) {
+  const liveRef = useRef(divider.y || 0.5);
+  const startRef = useRef(liveRef.current);
+  const [liveY, setLiveY] = useState(liveRef.current);
+
+  useEffect(() => {
+    liveRef.current = divider.y || 0.5;
+    setLiveY(liveRef.current);
+  }, [divider.y, divider.id]);
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startRef.current = liveRef.current;
+      },
+      onPanResponderMove: (_, g) => {
+        const next = clamp(startRef.current + g.dy / pageH, 0.03, 0.97);
+        liveRef.current = next;
+        setLiveY(next);
+      },
+      onPanResponderRelease: () => {
+        onChange(divider.id, liveRef.current);
+      },
+    }),
+  ).current;
+
+  return (
+    <View
+      {...responder.panHandlers}
+      style={[styles.dividerHit, {top: liveY * pageH - 14, width: pageW}]}>
+      <View style={styles.dividerLine} />
+      <Text style={styles.dividerLabel}>上下拖到段落结尾</Text>
+    </View>
+  );
 }
 
 function EditableBox({box, pageW, pageH, onOpen, onChange}) {
@@ -117,6 +173,8 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [manifest, setManifest] = useState(null);
   const [terms, setTerms] = useState([]);
   const [termOverlays, setTermOverlays] = useState([]);
+  const [dividers, setDividers] = useState([]);
+  const [naturalSizes, setNaturalSizes] = useState({});
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [label, setLabel] = useState('');
@@ -134,10 +192,13 @@ export default function ScoreEditorScreen({navigation, route}) {
       setManifest(m);
       setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
       setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
+      setDividers(Array.isArray(m?.dividers) ? m.dividers : []);
+      setNaturalSizes({});
     } catch (e) {
       setManifest(null);
       setTerms([]);
       setTermOverlays([]);
+      setDividers([]);
     } finally {
       setLoading(false);
     }
@@ -305,21 +366,69 @@ export default function ScoreEditorScreen({navigation, route}) {
         setManifest(prev => ({
           ...(prev || {}),
           annotations: Array.isArray(r.annotations) ? r.annotations : [],
+          dividers: Array.isArray(r.dividers) ? r.dividers : [],
         }));
+        setDividers(Array.isArray(r.dividers) ? r.dividers : []);
         if (Array.isArray(r.term_translations)) {
           setTerms(r.term_translations);
         }
         if (Array.isArray(r.term_overlays)) {
           setTermOverlays(r.term_overlays);
         }
+        Alert.alert(
+          '已生成分段线',
+          '请把橙色横线拖到每个段落的结尾，再点「按分段线生成重点框」。',
+        );
       } else {
-        Alert.alert('生成失败', 'AI 暂时没生成出建议框，请稍后再试。');
+        Alert.alert('生成失败', 'AI 暂时没生成出分段线，请稍后再试。');
       }
     } catch (e) {
       Alert.alert('生成失败', '网络异常，请稍后重试。');
     } finally {
       setBusy(false);
     }
+  };
+
+  const onBoxesFromDividers = async () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传乐谱。');
+      return;
+    }
+    if (!dividers.length) {
+      Alert.alert('提示', '请先点「AI 分段线」生成可拖动的线，或手动确认后再生成。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await boxesFromDividers(getDeviceId(), studentId, pieceName, dividers, lines);
+      if (r?.ok) {
+        setManifest(prev => ({
+          ...(prev || {}),
+          annotations: Array.isArray(r.annotations) ? r.annotations : [],
+        }));
+        if (Array.isArray(r.dividers)) {
+          setDividers(r.dividers);
+        }
+        Alert.alert('已生成重点框', '可再拖动/点一下改文字，最后点「保存确认」。');
+      } else {
+        Alert.alert('生成失败', '请稍后重试。');
+      }
+    } catch (e) {
+      Alert.alert('生成失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeDividerY = (id, y) => {
+    setDividers(prev => prev.map(d => (d.id === id ? {...d, y} : d)));
+  };
+
+  const addDivider = pageIdx => {
+    setDividers(prev => [
+      ...prev,
+      {id: `d_${Date.now()}`, page: pageIdx, y: 0.5, label: '分段'},
+    ]);
   };
 
   const onRecognizeTerms = async () => {
@@ -415,9 +524,14 @@ export default function ScoreEditorScreen({navigation, route}) {
       }));
       const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms, {
         approvePending,
+        termOverlays,
+        dividers,
       });
       if (r?.ok) {
         setManifest(r.manifest || {...manifest, annotations});
+        if (Array.isArray(r.manifest?.dividers)) {
+          setDividers(r.manifest.dividers);
+        }
         Alert.alert(
           approvePending ? '已通过并发布' : '已保存',
           approvePending
@@ -469,7 +583,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            拍照可连拍多页；相册一次多选（按选中顺序为第1、2、3…页）。框可拖动，右下角缩放；点一下改文字。
+            拍照可连拍多页；相册一次多选。点「AI 分段线」→ 把橙色线拖到段落结尾 → 再点「按分段线生成重点框」。框可拖动缩放，点一下改文字。
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -499,13 +613,16 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
-              <Text style={ui.btnGhostText}>AI 乐句/乐段框</Text>
+              <Text style={ui.btnGhostText}>AI 分段线</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={ui.btn} onPress={() => saveAll(false)}>
-              <Text style={ui.btnText}>保存确认</Text>
+            <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
+              <Text style={ui.btnText}>按分段线生成重点框</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
+            <TouchableOpacity style={ui.btn} onPress={() => saveAll(false)}>
+              <Text style={ui.btnText}>保存确认</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={clearAllScores}>
               <Text style={ui.btnText}>删除全部乐谱</Text>
             </TouchableOpacity>
@@ -525,12 +642,14 @@ export default function ScoreEditorScreen({navigation, route}) {
         ) : null}
 
         {(manifest?.pages || []).map(page => {
-          const pageH = page.width ? Math.max(120, pageW * (page.height / page.width)) : pageW * 1.35;
+          const key = page.name || String(page.index);
+          const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
           const boxes = (manifest.annotations || []).filter(b => (b.page || 0) === page.index);
+          const pageDivs = (dividers || []).filter(d => (d.page || 0) === page.index);
           const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === page.index);
           const badge = page.pending_review ? ' · 待审' : page.uploaded_by === 'student' ? ' · 学生补传' : '';
           return (
-            <View key={page.name} style={ui.pageCard}>
+            <View key={key} style={ui.pageCard}>
               <View style={ui.pageHead}>
                 <Text style={ui.pageTitle}>
                   第 {page.index + 1} 页{badge}
@@ -538,6 +657,9 @@ export default function ScoreEditorScreen({navigation, route}) {
                 <View style={{flexDirection: 'row', gap: 14}}>
                   <TouchableOpacity onPress={() => deletePage(page.index)}>
                     <Text style={[ui.pageAction, {color: '#D14343'}]}>删除本页</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addDivider(page.index)}>
+                    <Text style={ui.pageAction}>＋ 加分段线</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => addBox(page.index)}>
                     <Text style={ui.pageAction}>＋ 手动加框</Text>
@@ -549,6 +671,16 @@ export default function ScoreEditorScreen({navigation, route}) {
                   source={{uri: `https://tutujiaolian.com${page.url}`}}
                   style={{width: pageW, height: pageH, borderRadius: 12}}
                   resizeMode="contain"
+                  onLoad={e => {
+                    const src = e?.nativeEvent?.source || {};
+                    const w = Number(src.width) || 0;
+                    const h = Number(src.height) || 0;
+                    if (w > 0 && h > 0) {
+                      setNaturalSizes(prev =>
+                        prev[key]?.w === w && prev[key]?.h === h ? prev : {...prev, [key]: {w, h}},
+                      );
+                    }
+                  }}
                 />
                 {boxes.map(box => (
                   <EditableBox
@@ -558,6 +690,15 @@ export default function ScoreEditorScreen({navigation, route}) {
                     pageH={pageH}
                     onOpen={openEdit}
                     onChange={changeBoxGeom}
+                  />
+                ))}
+                {pageDivs.map(d => (
+                  <EditableDivider
+                    key={d.id}
+                    divider={d}
+                    pageW={pageW}
+                    pageH={pageH}
+                    onChange={changeDividerY}
                   />
                 ))}
                 {pageTerms.map(ov => {
@@ -713,6 +854,30 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 2,
     backgroundColor: '#FFB300',
+  },
+  dividerHit: {
+    position: 'absolute',
+    left: 0,
+    height: 28,
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  dividerLine: {
+    height: 3,
+    backgroundColor: '#FF7A2F',
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
+  dividerLabel: {
+    position: 'absolute',
+    right: 8,
+    top: 4,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF7A2F',
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    paddingHorizontal: 4,
+    borderRadius: 4,
   },
   termOv: {
     position: 'absolute',
