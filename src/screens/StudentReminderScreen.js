@@ -493,6 +493,10 @@ export default function StudentReminderScreen({navigation}) {
                       <Text style={styles.renameBtn}>备注名</Text>
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.stuCodeHint}>
+                    学生码：{sel.id}
+                    {'\n'}请与学生端「学生码」一致，否则曲目会对不上。
+                  </Text>
 
                   {/* 播报频率 */}
                   <View style={styles.freqCard}>
@@ -808,6 +812,12 @@ const makeStyles = colors =>
     },
     selName: {flex: 1, fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginRight: 10},
     renameBtn: {fontSize: 13, fontWeight: '700', color: colors.accent},
+    stuCodeHint: {
+      marginTop: 6,
+      fontSize: 12,
+      lineHeight: 17,
+      color: colors.textSecondary,
+    },
     freqCard: {
       backgroundColor: colors.card,
       borderRadius: 14,

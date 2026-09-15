@@ -54,14 +54,26 @@ function pageFrameHeight(pageW, page, natural) {
 }
 
 function EditableDivider({divider, pageW, pageH, onChange}) {
-  const liveRef = useRef(divider.y || 0.5);
+  const isVertical =
+    (divider.orientation || 'v') !== 'h' && (divider.x != null || divider.y == null);
+  const liveRef = useRef(isVertical ? Number(divider.x) || 0.5 : Number(divider.y) || 0.5);
   const startRef = useRef(liveRef.current);
-  const [liveY, setLiveY] = useState(liveRef.current);
+  const vertRef = useRef(isVertical);
+  const pageWRef = useRef(pageW);
+  const pageHRef = useRef(pageH);
+  const [live, setLive] = useState(liveRef.current);
 
   useEffect(() => {
-    liveRef.current = divider.y || 0.5;
-    setLiveY(liveRef.current);
-  }, [divider.y, divider.id]);
+    vertRef.current = isVertical;
+    pageWRef.current = pageW;
+    pageHRef.current = pageH;
+  }, [isVertical, pageW, pageH]);
+
+  useEffect(() => {
+    const next = isVertical ? Number(divider.x) || 0.5 : Number(divider.y) || 0.5;
+    liveRef.current = next;
+    setLive(next);
+  }, [divider.x, divider.y, divider.id, isVertical]);
 
   const responder = useRef(
     PanResponder.create({
@@ -71,20 +83,32 @@ function EditableDivider({divider, pageW, pageH, onChange}) {
         startRef.current = liveRef.current;
       },
       onPanResponderMove: (_, g) => {
-        const next = clamp(startRef.current + g.dy / pageH, 0.03, 0.97);
+        const next = vertRef.current
+          ? clamp(startRef.current + g.dx / Math.max(1, pageWRef.current), 0.03, 0.97)
+          : clamp(startRef.current + g.dy / Math.max(1, pageHRef.current), 0.03, 0.97);
         liveRef.current = next;
-        setLiveY(next);
+        setLive(next);
       },
       onPanResponderRelease: () => {
-        onChange(divider.id, liveRef.current);
+        onChange(divider.id, liveRef.current, vertRef.current ? 'v' : 'h');
       },
     }),
   ).current;
 
+  if (isVertical) {
+    return (
+      <View
+        {...responder.panHandlers}
+        style={[styles.dividerHitV, {left: live * pageW - 14, height: pageH}]}>
+        <View style={styles.dividerLineV} />
+        <Text style={styles.dividerLabelV}>左右拖到段尾</Text>
+      </View>
+    );
+  }
   return (
     <View
       {...responder.panHandlers}
-      style={[styles.dividerHit, {top: liveY * pageH - 14, width: pageW}]}>
+      style={[styles.dividerHit, {top: live * pageH - 14, width: pageW}]}>
       <View style={styles.dividerLine} />
       <Text style={styles.dividerLabel}>上下拖到段落结尾</Text>
     </View>
@@ -377,7 +401,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         }
         Alert.alert(
           '已生成分段线',
-          '请把橙色横线拖到每个段落的结尾，再点「按分段线生成重点框」。',
+          '请把橙色竖线（像小节线）左右拖到每个段落的结尾，再点「按分段线生成重点框」。',
         );
       } else {
         Alert.alert('生成失败', 'AI 暂时没生成出分段线，请稍后再试。');
@@ -420,14 +444,22 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
-  const changeDividerY = (id, y) => {
-    setDividers(prev => prev.map(d => (d.id === id ? {...d, y} : d)));
+  const changeDividerPos = (id, value, orientation = 'v') => {
+    setDividers(prev =>
+      prev.map(d =>
+        d.id === id
+          ? orientation === 'v'
+            ? {...d, x: value, orientation: 'v', y: undefined}
+            : {...d, y: value, orientation: 'h'}
+          : d,
+      ),
+    );
   };
 
   const addDivider = pageIdx => {
     setDividers(prev => [
       ...prev,
-      {id: `d_${Date.now()}`, page: pageIdx, y: 0.5, label: '分段'},
+      {id: `d_${Date.now()}`, page: pageIdx, x: 0.5, orientation: 'v', label: '分段'},
     ]);
   };
 
@@ -583,7 +615,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            拍照可连拍多页；相册一次多选。点「AI 分段线」→ 把橙色线拖到段落结尾 → 再点「按分段线生成重点框」。框可拖动缩放，点一下改文字。
+            拍照可连拍多页；相册一次多选。点「AI 分段线」→ 把橙色竖线左右拖到段落结尾（像小节线）→ 再点「按分段线生成重点框」。框可拖动缩放，点一下改文字。
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -698,11 +730,11 @@ export default function ScoreEditorScreen({navigation, route}) {
                     divider={d}
                     pageW={pageW}
                     pageH={pageH}
-                    onChange={changeDividerY}
+                    onChange={changeDividerPos}
                   />
                 ))}
                 {pageTerms.map(ov => {
-                  const fontSize = Math.max(9, Math.min(15, (ov.h || 0.025) * pageH * 0.75));
+                  const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
                   return (
                     <View
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
@@ -712,8 +744,9 @@ export default function ScoreEditorScreen({navigation, route}) {
                         {
                           left: (ov.x || 0) * pageW,
                           top: (ov.y || 0) * pageH,
-                          width: Math.max(28, (ov.w || 0.06) * pageW),
-                          height: Math.max(12, (ov.h || 0.02) * pageH),
+                          width: Math.max(32, (ov.w || 0.08) * pageW),
+                          height: Math.max(16, (ov.h || 0.022) * pageH),
+                          zIndex: 12,
                         },
                       ]}>
                       <Text
@@ -879,20 +912,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 4,
   },
+  dividerHitV: {
+    position: 'absolute',
+    top: 0,
+    width: 28,
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  dividerLineV: {
+    width: 3,
+    flex: 1,
+    backgroundColor: '#FF7A2F',
+    borderRadius: 2,
+    marginVertical: 4,
+  },
+  dividerLabelV: {
+    position: 'absolute',
+    top: 8,
+    left: 6,
+    width: 56,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF7A2F',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    borderRadius: 4,
+    transform: [{rotate: '-90deg'}],
+  },
   termOv: {
     position: 'absolute',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    alignItems: 'flex-start',
+    backgroundColor: 'rgba(64, 156, 255, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(30, 110, 210, 0.95)',
+    borderRadius: 4,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 0,
+    paddingHorizontal: 3,
+    overflow: 'hidden',
   },
   termOvText: {
-    fontWeight: '500',
-    color: '#1A3A4A',
-    textShadowColor: 'rgba(255,255,255,0.92)',
-    textShadowOffset: {width: 0.6, height: 0.6},
-    textShadowRadius: 1.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: {width: 0, height: 0.5},
+    textShadowRadius: 1,
   },
 });
 

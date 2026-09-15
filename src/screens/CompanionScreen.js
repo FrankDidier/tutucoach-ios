@@ -302,6 +302,27 @@ export default function CompanionScreen({navigation}) {
   // 从「切换分身」页返回后（再次获得焦点），刷新所选角色的名称/背景/音色。
   // 首次进入的焦点由初始化负责，这里跳过。
   useEffect(() => {
+    const reloadPieces = async () => {
+      try {
+        const sid = studentIdRef.current || getDeviceId();
+        const r = await fetchReminders(sid, null);
+        if (!aliveRef.current) return;
+        freqRef.current = Math.max(10, r.freqSec || 45);
+        const next = r.pieces || [];
+        piecesRef.current = next;
+        if (next.length) {
+          const keep = Math.max(0, Math.min(pieceIdxRef.current, next.length - 1));
+          pieceIdxRef.current = keep >= 0 ? keep : 0;
+          applyPiece(pieceIdxRef.current);
+          setPieces(next);
+          setPieceIdx(pieceIdxRef.current);
+        } else {
+          remindersRef.current = r.reminders || [];
+          setPieces([]);
+          setPieceIdx(-1);
+        }
+      } catch (e) {}
+    };
     const unsubFocus = navigation.addListener('focus', () => {
       focusCountRef.current += 1;
       scoreViewerOpenRef.current = false;
@@ -309,6 +330,7 @@ export default function CompanionScreen({navigation}) {
       aliveRef.current = true;
       pausedRef.current = false;
       reloadCoach({blocking: false});
+      reloadPieces();
     });
     // 离开本页（去选分身页）时暂停主动陪聊并停掉正在播的语音，避免在选择页说话。
     // 看乐谱时保持语音，不打断陪练。

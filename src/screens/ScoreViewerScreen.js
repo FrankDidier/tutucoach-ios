@@ -266,7 +266,7 @@ export default function ScoreViewerScreen({navigation, route}) {
                   </View>
                 ))}
                 {pageTerms.map(ov => {
-                  const fontSize = Math.max(9, Math.min(15, (ov.h || 0.025) * pageH * 0.75));
+                  const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
                   return (
                     <View
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
@@ -276,8 +276,9 @@ export default function ScoreViewerScreen({navigation, route}) {
                         {
                           left: (ov.x || 0) * pageW,
                           top: (ov.y || 0) * pageH,
-                          width: Math.max(28, (ov.w || 0.06) * pageW),
-                          height: Math.max(12, (ov.h || 0.02) * pageH),
+                          width: Math.max(32, (ov.w || 0.08) * pageW),
+                          height: Math.max(16, (ov.h || 0.022) * pageH),
+                          zIndex: 12,
                         },
                       ]}>
                       <Text
@@ -351,18 +352,21 @@ const makeStyles = colors =>
     boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
     termOv: {
       position: 'absolute',
-      backgroundColor: 'transparent',
-      borderWidth: 0,
-      alignItems: 'flex-start',
+      backgroundColor: 'rgba(64, 156, 255, 0.88)',
+      borderWidth: 1,
+      borderColor: 'rgba(30, 110, 210, 0.95)',
+      borderRadius: 4,
+      alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 0,
+      paddingHorizontal: 3,
+      overflow: 'hidden',
     },
     termOvText: {
-      fontWeight: '500',
-      color: '#1A3A4A',
-      textShadowColor: 'rgba(255,255,255,0.92)',
-      textShadowOffset: {width: 0.6, height: 0.6},
-      textShadowRadius: 1.5,
+      fontWeight: '700',
+      color: '#FFFFFF',
+      textShadowColor: 'rgba(0,0,0,0.25)',
+      textShadowOffset: {width: 0, height: 0.5},
+      textShadowRadius: 1,
     },
     termCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 6},
     termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 6},
