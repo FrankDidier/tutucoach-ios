@@ -53,27 +53,21 @@ function pageFrameHeight(pageW, page, natural) {
   return pageW * 1.35;
 }
 
-function EditableDivider({divider, pageW, pageH, onChange}) {
-  const isVertical =
-    (divider.orientation || 'v') !== 'h' && (divider.x != null || divider.y == null);
-  const liveRef = useRef(isVertical ? Number(divider.x) || 0.5 : Number(divider.y) || 0.5);
+function EditableDivider({divider, pageW, pageH, onChange, onDelete}) {
+  const liveRef = useRef(Number(divider.x) || 0.5);
   const startRef = useRef(liveRef.current);
-  const vertRef = useRef(isVertical);
   const pageWRef = useRef(pageW);
-  const pageHRef = useRef(pageH);
-  const [live, setLive] = useState(liveRef.current);
+  const [liveX, setLiveX] = useState(liveRef.current);
 
   useEffect(() => {
-    vertRef.current = isVertical;
     pageWRef.current = pageW;
-    pageHRef.current = pageH;
-  }, [isVertical, pageW, pageH]);
+  }, [pageW]);
 
   useEffect(() => {
-    const next = isVertical ? Number(divider.x) || 0.5 : Number(divider.y) || 0.5;
+    const next = Number(divider.x) || 0.5;
     liveRef.current = next;
-    setLive(next);
-  }, [divider.x, divider.y, divider.id, isVertical]);
+    setLiveX(next);
+  }, [divider.x, divider.id]);
 
   const responder = useRef(
     PanResponder.create({
@@ -83,34 +77,92 @@ function EditableDivider({divider, pageW, pageH, onChange}) {
         startRef.current = liveRef.current;
       },
       onPanResponderMove: (_, g) => {
-        const next = vertRef.current
-          ? clamp(startRef.current + g.dx / Math.max(1, pageWRef.current), 0.03, 0.97)
-          : clamp(startRef.current + g.dy / Math.max(1, pageHRef.current), 0.03, 0.97);
+        const next = clamp(
+          startRef.current + g.dx / Math.max(1, pageWRef.current),
+          0.02,
+          0.98,
+        );
         liveRef.current = next;
-        setLive(next);
+        setLiveX(next);
       },
-      onPanResponderRelease: () => {
-        onChange(divider.id, liveRef.current, vertRef.current ? 'v' : 'h');
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dx) < 5 && Math.abs(g.dy) < 5) {
+          onDelete(divider.id);
+          return;
+        }
+        onChange(divider.id, liveRef.current);
       },
     }),
   ).current;
 
-  if (isVertical) {
-    return (
-      <View
-        {...responder.panHandlers}
-        style={[styles.dividerHitV, {left: live * pageW - 14, height: pageH}]}>
-        <View style={styles.dividerLineV} />
-        <Text style={styles.dividerLabelV}>左右拖到段尾</Text>
-      </View>
-    );
-  }
+  // 只跨它所在的那一行谱表，所以是「短竖线」
+  const y0 = divider.y0 != null ? Number(divider.y0) : 0.04;
+  const y1 = divider.y1 != null ? Number(divider.y1) : 0.96;
+  const top = Math.max(0, y0 * pageH);
+  const height = Math.max(24, (y1 - y0) * pageH);
+
   return (
     <View
       {...responder.panHandlers}
-      style={[styles.dividerHit, {top: live * pageH - 14, width: pageW}]}>
-      <View style={styles.dividerLine} />
-      <Text style={styles.dividerLabel}>上下拖到段落结尾</Text>
+      style={[styles.dividerHitV, {left: liveX * pageW - 15, top, height}]}>
+      <View style={styles.dividerLineV} />
+    </View>
+  );
+}
+
+function DrawLayer({pageIdx, pageW, pageH, onDraw}) {
+  const startRef = useRef({x: 0, y: 0});
+  const [ghost, setGhost] = useState(null);
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        const {locationX, locationY} = e.nativeEvent;
+        startRef.current = {x: locationX, y: locationY};
+        setGhost({x: locationX, y0: locationY, y1: locationY});
+      },
+      onPanResponderMove: (e, g) => {
+        const y = startRef.current.y + g.dy;
+        setGhost({
+          x: startRef.current.x,
+          y0: Math.min(startRef.current.y, y),
+          y1: Math.max(startRef.current.y, y),
+        });
+      },
+      onPanResponderRelease: (_, g) => {
+        const sx = startRef.current.x;
+        const sy = startRef.current.y;
+        const ey = sy + g.dy;
+        setGhost(null);
+        const y0 = Math.min(sy, ey);
+        const y1 = Math.max(sy, ey);
+        onDraw(pageIdx, {
+          x: clamp(sx / Math.max(1, pageW), 0.02, 0.98),
+          y0: clamp(y0 / Math.max(1, pageH), 0, 0.98),
+          y1: clamp(Math.max(y1, y0 + 28) / Math.max(1, pageH), 0.02, 1),
+        });
+      },
+    }),
+  ).current;
+
+  return (
+    <View
+      {...responder.panHandlers}
+      style={[styles.drawLayer, {width: pageW, height: pageH}]}>
+      {ghost ? (
+        <View
+          style={[
+            styles.dividerLineV,
+            {
+              position: 'absolute',
+              left: ghost.x - 1.5,
+              top: ghost.y0,
+              height: Math.max(24, ghost.y1 - ghost.y0),
+            },
+          ]}
+        />
+      ) : null}
     </View>
   );
 }
@@ -186,6 +238,13 @@ function EditableBox({box, pageW, pageH, onOpen, onChange}) {
   );
 }
 
+// 1.5.124 及更早存过横向分段线（只有 y），新版一律用竖线，旧数据直接丢掉。
+function normDividers(arr) {
+  return (Array.isArray(arr) ? arr : [])
+    .filter(d => d && d.x != null)
+    .map(d => ({...d, orientation: 'v'}));
+}
+
 export default function ScoreEditorScreen({navigation, route}) {
   const {colors} = useTheme();
   const ui = useMemo(() => makeStyles(colors), [colors]);
@@ -198,6 +257,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [terms, setTerms] = useState([]);
   const [termOverlays, setTermOverlays] = useState([]);
   const [dividers, setDividers] = useState([]);
+  const [drawMode, setDrawMode] = useState(false);
   const [naturalSizes, setNaturalSizes] = useState({});
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -216,7 +276,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       setManifest(m);
       setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
       setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
-      setDividers(Array.isArray(m?.dividers) ? m.dividers : []);
+      setDividers(normDividers(m?.dividers));
       setNaturalSizes({});
     } catch (e) {
       setManifest(null);
@@ -390,9 +450,9 @@ export default function ScoreEditorScreen({navigation, route}) {
         setManifest(prev => ({
           ...(prev || {}),
           annotations: Array.isArray(r.annotations) ? r.annotations : [],
-          dividers: Array.isArray(r.dividers) ? r.dividers : [],
+          dividers: normDividers(r.dividers),
         }));
-        setDividers(Array.isArray(r.dividers) ? r.dividers : []);
+        setDividers(normDividers(r.dividers));
         if (Array.isArray(r.term_translations)) {
           setTerms(r.term_translations);
         }
@@ -401,7 +461,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         }
         Alert.alert(
           '已生成分段线',
-          '请把橙色竖线（像小节线）左右拖到每个段落的结尾，再点「按分段线生成重点框」。',
+          '每行谱表上有一条橙色短竖线：左右拖到段落结尾，点一下可删除；也可用「手指划线」自己画。完成后点「按分段线生成重点框」。',
         );
       } else {
         Alert.alert('生成失败', 'AI 暂时没生成出分段线，请稍后再试。');
@@ -419,9 +479,10 @@ export default function ScoreEditorScreen({navigation, route}) {
       return;
     }
     if (!dividers.length) {
-      Alert.alert('提示', '请先点「AI 分段线」生成可拖动的线，或手动确认后再生成。');
+      Alert.alert('提示', '请先用「手指划线」在谱子上划几条竖线，或点「AI 分段线」。');
       return;
     }
+    setDrawMode(false);
     setBusy(true);
     try {
       const r = await boxesFromDividers(getDeviceId(), studentId, pieceName, dividers, lines);
@@ -431,7 +492,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           annotations: Array.isArray(r.annotations) ? r.annotations : [],
         }));
         if (Array.isArray(r.dividers)) {
-          setDividers(r.dividers);
+          setDividers(normDividers(r.dividers));
         }
         Alert.alert('已生成重点框', '可再拖动/点一下改文字，最后点「保存确认」。');
       } else {
@@ -444,24 +505,36 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
-  const changeDividerPos = (id, value, orientation = 'v') => {
-    setDividers(prev =>
-      prev.map(d =>
-        d.id === id
-          ? orientation === 'v'
-            ? {...d, x: value, orientation: 'v', y: undefined}
-            : {...d, y: value, orientation: 'h'}
-          : d,
-      ),
-    );
+  const changeDividerPos = (id, x) => {
+    setDividers(prev => prev.map(d => (d.id === id ? {...d, x, orientation: 'v'} : d)));
   };
 
-  const addDivider = pageIdx => {
-    setDividers(prev => [
-      ...prev,
-      {id: `d_${Date.now()}`, page: pageIdx, x: 0.5, orientation: 'v', label: '分段'},
+  const removeDivider = id => {
+    Alert.alert('删除这条分段线？', '点「删除」移除；想移动请直接左右拖动它。', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => setDividers(prev => prev.filter(d => d.id !== id)),
+      },
     ]);
   };
+
+  const addDividerAt = (pageIdx, geom) => {
+    setDividers(prev => [
+      ...prev,
+      {
+        id: `d_${Date.now()}_${Math.round(Math.random() * 999)}`,
+        page: pageIdx,
+        orientation: 'v',
+        label: '分段',
+        ...geom,
+      },
+    ]);
+  };
+
+  const addDivider = pageIdx =>
+    addDividerAt(pageIdx, {x: 0.5, y0: 0.08, y1: 0.24});
 
   const onRecognizeTerms = async () => {
     if (!manifest?.pages?.length) {
@@ -610,12 +683,12 @@ export default function ScoreEditorScreen({navigation, route}) {
     <SafeAreaView style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱上传与重点框" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={ui.scroll}>
+      <ScrollView contentContainerStyle={ui.scroll} scrollEnabled={!drawMode}>
         <View style={ui.card}>
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            拍照可连拍多页；相册一次多选。点「AI 分段线」→ 把橙色竖线左右拖到段落结尾（像小节线）→ 再点「按分段线生成重点框」。框可拖动缩放，点一下改文字。
+            拍照可连拍多页；相册一次多选。分段有两种方式：①「手指划线」打开后，在谱子上竖着划一小段就是一条分段线；②「AI 分段线」先自动给每行谱表一条，再左右拖。点一下线可删除。划好后点「按分段线生成重点框」。
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -644,11 +717,25 @@ export default function ScoreEditorScreen({navigation, route}) {
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
+            <TouchableOpacity
+              style={[ui.btn, drawMode ? ui.btnDanger : ui.btnGhost]}
+              onPress={() => setDrawMode(v => !v)}>
+              <Text style={drawMode ? ui.btnText : ui.btnGhostText}>
+                {drawMode ? '划线中·点此结束' : '手指划线'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
               <Text style={ui.btnGhostText}>AI 分段线</Text>
             </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
             <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
               <Text style={ui.btnText}>按分段线生成重点框</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[ui.btn, ui.btnGhost]}
+              onPress={() => setDividers([])}>
+              <Text style={ui.btnGhostText}>清空分段线</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
@@ -731,8 +818,17 @@ export default function ScoreEditorScreen({navigation, route}) {
                     pageW={pageW}
                     pageH={pageH}
                     onChange={changeDividerPos}
+                    onDelete={removeDivider}
                   />
                 ))}
+                {drawMode ? (
+                  <DrawLayer
+                    pageIdx={page.index}
+                    pageW={pageW}
+                    pageH={pageH}
+                    onDraw={addDividerAt}
+                  />
+                ) : null}
                 {pageTerms.map(ov => {
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
                   return (
@@ -914,31 +1010,24 @@ const styles = StyleSheet.create({
   },
   dividerHitV: {
     position: 'absolute',
-    top: 0,
-    width: 28,
+    width: 30,
     alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 20,
   },
   dividerLineV: {
     width: 3,
     flex: 1,
+    alignSelf: 'center',
     backgroundColor: '#FF7A2F',
     borderRadius: 2,
-    marginVertical: 4,
   },
-  dividerLabelV: {
+  drawLayer: {
     position: 'absolute',
-    top: 8,
-    left: 6,
-    width: 56,
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FF7A2F',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 3,
-    paddingVertical: 2,
-    borderRadius: 4,
-    transform: [{rotate: '-90deg'}],
+    left: 0,
+    top: 0,
+    zIndex: 30,
+    backgroundColor: 'rgba(255,122,47,0.06)',
   },
   termOv: {
     position: 'absolute',
