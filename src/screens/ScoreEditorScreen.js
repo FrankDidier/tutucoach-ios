@@ -12,6 +12,7 @@ import {
   TextInput,
   Modal,
   PanResponder,
+  Pressable,
   Alert,
   useWindowDimensions,
 } from 'react-native';
@@ -110,63 +111,6 @@ function EditableDivider({divider, pageW, pageH, onChange, onDelete}) {
   );
 }
 
-function DrawLayer({pageIdx, pageW, pageH, onDraw}) {
-  const startRef = useRef({x: 0, y: 0});
-  const [ghost, setGhost] = useState(null);
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        const {locationX, locationY} = e.nativeEvent;
-        startRef.current = {x: locationX, y: locationY};
-        setGhost({x: locationX, y0: locationY, y1: locationY});
-      },
-      onPanResponderMove: (e, g) => {
-        const y = startRef.current.y + g.dy;
-        setGhost({
-          x: startRef.current.x,
-          y0: Math.min(startRef.current.y, y),
-          y1: Math.max(startRef.current.y, y),
-        });
-      },
-      onPanResponderRelease: (_, g) => {
-        const sx = startRef.current.x;
-        const sy = startRef.current.y;
-        const ey = sy + g.dy;
-        setGhost(null);
-        const y0 = Math.min(sy, ey);
-        const y1 = Math.max(sy, ey);
-        onDraw(pageIdx, {
-          x: clamp(sx / Math.max(1, pageW), 0.02, 0.98),
-          y0: clamp(y0 / Math.max(1, pageH), 0, 0.98),
-          y1: clamp(Math.max(y1, y0 + 28) / Math.max(1, pageH), 0.02, 1),
-        });
-      },
-    }),
-  ).current;
-
-  return (
-    <View
-      {...responder.panHandlers}
-      style={[styles.drawLayer, {width: pageW, height: pageH}]}>
-      {ghost ? (
-        <View
-          style={[
-            styles.dividerLineV,
-            {
-              position: 'absolute',
-              left: ghost.x - 1.5,
-              top: ghost.y0,
-              height: Math.max(24, ghost.y1 - ghost.y0),
-            },
-          ]}
-        />
-      ) : null}
-    </View>
-  );
-}
-
 function EditableBox({box, pageW, pageH, onOpen, onChange}) {
   const liveRef = useRef({x: box.x || 0, y: box.y || 0, w: box.w || 0.84, h: box.h || 0.1});
   const startRef = useRef({...liveRef.current});
@@ -257,8 +201,8 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [terms, setTerms] = useState([]);
   const [termOverlays, setTermOverlays] = useState([]);
   const [dividers, setDividers] = useState([]);
-  const [drawMode, setDrawMode] = useState(false);
   const [naturalSizes, setNaturalSizes] = useState({});
+  const [pendingFiles, setPendingFiles] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [label, setLabel] = useState('');
@@ -309,6 +253,15 @@ export default function ScoreEditorScreen({navigation, route}) {
       Alert.alert('上传失败', '未能读取文件，请重试。');
       return;
     }
+    // 多页相册：先预览顺序（第1/2/3页），可上移下移再确认上传
+    if (files.length > 1) {
+      setPendingFiles({files, forceReplace});
+      return;
+    }
+    await uploadFileList(files, forceReplace);
+  };
+
+  const uploadFileList = async (files, forceReplace = false) => {
     setBusy(true);
     try {
       const hadPages = !forceReplace && !!(manifest?.pages?.length);
@@ -337,6 +290,19 @@ export default function ScoreEditorScreen({navigation, route}) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const movePending = (idx, dir) => {
+    setPendingFiles(prev => {
+      if (!prev) return prev;
+      const next = [...prev.files];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return prev;
+      const tmp = next[idx];
+      next[idx] = next[j];
+      next[j] = tmp;
+      return {...prev, files: next};
+    });
   };
 
   const clearAllScores = () => {
@@ -461,7 +427,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         }
         Alert.alert(
           '已生成分段线',
-          '每行谱表上有一条橙色短竖线：左右拖到段落结尾，点一下可删除；也可用「手指划线」自己画。完成后点「按分段线生成重点框」。',
+          '每行谱表中间有一条橙色短竖线：左右拖到段落结尾；也可直接点谱面任意位置加线。点一下线可删除。完成后点「按分段线生成重点框」。',
         );
       } else {
         Alert.alert('生成失败', 'AI 暂时没生成出分段线，请稍后再试。');
@@ -479,10 +445,9 @@ export default function ScoreEditorScreen({navigation, route}) {
       return;
     }
     if (!dividers.length) {
-      Alert.alert('提示', '请先用「手指划线」在谱子上划几条竖线，或点「AI 分段线」。');
+      Alert.alert('提示', '请先点谱面加分段线（或点「AI 分段线」），再生成重点框。');
       return;
     }
-    setDrawMode(false);
     setBusy(true);
     try {
       const r = await boxesFromDividers(getDeviceId(), studentId, pieceName, dividers, lines);
@@ -533,8 +498,22 @@ export default function ScoreEditorScreen({navigation, route}) {
     ]);
   };
 
+  const placeDividerAtTap = (pageIdx, pageH, evt) => {
+    const {locationX, locationY} = evt.nativeEvent || {};
+    if (!(locationX >= 0) || !(locationY >= 0) || !pageH) return;
+    const x = clamp(locationX / Math.max(1, pageW), 0.03, 0.97);
+    const y = clamp(locationY / Math.max(1, pageH), 0.03, 0.97);
+    // 点哪里就在哪里放一条短竖线（约覆盖该处上下 4% 页高），可再左右拖
+    const half = 0.035;
+    addDividerAt(pageIdx, {
+      x,
+      y0: clamp(y - half, 0.01, 0.95),
+      y1: clamp(y + half, 0.05, 0.99),
+    });
+  };
+
   const addDivider = pageIdx =>
-    addDividerAt(pageIdx, {x: 0.5, y0: 0.08, y1: 0.24});
+    addDividerAt(pageIdx, {x: 0.5, y0: 0.08, y1: 0.18});
 
   const onRecognizeTerms = async () => {
     if (!manifest?.pages?.length) {
@@ -683,12 +662,12 @@ export default function ScoreEditorScreen({navigation, route}) {
     <SafeAreaView style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱上传与重点框" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={ui.scroll} scrollEnabled={!drawMode}>
+      <ScrollView contentContainerStyle={ui.scroll}>
         <View style={ui.card}>
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            拍照可连拍多页；相册一次多选。分段有两种方式：①「手指划线」打开后，在谱子上竖着划一小段就是一条分段线；②「AI 分段线」先自动给每行谱表一条，再左右拖。点一下线可删除。划好后点「按分段线生成重点框」。
+            拍照可连拍多页；相册多选后会先显示页序（可调整）。直接点谱面即可加一条短竖线，左右拖到段落结尾；也可用「AI 分段线」。点一下线可删除。划好后点「按分段线生成重点框」——线左边到上一线/行首就是一个重点框。
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -717,26 +696,20 @@ export default function ScoreEditorScreen({navigation, route}) {
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
-            <TouchableOpacity
-              style={[ui.btn, drawMode ? ui.btnDanger : ui.btnGhost]}
-              onPress={() => setDrawMode(v => !v)}>
-              <Text style={drawMode ? ui.btnText : ui.btnGhostText}>
-                {drawMode ? '划线中·点此结束' : '手指划线'}
-              </Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
               <Text style={ui.btnGhostText}>AI 分段线</Text>
             </TouchableOpacity>
-          </View>
-          <View style={ui.row}>
             <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
               <Text style={ui.btnText}>按分段线生成重点框</Text>
             </TouchableOpacity>
+          </View>
+          <View style={ui.row}>
             <TouchableOpacity
               style={[ui.btn, ui.btnGhost]}
               onPress={() => setDividers([])}>
               <Text style={ui.btnGhostText}>清空分段线</Text>
             </TouchableOpacity>
+            <View style={{flex: 1}} />
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={ui.btn} onPress={() => saveAll(false)}>
@@ -786,21 +759,23 @@ export default function ScoreEditorScreen({navigation, route}) {
                 </View>
               </View>
               <View style={{width: pageW, height: pageH}}>
-                <Image
-                  source={{uri: `https://tutujiaolian.com${page.url}`}}
-                  style={{width: pageW, height: pageH, borderRadius: 12}}
-                  resizeMode="contain"
-                  onLoad={e => {
-                    const src = e?.nativeEvent?.source || {};
-                    const w = Number(src.width) || 0;
-                    const h = Number(src.height) || 0;
-                    if (w > 0 && h > 0) {
-                      setNaturalSizes(prev =>
-                        prev[key]?.w === w && prev[key]?.h === h ? prev : {...prev, [key]: {w, h}},
-                      );
-                    }
-                  }}
-                />
+                <Pressable onPress={e => placeDividerAtTap(page.index, pageH, e)}>
+                  <Image
+                    source={{uri: `https://tutujiaolian.com${page.url}`}}
+                    style={{width: pageW, height: pageH, borderRadius: 12}}
+                    resizeMode="contain"
+                    onLoad={e => {
+                      const src = e?.nativeEvent?.source || {};
+                      const w = Number(src.width) || 0;
+                      const h = Number(src.height) || 0;
+                      if (w > 0 && h > 0) {
+                        setNaturalSizes(prev =>
+                          prev[key]?.w === w && prev[key]?.h === h ? prev : {...prev, [key]: {w, h}},
+                        );
+                      }
+                    }}
+                  />
+                </Pressable>
                 {boxes.map(box => (
                   <EditableBox
                     key={box.id}
@@ -821,16 +796,10 @@ export default function ScoreEditorScreen({navigation, route}) {
                     onDelete={removeDivider}
                   />
                 ))}
-                {drawMode ? (
-                  <DrawLayer
-                    pageIdx={page.index}
-                    pageW={pageW}
-                    pageH={pageH}
-                    onDraw={addDividerAt}
-                  />
-                ) : null}
                 {pageTerms.map(ov => {
+                  const label = String(ov.short || ov.translation || ov.term || '');
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
+                  const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
                   return (
                     <View
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
@@ -840,16 +809,18 @@ export default function ScoreEditorScreen({navigation, route}) {
                         {
                           left: (ov.x || 0) * pageW,
                           top: (ov.y || 0) * pageH,
-                          width: Math.max(32, (ov.w || 0.08) * pageW),
-                          height: Math.max(16, (ov.h || 0.022) * pageH),
+                          width: Math.max(minW, (ov.w || 0.1) * pageW),
+                          height: Math.max(18, (ov.h || 0.022) * pageH),
                           zIndex: 12,
                         },
                       ]}>
                       <Text
                         style={[styles.termOvText, {fontSize}]}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.75}
                         allowFontScaling={false}>
-                        {ov.short || ov.translation || ov.term}
+                        {label}
                       </Text>
                     </View>
                   );
@@ -960,6 +931,62 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={!!pendingFiles}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingFiles(null)}>
+        <View style={ui.modalMask}>
+          <View style={[ui.modalCard, {maxHeight: '80%'}]}>
+            <Text style={ui.section}>确认乐谱页序</Text>
+            <Text style={ui.help}>按第 1、2、3… 页顺序上传。点「上移/下移」调整。</Text>
+            <ScrollView style={{maxHeight: 360}}>
+              {(pendingFiles?.files || []).map((f, idx) => (
+                <View key={`${f.uri || idx}_${idx}`} style={styles.orderRow}>
+                  <Text style={styles.orderBadge}>{idx + 1}</Text>
+                  <Image
+                    source={{uri: f.uri}}
+                    style={styles.orderThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={{flex: 1}}>
+                    <Text style={ui.sub} numberOfLines={1}>
+                      第 {idx + 1} 页
+                    </Text>
+                    <View style={{flexDirection: 'row', gap: 10, marginTop: 6}}>
+                      <TouchableOpacity onPress={() => movePending(idx, -1)}>
+                        <Text style={ui.pageAction}>上移</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => movePending(idx, 1)}>
+                        <Text style={ui.pageAction}>下移</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={ui.row}>
+              <TouchableOpacity
+                style={[ui.btn, ui.btnGhost]}
+                onPress={() => setPendingFiles(null)}>
+                <Text style={ui.btnGhostText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={ui.btn}
+                onPress={async () => {
+                  const pack = pendingFiles;
+                  setPendingFiles(null);
+                  if (pack?.files?.length) {
+                    await uploadFileList(pack.files, !!pack.forceReplace);
+                  }
+                }}>
+                <Text style={ui.btnText}>按此顺序上传</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1022,12 +1049,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF7A2F',
     borderRadius: 2,
   },
-  drawLayer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    zIndex: 30,
-    backgroundColor: 'rgba(255,122,47,0.06)',
+  orderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  orderBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#7B61FF',
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 28,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  orderThumb: {
+    width: 56,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: '#222',
   },
   termOv: {
     position: 'absolute',

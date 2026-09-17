@@ -10,6 +10,7 @@ import {
   Alert,
   StatusBar,
   Dimensions,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {useFocusEffect} from '@react-navigation/native';
@@ -89,6 +90,15 @@ const SubscriptionScreen = ({navigation}) => {
   const onPurchase = async () => {
     if (!agreed) {
       Alert.alert('提示', '请先阅读并同意《会员购买协议》');
+      return;
+    }
+    // App Store 2.1：iOS 数字会员必须走 Apple IAP，不能再用微信支付下单。
+    if (Platform.OS === 'ios') {
+      Alert.alert(
+        '开通会员',
+        'iOS 会员通过 App Store 内购开通。审核账号可用设备登录正常体验全部功能；正式内购上线后可在此页购买。',
+        [{text: '好的'}],
+      );
       return;
     }
     try {

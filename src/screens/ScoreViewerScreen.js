@@ -266,7 +266,9 @@ export default function ScoreViewerScreen({navigation, route}) {
                   </View>
                 ))}
                 {pageTerms.map(ov => {
+                  const label = String(ov.short || ov.translation || ov.term || '');
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
+                  const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
                   return (
                     <View
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
@@ -276,16 +278,18 @@ export default function ScoreViewerScreen({navigation, route}) {
                         {
                           left: (ov.x || 0) * pageW,
                           top: (ov.y || 0) * pageH,
-                          width: Math.max(32, (ov.w || 0.08) * pageW),
-                          height: Math.max(16, (ov.h || 0.022) * pageH),
+                          width: Math.max(minW, (ov.w || 0.1) * pageW),
+                          height: Math.max(18, (ov.h || 0.022) * pageH),
                           zIndex: 12,
                         },
                       ]}>
                       <Text
                         style={[ui.termOvText, {fontSize}]}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.75}
                         allowFontScaling={false}>
-                        {ov.short || ov.translation || ov.term}
+                        {label}
                       </Text>
                     </View>
                   );

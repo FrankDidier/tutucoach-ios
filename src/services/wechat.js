@@ -34,9 +34,40 @@ export async function registerWeChat() {
 /** 登录：唤起授权 → 拿 code → 交后端换 OpenID。返回后端账号结果。 */
 export async function loginWithWeChat(deviceId) {
   if (!RNWeChat) {
-    return {ok: false, error: 'wechat_bridge_missing', message: '微信原生模块未集成'};
+    return {
+      ok: false,
+      error: 'wechat_bridge_missing',
+      message: '本机可直接使用设备账号；微信登录模块未就绪',
+    };
   }
-  const {code} = await RNWeChat.sendAuthReq('snsapi_userinfo', 'tutu_login');
+  try {
+    if (typeof RNWeChat.isWXAppInstalled === 'function') {
+      const installed = await RNWeChat.isWXAppInstalled();
+      if (!installed) {
+        // Guideline 4.2.3：不能强制用户安装微信才能登录
+        return {
+          ok: false,
+          error: 'no_wechat',
+          message: '未安装微信也可继续使用本机账号；安装微信后可再绑定同步',
+        };
+      }
+    }
+  } catch (e) {}
+  let code = '';
+  try {
+    const r = await RNWeChat.sendAuthReq('snsapi_userinfo', 'tutu_login');
+    code = r && r.code;
+  } catch (e) {
+    const msg = String(e?.message || e || '');
+    if (msg.includes('no_wechat') || msg.includes('未安装微信')) {
+      return {
+        ok: false,
+        error: 'no_wechat',
+        message: '未安装微信也可继续使用本机账号；安装微信后可再绑定同步',
+      };
+    }
+    return {ok: false, error: 'auth_failed', message: '微信授权失败，请重试'};
+  }
   if (!code) return {ok: false, error: 'auth_cancelled', message: '已取消授权'};
   const prefer =
     (await getPreviousUserId()) ||
