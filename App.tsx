@@ -153,6 +153,14 @@ function AppInner(): React.JSX.Element {
         ].includes(boot)
       ) {
         setInitialRoute(boot);
+      } else if (boot === 'ScoreEditorPreview') {
+        setBootParams({
+          preview: true,
+          studentId: 'preview',
+          studentName: '预览',
+          pieceName: '预览曲',
+        });
+        setInitialRoute('ScoreEditor');
       } else if (tabNames.includes(boot)) {
         setBootParams({screen: boot});
         setInitialRoute('MainTabs');
@@ -209,7 +217,11 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
-        <Stack.Screen name="ScoreEditor" component={ScoreEditorScreen} />
+        <Stack.Screen
+          name="ScoreEditor"
+          component={ScoreEditorScreen}
+          initialParams={initialRoute === 'ScoreEditor' ? bootParams : undefined}
+        />
         <Stack.Screen name="ScoreViewer" component={ScoreViewerScreen} />
       </Stack.Navigator>
     </NavigationContainer>

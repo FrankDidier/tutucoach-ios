@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  PanResponder,
   Pressable,
   Alert,
   useWindowDimensions,
@@ -54,131 +53,61 @@ function pageFrameHeight(pageW, page, natural) {
   return pageW * 1.35;
 }
 
-function EditableDivider({divider, pageW, pageH, onChange, onDelete}) {
-  const liveRef = useRef(Number(divider.x) || 0.5);
-  const startRef = useRef(liveRef.current);
-  const pageWRef = useRef(pageW);
-  const [liveX, setLiveX] = useState(liveRef.current);
-
-  useEffect(() => {
-    pageWRef.current = pageW;
-  }, [pageW]);
-
-  useEffect(() => {
-    const next = Number(divider.x) || 0.5;
-    liveRef.current = next;
-    setLiveX(next);
-  }, [divider.x, divider.id]);
-
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        startRef.current = liveRef.current;
-      },
-      onPanResponderMove: (_, g) => {
-        const next = clamp(
-          startRef.current + g.dx / Math.max(1, pageWRef.current),
-          0.02,
-          0.98,
-        );
-        liveRef.current = next;
-        setLiveX(next);
-      },
-      onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dx) < 5 && Math.abs(g.dy) < 5) {
-          onDelete(divider.id);
-          return;
-        }
-        onChange(divider.id, liveRef.current);
-      },
-    }),
-  ).current;
-
-  // 只跨它所在的那一行谱表，所以是「短竖线」
-  const y0 = divider.y0 != null ? Number(divider.y0) : 0.04;
-  const y1 = divider.y1 != null ? Number(divider.y1) : 0.96;
-  const top = Math.max(0, y0 * pageH);
-  const height = Math.max(24, (y1 - y0) * pageH);
-
+function TapOnly({onPress, style, children}) {
+  // 点一下才响应；手指一动就把事件还给滚动，线和框不会跟着跑，也能下拉。
+  const start = useRef({x: 0, y: 0});
   return (
     <View
-      {...responder.panHandlers}
-      style={[styles.dividerHitV, {left: liveX * pageW - 15, top, height}]}>
-      <View style={styles.dividerLineV} />
+      style={style}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => false}
+      onResponderTerminationRequest={() => true}
+      onResponderGrant={e => {
+        start.current = {x: e.nativeEvent.pageX, y: e.nativeEvent.pageY};
+      }}
+      onResponderRelease={e => {
+        const dx = e.nativeEvent.pageX - start.current.x;
+        const dy = e.nativeEvent.pageY - start.current.y;
+        if (Math.hypot(dx, dy) < 12) onPress(e);
+      }}>
+      {children}
     </View>
   );
 }
 
-function EditableBox({box, pageW, pageH, onOpen, onChange}) {
-  const liveRef = useRef({x: box.x || 0, y: box.y || 0, w: box.w || 0.84, h: box.h || 0.1});
-  const startRef = useRef({...liveRef.current});
-  const modeRef = useRef('move');
-  const [live, setLive] = useState(liveRef.current);
-
-  useEffect(() => {
-    const next = {x: box.x || 0, y: box.y || 0, w: box.w || 0.84, h: box.h || 0.1};
-    liveRef.current = next;
-    setLive(next);
-  }, [box.x, box.y, box.w, box.h, box.id]);
-
-  const responder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: evt => {
-        startRef.current = {...liveRef.current};
-        const {locationX, locationY} = evt.nativeEvent;
-        const w = (liveRef.current.w || 0.84) * pageW;
-        const h = (liveRef.current.h || 0.1) * pageH;
-        modeRef.current = locationX > w - 28 && locationY > h - 28 ? 'resize' : 'move';
-      },
-      onPanResponderMove: (_, g) => {
-        let next;
-        if (modeRef.current === 'resize') {
-          next = {
-            ...startRef.current,
-            w: clamp(startRef.current.w + g.dx / pageW, 0.12, 0.95),
-            h: clamp(startRef.current.h + g.dy / pageH, 0.06, 0.5),
-          };
-        } else {
-          next = {
-            ...startRef.current,
-            x: clamp(startRef.current.x + g.dx / pageW, 0, 0.92),
-            y: clamp(startRef.current.y + g.dy / pageH, 0, 0.92),
-          };
-        }
-        liveRef.current = next;
-        setLive(next);
-      },
-      onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dx) < 6 && Math.abs(g.dy) < 6) {
-          onOpen(box);
-          return;
-        }
-        onChange(box.id, liveRef.current);
-      },
-    }),
-  ).current;
+function SimpleDivider({divider, pageW, pageH, onDelete}) {
+  const y0 = divider.y0 != null ? Number(divider.y0) : 0.04;
+  const y1 = divider.y1 != null ? Number(divider.y1) : 0.96;
+  const top = Math.max(0, y0 * pageH);
+  const height = Math.max(28, (y1 - y0) * pageH);
+  const left = (Number(divider.x) || 0.5) * pageW - 12;
 
   return (
-    <View
-      {...responder.panHandlers}
+    <TapOnly
+      onPress={() => onDelete(divider.id)}
+      style={[styles.dividerHitV, {left, top, height, width: 24}]}>
+      <View style={styles.dividerLineV} />
+    </TapOnly>
+  );
+}
+
+function SimpleBox({box, pageW, pageH, onOpen}) {
+  return (
+    <TapOnly
+      onPress={() => onOpen(box)}
       style={[
         styles.box,
         {
-          left: (live.x || 0) * pageW,
-          top: (live.y || 0) * pageH,
-          width: clamp(live.w || 0.5, 0.12, 0.95) * pageW,
-          height: clamp(live.h || 0.1, 0.06, 0.5) * pageH,
+          left: (box.x || 0) * pageW,
+          top: (box.y || 0) * pageH,
+          width: clamp(box.w || 0.5, 0.12, 0.95) * pageW,
+          height: clamp(box.h || 0.1, 0.06, 0.55) * pageH,
         },
       ]}>
       <Text style={styles.boxLabel} numberOfLines={2}>
         {box.label || '重点'}
       </Text>
-      <View style={styles.handle} />
-    </View>
+    </TapOnly>
   );
 }
 
@@ -213,6 +142,19 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [termValue, setTermValue] = useState('');
 
   const load = async () => {
+    if (route?.params?.preview) {
+      setManifest({
+        pages: [{index: 0, name: 'preview', url: '', width: 800, height: 1400}],
+        annotations: [
+          {id: 'preview_box', page: 0, x: 0.06, y: 0.22, w: 0.7, h: 0.28, label: '预览重点框'},
+        ],
+      });
+      setTerms([]);
+      setTermOverlays([]);
+      setDividers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const r = await fetchScore(studentId, pieceName, getDeviceId(), 'teacher');
@@ -411,14 +353,9 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
     setBusy(true);
     try {
+      // 「AI 分段线」只刷新术语识别，不再自动撒线（老师点哪里加哪里）
       const r = await suggestScore(getDeviceId(), studentId, pieceName, lines);
       if (r?.ok) {
-        setManifest(prev => ({
-          ...(prev || {}),
-          annotations: Array.isArray(r.annotations) ? r.annotations : [],
-          dividers: normDividers(r.dividers),
-        }));
-        setDividers(normDividers(r.dividers));
         if (Array.isArray(r.term_translations)) {
           setTerms(r.term_translations);
         }
@@ -426,11 +363,11 @@ export default function ScoreEditorScreen({navigation, route}) {
           setTermOverlays(r.term_overlays);
         }
         Alert.alert(
-          '已生成分段线',
-          '每行谱表中间有一条橙色短竖线：左右拖到段落结尾；也可直接点谱面任意位置加线。点一下线可删除。完成后点「按分段线生成重点框」。',
+          '术语已刷新',
+          '请直接点谱面加「段尾」竖线（点线可删除）。加好后点「按分段线生成重点框」。',
         );
       } else {
-        Alert.alert('生成失败', 'AI 暂时没生成出分段线，请稍后再试。');
+        Alert.alert('生成失败', '请稍后再试，或直接点谱面加分段线。');
       }
     } catch (e) {
       Alert.alert('生成失败', '网络异常，请稍后重试。');
@@ -445,7 +382,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       return;
     }
     if (!dividers.length) {
-      Alert.alert('提示', '请先点谱面加分段线（或点「AI 分段线」），再生成重点框。');
+      Alert.alert('提示', '请先点谱面加分段线，再生成重点框。');
       return;
     }
     setBusy(true);
@@ -459,7 +396,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         if (Array.isArray(r.dividers)) {
           setDividers(normDividers(r.dividers));
         }
-        Alert.alert('已生成重点框', '可再拖动/点一下改文字，最后点「保存确认」。');
+        Alert.alert('已生成重点框', '每条分段线往前一个大框。点框可改文字，最后点「保存确认」。');
       } else {
         Alert.alert('生成失败', '请稍后重试。');
       }
@@ -470,12 +407,8 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
-  const changeDividerPos = (id, x) => {
-    setDividers(prev => prev.map(d => (d.id === id ? {...d, x, orientation: 'v'} : d)));
-  };
-
   const removeDivider = id => {
-    Alert.alert('删除这条分段线？', '点「删除」移除；想移动请直接左右拖动它。', [
+    Alert.alert('删除这条分段线？', '点「删除」移除；想换位置请删掉后重新点谱面。', [
       {text: '取消', style: 'cancel'},
       {
         text: '删除',
@@ -492,28 +425,30 @@ export default function ScoreEditorScreen({navigation, route}) {
         id: `d_${Date.now()}_${Math.round(Math.random() * 999)}`,
         page: pageIdx,
         orientation: 'v',
-        label: '分段',
+        label: '段尾',
         ...geom,
       },
     ]);
   };
 
   const placeDividerAtTap = (pageIdx, pageH, evt) => {
-    const {locationX, locationY} = evt.nativeEvent || {};
+    const ne = evt?.nativeEvent || {};
+    const locationX = ne.locationX;
+    const locationY = ne.locationY;
     if (!(locationX >= 0) || !(locationY >= 0) || !pageH) return;
     const x = clamp(locationX / Math.max(1, pageW), 0.03, 0.97);
     const y = clamp(locationY / Math.max(1, pageH), 0.03, 0.97);
-    // 点哪里就在哪里放一条短竖线（约覆盖该处上下 4% 页高），可再左右拖
-    const half = 0.035;
+    // 分段线 = 前一段的终点。点哪里就立一条短竖线，不满意删了重点。
+    const half = 0.045;
     addDividerAt(pageIdx, {
       x,
-      y0: clamp(y - half, 0.01, 0.95),
-      y1: clamp(y + half, 0.05, 0.99),
+      y0: clamp(y - half, 0.01, 0.94),
+      y1: clamp(y + half, 0.06, 0.99),
     });
   };
 
   const addDivider = pageIdx =>
-    addDividerAt(pageIdx, {x: 0.5, y0: 0.08, y1: 0.18});
+    addDividerAt(pageIdx, {x: 0.5, y0: 0.1, y1: 0.2});
 
   const onRecognizeTerms = async () => {
     if (!manifest?.pages?.length) {
@@ -555,13 +490,6 @@ export default function ScoreEditorScreen({navigation, route}) {
       const annotations = (prev?.annotations || []).map(b => (b.id === next.id ? next : b));
       return {...(prev || {}), annotations};
     });
-  };
-
-  const changeBoxGeom = (id, geom) => {
-    setManifest(prev => ({
-      ...(prev || {}),
-      annotations: (prev?.annotations || []).map(b => (b.id === id ? {...b, ...geom} : b)),
-    }));
   };
 
   const addBox = pageIdx => {
@@ -667,7 +595,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            拍照可连拍多页；相册多选后会先显示页序（可调整）。直接点谱面即可加一条短竖线，左右拖到段落结尾；也可用「AI 分段线」。点一下线可删除。划好后点「按分段线生成重点框」——线左边到上一线/行首就是一个重点框。
+            操作很简单：①点谱面某处 = 加一条「段尾」竖线；不满意就点线删除再重点。②点「按分段线生成重点框」= 每条线往前自动生成一个大框。③点框可改文字。相册多选会先显示页序。
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -697,7 +625,7 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
-              <Text style={ui.btnGhostText}>AI 分段线</Text>
+              <Text style={ui.btnGhostText}>刷新术语</Text>
             </TouchableOpacity>
             <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
               <Text style={ui.btnText}>按分段线生成重点框</Text>
@@ -759,7 +687,10 @@ export default function ScoreEditorScreen({navigation, route}) {
                 </View>
               </View>
               <View style={{width: pageW, height: pageH}}>
-                <Pressable onPress={e => placeDividerAtTap(page.index, pageH, e)}>
+                <TapOnly
+                  onPress={e => placeDividerAtTap(page.index, pageH, e)}
+                  style={{width: pageW, height: pageH}}>
+                  {page.url ? (
                   <Image
                     source={{uri: `https://tutujiaolian.com${page.url}`}}
                     style={{width: pageW, height: pageH, borderRadius: 12}}
@@ -775,24 +706,25 @@ export default function ScoreEditorScreen({navigation, route}) {
                       }
                     }}
                   />
-                </Pressable>
+                  ) : (
+                    <View style={{width: pageW, height: pageH, borderRadius: 12, backgroundColor: '#F4EFE6'}} />
+                  )}
+                </TapOnly>
                 {boxes.map(box => (
-                  <EditableBox
+                  <SimpleBox
                     key={box.id}
                     box={box}
                     pageW={pageW}
                     pageH={pageH}
                     onOpen={openEdit}
-                    onChange={changeBoxGeom}
                   />
                 ))}
                 {pageDivs.map(d => (
-                  <EditableDivider
+                  <SimpleDivider
                     key={d.id}
                     divider={d}
                     pageW={pageW}
                     pageH={pageH}
-                    onChange={changeDividerPos}
                     onDelete={removeDivider}
                   />
                 ))}
