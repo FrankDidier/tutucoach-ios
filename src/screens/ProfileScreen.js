@@ -81,14 +81,27 @@ const ProfileScreen = ({navigation}) => {
   );
 
   const onChangeAvatar = async () => {
-    const r = await pickFromGallery();
-    if (r.uri) {
-      setAvatar(r.uri);
-      await setAvatarUri(r.uri);
+    // 存 data URI：App 更新后沙盒目录会换名字，存 file:// 路径的话头像就丢了
+    const r = await pickFromGallery({
+      base64: true,
+      maxWidth: 256,
+      maxHeight: 256,
+      quality: 0.8,
+    });
+    const keep = r.dataUri || r.uri;
+    if (keep) {
+      setAvatar(keep);
+      await setAvatarUri(keep);
       Alert.alert('头像已更新');
     } else if (r.error === 'no_module') {
       Alert.alert('提示', '图片选择模块未集成（需重新编译）');
     }
+  };
+
+  // 老版本存的是 file:// 路径，更新后指向的目录已经不在了：显示失败就回到默认头像
+  const onAvatarBroken = () => {
+    setAvatar(null);
+    setAvatarUri('');
   };
 
   const onEditName = () => {
@@ -193,6 +206,7 @@ const ProfileScreen = ({navigation}) => {
           <TouchableOpacity activeOpacity={0.85} onPress={onChangeAvatar}>
             <Image
               source={avatarUri ? {uri: avatarUri} : Images.pfAvatar}
+              onError={avatarUri ? onAvatarBroken : undefined}
               style={styles.avatar}
               resizeMode="cover"
             />

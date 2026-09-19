@@ -26,11 +26,18 @@ const S = SCREEN_W / 375;
 const px = n => Math.round(n * S);
 
 // 默认展示价（服务端拉取失败时回退）；真实扣款仍以服务端为准。
+// 名称统一写成「连续包X」：这是自动续期订阅，审核要求页面上写清楚。
 const DEFAULT_PLANS = [
-  {id: 'yearly', name: '年卡', price: '888', original: '¥1188.00'},
-  {id: 'quarterly', name: '季卡', price: '228', original: '¥299.00'},
-  {id: 'monthly', name: '月卡', price: '88', original: '¥128.00'},
+  {id: 'yearly', name: '连续包年', price: '888', original: '¥1188.00'},
+  {id: 'quarterly', name: '连续包季', price: '228', original: '¥299.00'},
+  {id: 'monthly', name: '连续包月', price: '88', original: '¥128.00'},
 ];
+
+const PLAN_CN = {
+  yearly: {name: '连续包年', unit: '年', cycle: '每年'},
+  quarterly: {name: '连续包季', unit: '季', cycle: '每 3 个月'},
+  monthly: {name: '连续包月', unit: '月', cycle: '每月'},
+};
 
 function parsePlansFromApi(j) {
   if (!j || !j.ok || !Array.isArray(j.plans) || !j.plans.length) return null;
@@ -43,7 +50,7 @@ function parsePlansFromApi(j) {
     if (p.id === 'yearly') original = `¥${Math.round(mAmt * 12)}.00`;
     else if (p.id === 'quarterly') original = `¥${Math.round(mAmt * 3)}.00`;
     else original = `¥${Math.round(mAmt * 1.2)}.00`;
-    return {id: p.id, name: p.name || p.id, price, original};
+    return {id: p.id, name: PLAN_CN[p.id]?.name || p.name || p.id, price, original};
   });
 }
 
@@ -118,6 +125,10 @@ const SubscriptionScreen = ({navigation}) => {
   };
 
   const isVip = vip && vip.is_vip;
+  const curPlan = plans.find(p => p.id === selected) || plans[0] || {};
+  const curCycle = (PLAN_CN[selected] || {}).cycle || '每月';
+  const curPrice = curPlan.price || '';
+  const curName = (PLAN_CN[selected] || {}).name || curPlan.name || '会员';
 
   return (
     <View style={styles.root}>
@@ -184,25 +195,50 @@ const SubscriptionScreen = ({navigation}) => {
           </View>
         </View>
 
-        <Text style={[styles.sectionTitle, styles.plansTitle]}>选择套餐</Text>
+        <Text style={[styles.sectionTitle, styles.plansTitle]}>
+          选择套餐（连续订阅 · 自动续费）
+        </Text>
         <View style={styles.plansRow}>
           {plans.map(plan => {
             const on = selected === plan.id;
+            const cn = PLAN_CN[plan.id] || {};
             return (
               <TouchableOpacity
                 key={plan.id}
                 style={[styles.planCard, on && styles.planCardSelected]}
                 activeOpacity={0.88}
                 onPress={() => setSelected(plan.id)}>
-                <Text style={styles.planName}>{plan.name}</Text>
+                <Text style={styles.planName}>{cn.name || plan.name}</Text>
                 <Text style={styles.originalPrice}>{plan.original}</Text>
                 <View style={styles.priceRow}>
                   <Text style={[styles.priceCurrency, on && styles.priceOn]}>¥</Text>
                   <Text style={[styles.priceValue, on && styles.priceOn]}>{plan.price}</Text>
                 </View>
+                <Text style={styles.planCycle}>
+                  {cn.cycle ? `${cn.cycle}自动续费` : '自动续费'}
+                </Text>
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        {/* 审核要求：订阅页必须写清楚这是自动续期订阅、续费价格与取消方式 */}
+        <View style={styles.renewCard}>
+          <Text style={styles.renewTitle}>连续订阅说明</Text>
+          <Text style={styles.renewText}>
+            · 本会员为<Text style={styles.renewStrong}>连续订阅（自动续费）</Text>
+            ，不是一次性购买。{'\n'}
+            · 订阅后按所选周期（{curCycle}）自动续费 ¥{curPrice}，
+            {Platform.OS === 'ios' ? '由 Apple ID 账户扣款。' : '由所选支付方式扣款。'}
+            {'\n'}
+            · 在当前订阅期结束前 24 小时内自动续订；
+            如需取消，请在到期前 24 小时以上
+            {Platform.OS === 'ios'
+              ? '于「设置 → Apple ID → 订阅」中关闭自动续订。'
+              : '在「我的 → 会员订阅」中关闭自动续订。'}
+            {'\n'}
+            · 取消后本订阅期内权益仍可继续使用，到期不再扣费。
+          </Text>
         </View>
 
         <TouchableOpacity style={styles.agreementRow} activeOpacity={0.85} onPress={() => setAgreed(a => !a)}>
@@ -210,7 +246,19 @@ const SubscriptionScreen = ({navigation}) => {
             {agreed ? <Text style={styles.checkboxMark}>✓</Text> : null}
           </View>
           <Text style={styles.agreementText}>
-            已阅读并同意<Text style={styles.agreementLink}>《会员购买协议》</Text>
+            已阅读并同意
+            <Text
+              style={styles.agreementLink}
+              onPress={() => navigation?.navigate?.('Legal')}>
+              《会员购买协议》
+            </Text>
+            与
+            <Text
+              style={styles.agreementLink}
+              onPress={() => navigation?.navigate?.('Legal')}>
+              《隐私政策》
+            </Text>
+            ，并知悉本订阅为连续订阅、到期自动续费
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -225,7 +273,9 @@ const SubscriptionScreen = ({navigation}) => {
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          <Text style={styles.purchaseBtnText}>立即开通</Text>
+          <Text style={styles.purchaseBtnText}>
+            {`开通${curName} ¥${curPrice}/${(PLAN_CN[selected] || {}).unit || '月'} 自动续费`}
+          </Text>
         </TouchableOpacity>
       </SafeAreaView>
     </View>
@@ -357,7 +407,19 @@ const makeStyles = (colors, dark) =>
     priceCurrency: {fontSize: 15, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216', marginBottom: 3},
     priceValue: {fontSize: 22, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216'},
     priceOn: {color: colors.primary},
-    agreementRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(15)},
+    planCycle: {fontSize: 10.5, color: colors.textSecondary, marginTop: 4},
+    renewCard: {
+      marginTop: px(14),
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: dark ? '#221C24' : '#FFF6F9',
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    renewTitle: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+    renewText: {fontSize: 12, lineHeight: 19, color: colors.textSecondary, marginTop: 6},
+    renewStrong: {color: colors.primary, fontWeight: '700'},
+    agreementRow: {flexDirection: 'row', alignItems: 'flex-start', marginTop: px(15)},
     checkbox: {
       width: 18,
       height: 18,

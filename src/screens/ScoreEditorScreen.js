@@ -27,6 +27,7 @@ import {
   boxesFromDividers,
   uploadScore,
   recognizeScoreTerms,
+  recognizeTermAt,
   deleteScore,
 } from '../services/score';
 
@@ -92,6 +93,8 @@ function SimpleDivider({divider, pageW, pageH, onDelete}) {
 }
 
 function SimpleBox({box, pageW, pageH, onOpen}) {
+  // 一段跨好几行时会有好几个方框，只有第一个写标题，其余几行留白
+  const cont = !!box.cont;
   return (
     <TapOnly
       onPress={() => onOpen(box)}
@@ -100,13 +103,15 @@ function SimpleBox({box, pageW, pageH, onOpen}) {
         {
           left: (box.x || 0) * pageW,
           top: (box.y || 0) * pageH,
-          width: clamp(box.w || 0.5, 0.12, 0.95) * pageW,
-          height: clamp(box.h || 0.1, 0.06, 0.55) * pageH,
+          width: clamp(box.w || 0.5, 0.06, 0.96) * pageW,
+          height: clamp(box.h || 0.1, 0.05, 0.55) * pageH,
         },
       ]}>
-      <Text style={styles.boxLabel} numberOfLines={2}>
-        {box.label || '重点'}
-      </Text>
+      {cont ? null : (
+        <Text style={styles.boxLabel} numberOfLines={2}>
+          {box.label || '重点'}
+        </Text>
+      )}
     </TapOnly>
   );
 }
@@ -140,6 +145,11 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [termIdx, setTermIdx] = useState(-1);
   const [termKey, setTermKey] = useState('');
   const [termValue, setTermValue] = useState('');
+  // 点谱面时做什么：'divider' 加分段线 / 'term' 认术语
+  const [tapMode, setTapMode] = useState('divider');
+  // 认不出来时，让老师照着 OCR 读到的字补一个
+  const [askTerm, setAskTerm] = useState(null);
+  const [askText, setAskText] = useState('');
 
   const load = async () => {
     if (route?.params?.preview) {
@@ -431,20 +441,91 @@ export default function ScoreEditorScreen({navigation, route}) {
     ]);
   };
 
-  const placeDividerAtTap = (pageIdx, pageH, evt) => {
+  const onPageTap = (pageIdx, pageH, evt) => {
     const ne = evt?.nativeEvent || {};
     const locationX = ne.locationX;
     const locationY = ne.locationY;
     if (!(locationX >= 0) || !(locationY >= 0) || !pageH) return;
-    const x = clamp(locationX / Math.max(1, pageW), 0.03, 0.97);
-    const y = clamp(locationY / Math.max(1, pageH), 0.03, 0.97);
+    const x = clamp(locationX / Math.max(1, pageW), 0.02, 0.98);
+    const y = clamp(locationY / Math.max(1, pageH), 0.02, 0.98);
+    if (tapMode === 'term') {
+      recognizeAtTap(pageIdx, x, y);
+      return;
+    }
     // 分段线 = 前一段的终点。点哪里就立一条短竖线，不满意删了重点。
     const half = 0.045;
     addDividerAt(pageIdx, {
-      x,
+      x: clamp(x, 0.03, 0.97),
       y0: clamp(y - half, 0.01, 0.94),
       y1: clamp(y + half, 0.06, 0.99),
     });
+  };
+
+  // 点一下谱上没认出来的术语 → 当场识别，并记进术语库（下次同样的词不用再点）
+  const recognizeAtTap = async (pageIdx, x, y, typed = '') => {
+    if (route?.params?.preview) {
+      Alert.alert('预览模式', '预览页不连服务器，装到手机上就能点术语识别了。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await recognizeTermAt(
+        getDeviceId(), studentId, pieceName, pageIdx, x, y, {term: typed},
+      );
+      if (r?.ok) {
+        if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
+        if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
+        if (r.needs_confirm) {
+          Alert.alert(
+            '认出来了，对吗？',
+            `${r.term}：${r.translation}\n不对的话点「我来改」，改过的会记进术语库。`,
+            [
+              {text: '就是它', onPress: () => confirmTerm(pageIdx, x, y, r.term)},
+              {
+                text: '我来改',
+                onPress: () => {
+                  setAskText(r.term || '');
+                  setAskTerm({page: pageIdx, x, y, ocr: r.ocr || '', replaceId: r.overlay?.id || ''});
+                },
+              },
+            ],
+          );
+        } else {
+          Alert.alert('已识别', `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`);
+        }
+      } else if (r?.error === 'not_recognized') {
+        setAskText('');
+        setAskTerm({page: pageIdx, x, y, ocr: r.ocr || ''});
+      } else {
+        Alert.alert('识别失败', '请稍后重试，或换个位置点在术语正中间。');
+      }
+    } catch (e) {
+      Alert.alert('识别失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 老师确认/改正后再学一遍，这次才写进术语库
+  const confirmTerm = async (pageIdx, x, y, term, replaceId = '') => {
+    if (!term) return;
+    setBusy(true);
+    try {
+      const r = await recognizeTermAt(
+        getDeviceId(), studentId, pieceName, pageIdx, x, y, {term, replaceId},
+      );
+      if (r?.ok) {
+        if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
+        if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
+        Alert.alert('已记住', `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`);
+      } else {
+        Alert.alert('保存失败', '请稍后重试。');
+      }
+    } catch (e) {
+      Alert.alert('保存失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const addDivider = pageIdx =>
@@ -595,7 +676,28 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            操作很简单：①点谱面某处 = 加一条「段尾」竖线；不满意就点线删除再重点。②点「按分段线生成重点框」= 每条线往前自动生成一个大框。③点框可改文字。相册多选会先显示页序。
+            操作很简单：①点谱面某处 = 加一条「段尾」竖线；不满意就点线删除再重点。②点「按分段线生成重点框」= 从上一条线到这条线，整段（可跨好几行）都会圈进来。③点框可改文字。相册多选会先显示页序。
+          </Text>
+          <View style={ui.modeRow}>
+            <TouchableOpacity
+              style={[ui.modeBtn, tapMode === 'divider' && ui.modeBtnOn]}
+              onPress={() => setTapMode('divider')}>
+              <Text style={[ui.modeText, tapMode === 'divider' && ui.modeTextOn]}>
+                点谱＝加分段线
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[ui.modeBtn, tapMode === 'term' && ui.modeBtnOn]}
+              onPress={() => setTapMode('term')}>
+              <Text style={[ui.modeText, tapMode === 'term' && ui.modeTextOn]}>
+                点谱＝认术语
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={ui.help}>
+            {tapMode === 'term'
+              ? '哪个术语没认出来，就用手指点在那串字上。认出来会直接标在谱上，并记进术语库——以后别的曲子出现同一个词，不用再点。'
+              : '要补识别术语，先切到「点谱＝认术语」，再点谱上那串没认出来的字。'}
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -688,7 +790,7 @@ export default function ScoreEditorScreen({navigation, route}) {
               </View>
               <View style={{width: pageW, height: pageH}}>
                 <TapOnly
-                  onPress={e => placeDividerAtTap(page.index, pageH, e)}
+                  onPress={e => onPageTap(page.index, pageH, e)}
                   style={{width: pageW, height: pageH}}>
                   {page.url ? (
                   <Image
@@ -733,9 +835,19 @@ export default function ScoreEditorScreen({navigation, route}) {
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
                   const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
                   return (
-                    <View
+                    <TapOnly
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                      pointerEvents="none"
+                      onPress={() => {
+                        // 标错了就点它改；改过的会记进术语库
+                        setAskText(ov.term || '');
+                        setAskTerm({
+                          page: page.index,
+                          x: (ov.x || 0) + (ov.w || 0.08) / 2,
+                          y: (ov.y || 0) + (ov.h || 0.02) / 2,
+                          ocr: ov.term || '',
+                          replaceId: ov.id || '',
+                        });
+                      }}
                       style={[
                         styles.termOv,
                         {
@@ -754,7 +866,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                         allowFontScaling={false}>
                         {label}
                       </Text>
-                    </View>
+                    </TapOnly>
                   );
                 })}
               </View>
@@ -858,6 +970,50 @@ export default function ScoreEditorScreen({navigation, route}) {
               )}
               <TouchableOpacity style={ui.btn} onPress={saveTerm}>
                 <Text style={ui.btnText}>确定</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!askTerm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAskTerm(null)}>
+        <View style={ui.modalMask}>
+          <View style={ui.modalCard}>
+            <Text style={ui.section}>这串是什么术语？</Text>
+            <Text style={ui.help}>
+              {askTerm?.ocr
+                ? `谱上读到的是「${askTerm.ocr}」。填对的拼写（如 dimin.），以后每首曲子都能自动认出来。`
+                : '填这串术语的拼写（如 dimin.），以后每首曲子都能自动认出来。'}
+            </Text>
+            <TextInput
+              style={[ui.input, {marginTop: 10}]}
+              value={askText}
+              onChangeText={setAskText}
+              autoCapitalize="none"
+              placeholder="术语原文，例如 dimin."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={ui.row}>
+              <TouchableOpacity
+                style={[ui.btn, ui.btnGhost]}
+                onPress={() => setAskTerm(null)}>
+                <Text style={ui.btnGhostText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={ui.btn}
+                onPress={() => {
+                  const pack = askTerm;
+                  const txt = askText.trim();
+                  setAskTerm(null);
+                  if (pack && txt) {
+                    confirmTerm(pack.page, pack.x, pack.y, txt, pack.replaceId || '');
+                  }
+                }}>
+                <Text style={ui.btnText}>记进术语库</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1048,6 +1204,20 @@ const makeStyles = colors =>
       lineHeight: 18,
     },
     row: {flexDirection: 'row', gap: 10, marginTop: 12},
+    modeRow: {flexDirection: 'row', gap: 10, marginTop: 12},
+    modeBtn: {
+      flex: 1,
+      height: 38,
+      borderRadius: 19,
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeBtnOn: {borderColor: colors.primary, backgroundColor: colors.primary},
+    modeText: {fontSize: 13, fontWeight: '700', color: colors.textSecondary},
+    modeTextOn: {color: '#fff'},
     btn: {
       flex: 1,
       height: 44,

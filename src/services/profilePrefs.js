@@ -23,7 +23,8 @@ export async function getAvatarUri() {
 }
 
 export async function setAvatarUri(uri) {
-  if (uri) await setItem(K.avatarUri, uri);
+  // 传空字符串＝清掉旧头像（老版本存的 file:// 路径更新后会失效）
+  await setItem(K.avatarUri, uri || '');
 }
 
 export async function getCompanionBgUri() {
@@ -40,7 +41,8 @@ export async function getTeacherAvatarUri() {
 }
 
 export async function setTeacherAvatarUri(uri) {
-  if (uri) await setItem(K.teacherAvatarUri, uri);
+  // 传空字符串＝清掉旧头像（老版本存的 file:// 路径更新后会失效）
+  await setItem(K.teacherAvatarUri, uri || '');
 }
 
 export default {

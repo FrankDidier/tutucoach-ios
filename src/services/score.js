@@ -112,6 +112,29 @@ export async function recognizeScoreTerms(teacherId, studentId, pieceName) {
   );
 }
 
+// 老师用手指点谱上没认出来的术语：当场认，并记进术语库（下次不用再点）
+export async function recognizeTermAt(
+  teacherId,
+  studentId,
+  pieceName,
+  page,
+  x,
+  y,
+  {term = '', replaceId = ''} = {},
+) {
+  const body = {
+    teacher_id: teacherId || '',
+    student_id: studentId || '',
+    piece_name: pieceName || '',
+    page: page || 0,
+    x,
+    y,
+  };
+  if (term) body.term = term;
+  if (replaceId) body.replace_id = replaceId;
+  return postJson('/api/coach/score/term_at', body, null, 45000);
+}
+
 export default {
   uploadScore,
   fetchScore,
@@ -120,4 +143,5 @@ export default {
   suggestScore,
   boxesFromDividers,
   recognizeScoreTerms,
+  recognizeTermAt,
 };

@@ -593,14 +593,18 @@ export default function CompanionScreen({navigation}) {
       {
         text: '从相册选择',
         onPress: async () => {
+          // 存 data URI：App 更新后沙盒目录会换名字，存 file:// 路径的话背景就丢了
           const r = await pickFromGallery({
-            maxWidth: 1600,
-            maxHeight: 1600,
-            quality: 0.9,
+            base64: true,
+            maxWidth: 1080,
+            maxHeight: 1080,
+            quality: 0.78,
           });
-          if (r?.cancelled || r?.error || !r?.uri) return;
-          await setCompanionBgUri(r.uri);
-          setBgUri(r.uri);
+          if (r?.cancelled || r?.error) return;
+          const keep = r.dataUri || r.uri;
+          if (!keep) return;
+          await setCompanionBgUri(keep);
+          setBgUri(keep);
         },
       },
     ];
@@ -653,7 +657,11 @@ export default function CompanionScreen({navigation}) {
           resizeMode="cover"
           onError={() => {
             // 自定义图失败才清；角色图失败仅退回钢琴，保留顶部小头像
-            if (bgUri) setBgUri(null);
+            if (bgUri) {
+              // 老版本存的 file:// 路径更新后会失效，顺手清掉
+              setBgUri(null);
+              setCompanionBgUri(null);
+            }
             else if (avatarUri && !avatarBgFailed) setAvatarBgFailed(true);
           }}
         />

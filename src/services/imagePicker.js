@@ -10,11 +10,17 @@ try {
 
 function assetToFile(asset, fallbackName) {
   if (!asset?.uri) return null;
-  return {
+  const out = {
     uri: asset.uri,
     type: asset.type || 'image/jpeg',
     name: asset.fileName || fallbackName || `score_${Date.now()}.jpg`,
   };
+  // 头像这类要长期存着的图，存 data URI：App 更新后沙盒目录会换名字，
+  // 存 file:// 路径的话下次打开就找不到图了。
+  if (asset.base64) {
+    out.dataUri = `data:${out.type};base64,${asset.base64}`;
+  }
+  return out;
 }
 
 // 相册选图。默认按头像场景压到 ~512；手型模版需要更高清晰度，可传 opts 覆盖。
@@ -33,7 +39,7 @@ export function pickFromGallery(opts = {}) {
         maxWidth: opts.maxWidth || 512,
         maxHeight: opts.maxHeight || 512,
         quality: opts.quality || 0.88,
-        includeBase64: false,
+        includeBase64: !!opts.base64,
       },
       response => {
         if (response.didCancel) {
@@ -79,7 +85,7 @@ export function captureFromCamera(opts = {}) {
         maxWidth: opts.maxWidth || 1280,
         maxHeight: opts.maxHeight || 1280,
         quality: opts.quality || 0.9,
-        includeBase64: false,
+        includeBase64: !!opts.base64,
       },
       response => {
         if (response.didCancel) {
