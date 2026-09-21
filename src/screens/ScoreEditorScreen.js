@@ -14,6 +14,8 @@ import {
   Pressable,
   Alert,
   useWindowDimensions,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -100,6 +102,7 @@ function SimpleBox({box, pageW, pageH, onOpen}) {
       onPress={() => onOpen(box)}
       style={[
         styles.box,
+        cont ? styles.boxCont : null,
         {
           left: (box.x || 0) * pageW,
           top: (box.y || 0) * pageH,
@@ -108,9 +111,11 @@ function SimpleBox({box, pageW, pageH, onOpen}) {
         },
       ]}>
       {cont ? null : (
-        <Text style={styles.boxLabel} numberOfLines={2}>
-          {box.label || '重点'}
-        </Text>
+        <View style={styles.boxLabelPill}>
+          <Text style={styles.boxLabel} numberOfLines={1}>
+            {box.label || '重点'}
+          </Text>
+        </View>
       )}
     </TapOnly>
   );
@@ -150,6 +155,9 @@ export default function ScoreEditorScreen({navigation, route}) {
   // 认不出来时，让老师照着 OCR 读到的字补一个
   const [askTerm, setAskTerm] = useState(null);
   const [askText, setAskText] = useState('');
+  // 全屏放大看谱（眼神不好也能点准术语）
+  const [zoomPage, setZoomPage] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   const load = async () => {
     if (route?.params?.preview) {
@@ -776,7 +784,14 @@ export default function ScoreEditorScreen({navigation, route}) {
                 <Text style={ui.pageTitle}>
                   第 {page.index + 1} 页{badge}
                 </Text>
-                <View style={{flexDirection: 'row', gap: 14}}>
+                <View style={{flexDirection: 'row', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end'}}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setZoomScale(1);
+                      setZoomPage(page);
+                    }}>
+                    <Text style={ui.pageAction}>全屏放大</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => deletePage(page.index)}>
                     <Text style={[ui.pageAction, {color: '#D14343'}]}>删除本页</Text>
                   </TouchableOpacity>
@@ -1075,6 +1090,133 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={!!zoomPage}
+        animationType="slide"
+        onRequestClose={() => setZoomPage(null)}>
+        <View style={styles.zoomMask}>
+          <View style={styles.zoomTop}>
+            <Text style={styles.zoomTitle}>
+              第 {(zoomPage?.index || 0) + 1} 页 · 双指缩放
+            </Text>
+            <TouchableOpacity onPress={() => setZoomPage(null)}>
+              <Text style={styles.zoomClose}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.zoomHint}>
+            {tapMode === 'term'
+              ? '当前：点谱面＝认术语（放大后更好点准）'
+              : '当前：点谱面＝加分段线；也可先切到「认术语」再放大点'}
+          </Text>
+          {zoomPage ? (() => {
+            const zw = Dimensions.get('window').width;
+            const zh = pageFrameHeight(zw, zoomPage, naturalSizes[zoomPage.name || String(zoomPage.index)]);
+            const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
+            const boxes = (manifest?.annotations || []).filter(b => (b.page || 0) === zoomPage.index);
+            const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
+            const content = (
+              <View style={{width: zw * zoomScale, height: zh * zoomScale}}>
+                <TapOnly
+                  onPress={e => {
+                    const loc = e?.nativeEvent?.locationX != null
+                      ? {locationX: e.nativeEvent.locationX / zoomScale, locationY: e.nativeEvent.locationY / zoomScale}
+                      : null;
+                    if (!loc) return;
+                    onPageTap(zoomPage.index, zh, {nativeEvent: loc});
+                  }}
+                  style={{width: zw * zoomScale, height: zh * zoomScale}}>
+                  {zoomPage.url ? (
+                    <Image
+                      source={{uri: `https://tutujiaolian.com${zoomPage.url}`}}
+                      style={{width: zw * zoomScale, height: zh * zoomScale}}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                </TapOnly>
+                {boxes.map(box => (
+                  <SimpleBox
+                    key={box.id}
+                    box={box}
+                    pageW={zw * zoomScale}
+                    pageH={zh * zoomScale}
+                    onOpen={b => {
+                      setZoomPage(null);
+                      openEdit(b);
+                    }}
+                  />
+                ))}
+                {pageDivs.map(d => (
+                  <SimpleDivider
+                    key={d.id}
+                    divider={d}
+                    pageW={zw * zoomScale}
+                    pageH={zh * zoomScale}
+                    onDelete={removeDivider}
+                  />
+                ))}
+                {pageTerms.map(ov => {
+                  const label = String(ov.short || ov.translation || ov.term || '');
+                  const fontSize = Math.max(11, Math.min(16, (ov.h || 0.025) * zh * zoomScale * 0.85));
+                  const minW = Math.max(40, label.length * (fontSize * 0.95) + 10);
+                  return (
+                    <TapOnly
+                      key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                      onPress={() => {
+                        setAskText(ov.term || '');
+                        setAskTerm({
+                          page: zoomPage.index,
+                          x: (ov.x || 0) + (ov.w || 0.08) / 2,
+                          y: (ov.y || 0) + (ov.h || 0.02) / 2,
+                          ocr: ov.term || '',
+                          replaceId: ov.id || '',
+                        });
+                      }}
+                      style={[
+                        styles.termOv,
+                        {
+                          left: (ov.x || 0) * zw * zoomScale,
+                          top: (ov.y || 0) * zh * zoomScale,
+                          width: Math.max(minW, (ov.w || 0.1) * zw * zoomScale),
+                          height: Math.max(20, (ov.h || 0.022) * zh * zoomScale),
+                          zIndex: 12,
+                        },
+                      ]}>
+                      <Text style={[styles.termOvText, {fontSize}]} numberOfLines={1}>
+                        {label}
+                      </Text>
+                    </TapOnly>
+                  );
+                })}
+              </View>
+            );
+            return (
+              <ScrollView
+                style={{flex: 1}}
+                contentContainerStyle={{alignItems: 'center'}}
+                maximumZoomScale={Platform.OS === 'ios' ? 4 : 1}
+                minimumZoomScale={1}
+                bouncesZoom
+                centerContent>
+                {content}
+              </ScrollView>
+            );
+          })() : null}
+          {Platform.OS === 'android' ? (
+            <View style={styles.zoomTools}>
+              <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.4).toFixed(1)))}>
+                <Text style={styles.zoomTool}>缩小</Text>
+              </TouchableOpacity>
+              <Text style={styles.zoomTool}>{Math.round(zoomScale * 100)}%</Text>
+              <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.5, +(s + 0.4).toFixed(1)))}>
+                <Text style={styles.zoomTool}>放大</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{height: 24}} />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1082,14 +1224,25 @@ export default function ScoreEditorScreen({navigation, route}) {
 const styles = StyleSheet.create({
   box: {
     position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#FFB300',
-    backgroundColor: 'rgba(255,179,0,0.18)',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    borderWidth: 1.5,
+    borderColor: 'rgba(232, 156, 48, 0.85)',
+    backgroundColor: 'rgba(255, 196, 77, 0.12)',
+    borderRadius: 10,
   },
-  boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
+  boxCont: {
+    borderColor: 'rgba(232, 156, 48, 0.55)',
+    backgroundColor: 'rgba(255, 196, 77, 0.07)',
+  },
+  boxLabelPill: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginLeft: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 248, 230, 0.92)',
+  },
+  boxLabel: {fontSize: 11, fontWeight: '700', color: '#6B4A12'},
   handle: {
     position: 'absolute',
     right: 2,
@@ -1098,6 +1251,34 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 2,
     backgroundColor: '#FFB300',
+  },
+  zoomMask: {
+    flex: 1,
+    backgroundColor: '#0B0B0B',
+  },
+  zoomTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 54,
+    paddingBottom: 10,
+  },
+  zoomTitle: {color: '#fff', fontSize: 15, fontWeight: '700'},
+  zoomClose: {color: '#fff', fontSize: 15, fontWeight: '700'},
+  zoomTools: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 18,
+    paddingBottom: 18,
+    paddingTop: 8,
+  },
+  zoomTool: {color: '#fff', fontSize: 15, fontWeight: '700', paddingHorizontal: 8},
+  zoomHint: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    textAlign: 'center',
+    paddingBottom: 10,
   },
   dividerHit: {
     position: 'absolute',

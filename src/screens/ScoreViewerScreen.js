@@ -11,6 +11,9 @@ import {
   TouchableOpacity,
   Alert,
   useWindowDimensions,
+  Modal,
+  Platform,
+  Dimensions,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -48,6 +51,8 @@ export default function ScoreViewerScreen({navigation, route}) {
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null);
   const [naturalSizes, setNaturalSizes] = useState({});
+  const [zoomPage, setZoomPage] = useState(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   const load = async () => {
     setLoading(true);
@@ -230,9 +235,18 @@ export default function ScoreViewerScreen({navigation, route}) {
             <View key={key} style={ui.pageCard}>
               <View style={ui.pageHead}>
                 <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
-                <TouchableOpacity onPress={() => deletePage(page.index)}>
-                  <Text style={ui.deleteLink}>删除本页</Text>
-                </TouchableOpacity>
+                <View style={{flexDirection: 'row', gap: 14}}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setZoomScale(1);
+                      setZoomPage(page);
+                    }}>
+                    <Text style={[ui.deleteLink, {color: colors.primary}]}>全屏放大</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => deletePage(page.index)}>
+                    <Text style={ui.deleteLink}>删除本页</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={{width: pageW, height: pageH}}>
                 <Image
@@ -310,6 +324,92 @@ export default function ScoreViewerScreen({navigation, route}) {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal visible={!!zoomPage} animationType="slide" onRequestClose={() => setZoomPage(null)}>
+        <View style={{flex: 1, backgroundColor: '#0B0B0B'}}>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              paddingHorizontal: 14,
+              paddingTop: 54,
+              paddingBottom: 10,
+            }}>
+            <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>
+              第 {(zoomPage?.index || 0) + 1} 页 · 双指缩放
+            </Text>
+            <TouchableOpacity onPress={() => setZoomPage(null)}>
+              <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+          {zoomPage ? (() => {
+            const zw = Dimensions.get('window').width;
+            const key = zoomPage.name || String(zoomPage.index);
+            const zh = pageFrameHeight(zw, zoomPage, naturalSizes[key]);
+            const pageTerms = (manifest?.term_overlays || []).filter(
+              t => (t.page || 0) === zoomPage.index,
+            );
+            return (
+              <ScrollView
+                style={{flex: 1}}
+                contentContainerStyle={{alignItems: 'center'}}
+                maximumZoomScale={Platform.OS === 'ios' ? 4 : 1}
+                minimumZoomScale={1}
+                bouncesZoom
+                centerContent>
+                <View style={{width: zw * zoomScale, height: zh * zoomScale}}>
+                  <Image
+                    source={{uri: `https://tutujiaolian.com${zoomPage.url}`}}
+                    style={{width: zw * zoomScale, height: zh * zoomScale}}
+                    resizeMode="contain"
+                  />
+                  {pageTerms.map(ov => {
+                    const label = String(ov.short || ov.translation || ov.term || '');
+                    return (
+                      <View
+                        key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                        pointerEvents="none"
+                        style={[
+                          ui.termOv,
+                          {
+                            left: (ov.x || 0) * zw * zoomScale,
+                            top: (ov.y || 0) * zh * zoomScale,
+                            width: Math.max(40, (ov.w || 0.1) * zw * zoomScale),
+                            height: Math.max(20, (ov.h || 0.022) * zh * zoomScale),
+                          },
+                        ]}>
+                        <Text style={ui.termOvText} numberOfLines={1}>
+                          {label}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            );
+          })() : null}
+          {Platform.OS === 'android' ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 18,
+                paddingBottom: 18,
+                paddingTop: 8,
+              }}>
+              <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.4).toFixed(1)))}>
+                <Text style={{color: '#fff', fontWeight: '700'}}>缩小</Text>
+              </TouchableOpacity>
+              <Text style={{color: '#fff', fontWeight: '700'}}>{Math.round(zoomScale * 100)}%</Text>
+              <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.5, +(s + 0.4).toFixed(1)))}>
+                <Text style={{color: '#fff', fontWeight: '700'}}>放大</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{height: 24}} />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -346,14 +446,24 @@ const makeStyles = colors =>
     deleteLink: {fontSize: 13, fontWeight: '700', color: '#D14343'},
     box: {
       position: 'absolute',
-      borderWidth: 2,
-      borderColor: '#FFB300',
-      backgroundColor: 'rgba(255,179,0,0.18)',
-      borderRadius: 8,
-      paddingHorizontal: 6,
-      paddingVertical: 4,
+      borderWidth: 1.5,
+      borderColor: 'rgba(232, 156, 48, 0.85)',
+      backgroundColor: 'rgba(255, 196, 77, 0.12)',
+      borderRadius: 10,
     },
-    boxLabel: {fontSize: 12, fontWeight: '700', color: '#4A3100'},
+    boxLabel: {
+      alignSelf: 'flex-start',
+      marginTop: 4,
+      marginLeft: 4,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+      backgroundColor: 'rgba(255, 248, 230, 0.92)',
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#6B4A12',
+    },
     termOv: {
       position: 'absolute',
       backgroundColor: 'rgba(64, 156, 255, 0.88)',

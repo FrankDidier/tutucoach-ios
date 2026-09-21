@@ -152,17 +152,29 @@ jobs:
           BUNDLE_ID: com.impit.tutucoach
         run: |
           set -euo pipefail
-          # Homebrew Python on macos-15 is PEP 668 — use a venv for PyJWT.
+          # Read CFBundleVersion from the IPA we just uploaded — must match THAT
+          # build, not the previous VALID one still sitting in TestFlight.
+          IPA="$RUNNER_TEMP/export/$SCHEME.ipa"
+          UNZIP_DIR="$RUNNER_TEMP/ipa-inspect"
+          rm -rf "$UNZIP_DIR"
+          mkdir -p "$UNZIP_DIR"
+          unzip -q -o "$IPA" -d "$UNZIP_DIR" 'Payload/*.app/Info.plist'
+          INFO_PLIST=$(find "$UNZIP_DIR/Payload" -name Info.plist | head -1)
+          EXPECTED_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")
+          echo "EXPECTED_BUILD=$EXPECTED_BUILD"
+          echo "EXPECTED_BUILD=$EXPECTED_BUILD" >> "$GITHUB_ENV"
+
           python3 -m venv "$RUNNER_TEMP/asc-venv"
           # shellcheck disable=SC1091
           source "$RUNNER_TEMP/asc-venv/bin/activate"
           pip install -q PyJWT cryptography
-          python - <<'PY'
+          EXPECTED_BUILD="$EXPECTED_BUILD" python - <<'PY'
           import base64, json, os, time, urllib.error, urllib.request
           import jwt
 
           key_id = os.environ["ASC_KEY_ID"]
           issuer = os.environ["ASC_ISSUER_ID"]
+          expected = str(os.environ["EXPECTED_BUILD"]).strip()
           p8 = base64.b64decode(os.environ["ASC_KEY_P8_BASE64"]).decode()
           token = jwt.encode(
               {"iss": issuer, "iat": int(time.time()) - 10, "exp": int(time.time()) + 18 * 60, "aud": "appstoreconnect-v1"},
@@ -196,21 +208,36 @@ jobs:
 
           build_id = None
           build_ver = None
-          for _ in range(36):  # wait up to ~18 min for processing
-              st, builds = api("GET", f"https://api.appstoreconnect.apple.com/v1/builds?filter[app]={app_id}&sort=-uploadedDate&limit=5")
+          for _ in range(48):  # wait up to ~24 min for THIS build only
+              st, builds = api("GET", f"https://api.appstoreconnect.apple.com/v1/builds?filter[app]={app_id}&sort=-uploadedDate&limit=10")
               assert st == 200, builds
+              match = None
               for b in builds["data"]:
                   a = b["attributes"]
-                  if a.get("processingState") == "VALID" and not a.get("expired"):
-                      build_id = b["id"]
-                      build_ver = a.get("version")
+                  if str(a.get("version")) == expected:
+                      match = b
                       break
-              if build_id:
-                  break
-              print("waiting for VALID build…")
+              if match is None:
+                  print(f"waiting for build {expected} to appear…")
+              else:
+                  state = match["attributes"].get("processingState")
+                  print(f"build {expected} processingState={state}")
+                  if state == "VALID" and not match["attributes"].get("expired"):
+                      build_id = match["id"]
+                      build_ver = match["attributes"].get("version")
+                      break
+                  if state == "INVALID":
+                      raise SystemExit(f"build {expected} became INVALID")
               time.sleep(30)
-          assert build_id, "no VALID build found after upload"
+          assert build_id, f"no VALID build {expected} found after upload"
           print(f"using build {build_ver} id={build_id}")
+
+          # Export compliance so external review can proceed.
+          st, _ = api("PATCH", f"https://api.appstoreconnect.apple.com/v1/builds/{build_id}", {
+              "data": {"type": "builds", "id": build_id,
+                       "attributes": {"usesNonExemptEncryption": False}}
+          })
+          print(f"compliance: HTTP {st}")
 
           st, groups = api("GET", f"https://api.appstoreconnect.apple.com/v1/apps/{app_id}/betaGroups?limit=20")
           assert st == 200, groups
