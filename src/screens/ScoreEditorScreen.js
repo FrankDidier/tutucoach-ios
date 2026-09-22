@@ -14,7 +14,6 @@ import {
   Pressable,
   Alert,
   useWindowDimensions,
-  Platform,
   Dimensions,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
@@ -1093,129 +1092,171 @@ export default function ScoreEditorScreen({navigation, route}) {
 
       <Modal
         visible={!!zoomPage}
-        animationType="slide"
+        animationType="fade"
+        presentationStyle="fullScreen"
         onRequestClose={() => setZoomPage(null)}>
-        <View style={styles.zoomMask}>
+        <SafeAreaView style={styles.zoomMask}>
           <View style={styles.zoomTop}>
             <Text style={styles.zoomTitle}>
-              第 {(zoomPage?.index || 0) + 1} 页 · 双指缩放
+              第 {(zoomPage?.index || 0) + 1} 页
             </Text>
-            <TouchableOpacity onPress={() => setZoomPage(null)}>
+            <TouchableOpacity onPress={() => setZoomPage(null)} hitSlop={12}>
               <Text style={styles.zoomClose}>关闭</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.zoomHint}>
             {tapMode === 'term'
-              ? '当前：点谱面＝认术语（放大后更好点准）'
-              : '当前：点谱面＝加分段线；也可先切到「认术语」再放大点'}
+              ? '点谱面＝认术语 · 用下方按钮放大缩小'
+              : '点谱面＝加分段线 · 用下方按钮放大缩小'}
           </Text>
           {zoomPage ? (() => {
-            const zw = Dimensions.get('window').width;
-            const zh = pageFrameHeight(zw, zoomPage, naturalSizes[zoomPage.name || String(zoomPage.index)]);
+            const win = Dimensions.get('window');
+            const zw = Math.max(320, win.width);
+            const baseH = pageFrameHeight(
+              zw,
+              zoomPage,
+              naturalSizes[zoomPage.name || String(zoomPage.index)],
+            );
+            const zh = Math.max(baseH, win.height * 0.55);
+            const scale = zoomScale;
             const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
             const boxes = (manifest?.annotations || []).filter(b => (b.page || 0) === zoomPage.index);
             const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
-            const content = (
-              <View style={{width: zw * zoomScale, height: zh * zoomScale}}>
-                <TapOnly
-                  onPress={e => {
-                    const loc = e?.nativeEvent?.locationX != null
-                      ? {locationX: e.nativeEvent.locationX / zoomScale, locationY: e.nativeEvent.locationY / zoomScale}
-                      : null;
-                    if (!loc) return;
-                    onPageTap(zoomPage.index, zh, {nativeEvent: loc});
-                  }}
-                  style={{width: zw * zoomScale, height: zh * zoomScale}}>
-                  {zoomPage.url ? (
-                    <Image
-                      source={{uri: `https://tutujiaolian.com${zoomPage.url}`}}
-                      style={{width: zw * zoomScale, height: zh * zoomScale}}
-                      resizeMode="contain"
-                    />
-                  ) : null}
-                </TapOnly>
-                {boxes.map(box => (
-                  <SimpleBox
-                    key={box.id}
-                    box={box}
-                    pageW={zw * zoomScale}
-                    pageH={zh * zoomScale}
-                    onOpen={b => {
-                      setZoomPage(null);
-                      openEdit(b);
-                    }}
-                  />
-                ))}
-                {pageDivs.map(d => (
-                  <SimpleDivider
-                    key={d.id}
-                    divider={d}
-                    pageW={zw * zoomScale}
-                    pageH={zh * zoomScale}
-                    onDelete={removeDivider}
-                  />
-                ))}
-                {pageTerms.map(ov => {
-                  const label = String(ov.short || ov.translation || ov.term || '');
-                  const fontSize = Math.max(11, Math.min(16, (ov.h || 0.025) * zh * zoomScale * 0.85));
-                  const minW = Math.max(40, label.length * (fontSize * 0.95) + 10);
-                  return (
-                    <TapOnly
-                      key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                      onPress={() => {
-                        setAskText(ov.term || '');
-                        setAskTerm({
-                          page: zoomPage.index,
-                          x: (ov.x || 0) + (ov.w || 0.08) / 2,
-                          y: (ov.y || 0) + (ov.h || 0.02) / 2,
-                          ocr: ov.term || '',
-                          replaceId: ov.id || '',
-                        });
-                      }}
-                      style={[
-                        styles.termOv,
-                        {
-                          left: (ov.x || 0) * zw * zoomScale,
-                          top: (ov.y || 0) * zh * zoomScale,
-                          width: Math.max(minW, (ov.w || 0.1) * zw * zoomScale),
-                          height: Math.max(20, (ov.h || 0.022) * zh * zoomScale),
-                          zIndex: 12,
-                        },
-                      ]}>
-                      <Text style={[styles.termOvText, {fontSize}]} numberOfLines={1}>
-                        {label}
-                      </Text>
-                    </TapOnly>
-                  );
-                })}
-              </View>
-            );
+            const imgUri = zoomPage.url
+              ? (String(zoomPage.url).startsWith('http')
+                  ? zoomPage.url
+                  : `https://tutujiaolian.com${zoomPage.url}`)
+              : '';
             return (
               <ScrollView
-                style={{flex: 1}}
-                contentContainerStyle={{alignItems: 'center'}}
-                maximumZoomScale={Platform.OS === 'ios' ? 4 : 1}
+                style={{flex: 1, backgroundColor: '#F4EFE6'}}
+                contentContainerStyle={{
+                  alignItems: 'center',
+                  paddingVertical: 8,
+                  minHeight: zh * scale + 40,
+                }}
+                maximumZoomScale={1}
                 minimumZoomScale={1}
-                bouncesZoom
-                centerContent>
-                {content}
+                bounces
+                showsVerticalScrollIndicator
+                showsHorizontalScrollIndicator>
+                <View
+                  style={{
+                    width: zw * scale,
+                    height: zh * scale,
+                    backgroundColor: '#F4EFE6',
+                    overflow: 'hidden',
+                  }}>
+                  {imgUri ? (
+                    <Image
+                      source={{uri: imgUri}}
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: zw * scale,
+                        height: zh * scale,
+                      }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                      <Text style={{color: '#666'}}>乐谱加载中…</Text>
+                    </View>
+                  )}
+                  <Pressable
+                    onPress={e => {
+                      const lx = e?.nativeEvent?.locationX;
+                      const ly = e?.nativeEvent?.locationY;
+                      if (!(lx >= 0) || !(ly >= 0)) return;
+                      onPageTap(zoomPage.index, zh, {
+                        nativeEvent: {
+                          locationX: lx / scale,
+                          locationY: ly / scale,
+                        },
+                      });
+                    }}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      width: zw * scale,
+                      height: zh * scale,
+                    }}
+                  />
+                  {boxes.map(box => (
+                    <SimpleBox
+                      key={box.id}
+                      box={box}
+                      pageW={zw * scale}
+                      pageH={zh * scale}
+                      onOpen={b => {
+                        setZoomPage(null);
+                        openEdit(b);
+                      }}
+                    />
+                  ))}
+                  {pageDivs.map(d => (
+                    <SimpleDivider
+                      key={d.id}
+                      divider={d}
+                      pageW={zw * scale}
+                      pageH={zh * scale}
+                      onDelete={removeDivider}
+                    />
+                  ))}
+                  {pageTerms.map(ov => {
+                    const label = String(ov.short || ov.translation || ov.term || '');
+                    const fontSize = Math.max(11, Math.min(16, (ov.h || 0.025) * zh * scale * 0.85));
+                    const minW = Math.max(40, label.length * (fontSize * 0.95) + 10);
+                    return (
+                      <TapOnly
+                        key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                        onPress={() => {
+                          setAskText(ov.term || '');
+                          setAskTerm({
+                            page: zoomPage.index,
+                            x: (ov.x || 0) + (ov.w || 0.08) / 2,
+                            y: (ov.y || 0) + (ov.h || 0.02) / 2,
+                            ocr: ov.term || '',
+                            replaceId: ov.id || '',
+                          });
+                        }}
+                        style={[
+                          styles.termOv,
+                          {
+                            left: (ov.x || 0) * zw * scale,
+                            top: (ov.y || 0) * zh * scale,
+                            width: Math.max(minW, (ov.w || 0.1) * zw * scale),
+                            height: Math.max(20, (ov.h || 0.022) * zh * scale),
+                            zIndex: 12,
+                          },
+                        ]}>
+                        <Text style={[styles.termOvText, {fontSize}]} numberOfLines={1}>
+                          {label}
+                        </Text>
+                      </TapOnly>
+                    );
+                  })}
+                </View>
               </ScrollView>
             );
           })() : null}
-          {Platform.OS === 'android' ? (
-            <View style={styles.zoomTools}>
-              <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.4).toFixed(1)))}>
-                <Text style={styles.zoomTool}>缩小</Text>
-              </TouchableOpacity>
-              <Text style={styles.zoomTool}>{Math.round(zoomScale * 100)}%</Text>
-              <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.5, +(s + 0.4).toFixed(1)))}>
-                <Text style={styles.zoomTool}>放大</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={{height: 24}} />
-          )}
-        </View>
+          <View style={styles.zoomTools}>
+            <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))}>
+              <Text style={styles.zoomTool}>缩小</Text>
+            </TouchableOpacity>
+            <Text style={styles.zoomTool}>{Math.round(zoomScale * 100)}%</Text>
+            <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))}>
+              <Text style={styles.zoomTool}>放大</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -1225,13 +1266,13 @@ const styles = StyleSheet.create({
   box: {
     position: 'absolute',
     borderWidth: 1.5,
-    borderColor: 'rgba(232, 156, 48, 0.85)',
-    backgroundColor: 'rgba(255, 196, 77, 0.12)',
+    borderColor: 'rgba(232, 156, 48, 0.88)',
+    backgroundColor: 'rgba(255, 196, 77, 0.14)',
     borderRadius: 10,
   },
   boxCont: {
-    borderColor: 'rgba(232, 156, 48, 0.55)',
-    backgroundColor: 'rgba(255, 196, 77, 0.07)',
+    borderColor: 'rgba(232, 156, 48, 0.88)',
+    backgroundColor: 'rgba(255, 196, 77, 0.14)',
   },
   boxLabelPill: {
     alignSelf: 'flex-start',
@@ -1254,31 +1295,33 @@ const styles = StyleSheet.create({
   },
   zoomMask: {
     flex: 1,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: '#1A1A1A',
   },
   zoomTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingTop: 54,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   zoomTitle: {color: '#fff', fontSize: 15, fontWeight: '700'},
   zoomClose: {color: '#fff', fontSize: 15, fontWeight: '700'},
   zoomTools: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 18,
+    alignItems: 'center',
+    gap: 28,
     paddingBottom: 18,
-    paddingTop: 8,
+    paddingTop: 10,
+    backgroundColor: '#1A1A1A',
   },
-  zoomTool: {color: '#fff', fontSize: 15, fontWeight: '700', paddingHorizontal: 8},
+  zoomTool: {color: '#fff', fontSize: 16, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 6},
   zoomHint: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.72)',
     fontSize: 12,
     textAlign: 'center',
-    paddingBottom: 10,
+    paddingBottom: 8,
   },
   dividerHit: {
     position: 'absolute',

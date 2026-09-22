@@ -12,7 +12,6 @@ import {
   Alert,
   useWindowDimensions,
   Modal,
-  Platform,
   Dimensions,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
@@ -325,44 +324,58 @@ export default function ScoreViewerScreen({navigation, route}) {
         ) : null}
       </ScrollView>
 
-      <Modal visible={!!zoomPage} animationType="slide" onRequestClose={() => setZoomPage(null)}>
-        <View style={{flex: 1, backgroundColor: '#0B0B0B'}}>
+      <Modal
+        visible={!!zoomPage}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setZoomPage(null)}>
+        <SafeAreaView style={{flex: 1, backgroundColor: '#1A1A1A'}}>
           <View
             style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
               paddingHorizontal: 14,
-              paddingTop: 54,
-              paddingBottom: 10,
+              paddingTop: 8,
+              paddingBottom: 6,
             }}>
             <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>
-              第 {(zoomPage?.index || 0) + 1} 页 · 双指缩放
+              第 {(zoomPage?.index || 0) + 1} 页
             </Text>
             <TouchableOpacity onPress={() => setZoomPage(null)}>
               <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>关闭</Text>
             </TouchableOpacity>
           </View>
+          <Text style={{color: 'rgba(255,255,255,0.72)', fontSize: 12, textAlign: 'center', paddingBottom: 8}}>
+            用下方按钮放大缩小
+          </Text>
           {zoomPage ? (() => {
-            const zw = Dimensions.get('window').width;
+            const win = Dimensions.get('window');
+            const zw = Math.max(320, win.width);
             const key = zoomPage.name || String(zoomPage.index);
-            const zh = pageFrameHeight(zw, zoomPage, naturalSizes[key]);
+            const baseH = pageFrameHeight(zw, zoomPage, naturalSizes[key]);
+            const zh = Math.max(baseH, win.height * 0.55);
+            const scale = zoomScale;
             const pageTerms = (manifest?.term_overlays || []).filter(
               t => (t.page || 0) === zoomPage.index,
             );
+            const imgUri = zoomPage.url
+              ? (String(zoomPage.url).startsWith('http')
+                  ? zoomPage.url
+                  : `https://tutujiaolian.com${zoomPage.url}`)
+              : '';
             return (
               <ScrollView
-                style={{flex: 1}}
-                contentContainerStyle={{alignItems: 'center'}}
-                maximumZoomScale={Platform.OS === 'ios' ? 4 : 1}
-                minimumZoomScale={1}
-                bouncesZoom
-                centerContent>
-                <View style={{width: zw * zoomScale, height: zh * zoomScale}}>
-                  <Image
-                    source={{uri: `https://tutujiaolian.com${zoomPage.url}`}}
-                    style={{width: zw * zoomScale, height: zh * zoomScale}}
-                    resizeMode="contain"
-                  />
+                style={{flex: 1, backgroundColor: '#F4EFE6'}}
+                contentContainerStyle={{alignItems: 'center', paddingVertical: 8, minHeight: zh * scale + 40}}
+                showsVerticalScrollIndicator>
+                <View style={{width: zw * scale, height: zh * scale, backgroundColor: '#F4EFE6'}}>
+                  {imgUri ? (
+                    <Image
+                      source={{uri: imgUri}}
+                      style={{width: zw * scale, height: zh * scale}}
+                      resizeMode="contain"
+                    />
+                  ) : null}
                   {pageTerms.map(ov => {
                     const label = String(ov.short || ov.translation || ov.term || '');
                     return (
@@ -372,10 +385,10 @@ export default function ScoreViewerScreen({navigation, route}) {
                         style={[
                           ui.termOv,
                           {
-                            left: (ov.x || 0) * zw * zoomScale,
-                            top: (ov.y || 0) * zh * zoomScale,
-                            width: Math.max(40, (ov.w || 0.1) * zw * zoomScale),
-                            height: Math.max(20, (ov.h || 0.022) * zh * zoomScale),
+                            left: (ov.x || 0) * zw * scale,
+                            top: (ov.y || 0) * zh * scale,
+                            width: Math.max(40, (ov.w || 0.1) * zw * scale),
+                            height: Math.max(20, (ov.h || 0.022) * zh * scale),
                           },
                         ]}>
                         <Text style={ui.termOvText} numberOfLines={1}>
@@ -388,27 +401,25 @@ export default function ScoreViewerScreen({navigation, route}) {
               </ScrollView>
             );
           })() : null}
-          {Platform.OS === 'android' ? (
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 18,
-                paddingBottom: 18,
-                paddingTop: 8,
-              }}>
-              <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.4).toFixed(1)))}>
-                <Text style={{color: '#fff', fontWeight: '700'}}>缩小</Text>
-              </TouchableOpacity>
-              <Text style={{color: '#fff', fontWeight: '700'}}>{Math.round(zoomScale * 100)}%</Text>
-              <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.5, +(s + 0.4).toFixed(1)))}>
-                <Text style={{color: '#fff', fontWeight: '700'}}>放大</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={{height: 24}} />
-          )}
-        </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: 28,
+              paddingBottom: 18,
+              paddingTop: 10,
+            }}>
+            <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))}>
+              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>缩小</Text>
+            </TouchableOpacity>
+            <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>
+              {Math.round(zoomScale * 100)}%
+            </Text>
+            <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))}>
+              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>放大</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
