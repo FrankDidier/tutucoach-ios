@@ -20,7 +20,20 @@ import {fetchScore, uploadScore, deleteScore} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 
-const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
+const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92, base64: true};
+
+function scoreImageUri(page, bust) {
+  const u = page?.url;
+  if (!u) return '';
+  let out = String(u);
+  if (!(out.startsWith('http') || out.startsWith('data:'))) {
+    out = `https://tutujiaolian.com${out}`;
+  }
+  if (bust && out.startsWith('http')) {
+    out += (out.includes('?') ? '&' : '?') + `_e=${encodeURIComponent(bust)}`;
+  }
+  return out;
+}
 
 function pageFrameHeight(pageW, page, natural) {
   const nw = natural?.w || 0;
@@ -42,8 +55,10 @@ function pageFrameHeight(pageW, page, natural) {
 export default function ScoreViewerScreen({navigation, route}) {
   const {colors} = useTheme();
   const ui = useMemo(() => makeStyles(colors), [colors]);
-  const {width: winW} = useWindowDimensions();
+  const {width: winW, height: winH} = useWindowDimensions();
   const pageW = winW - 32;
+  const [imgEpoch, setImgEpoch] = useState(0);
+  const layoutEpoch = `${Math.round(winW)}x${Math.round(winH)}-${imgEpoch}`;
   const {studentId = '', pieceName = ''} = route?.params || {};
   const sid = studentId || getDeviceId();
   const [loading, setLoading] = useState(true);
@@ -59,6 +74,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       const r = await fetchScore(sid, pieceName, '', 'student');
       setManifest(r?.manifest || null);
       setNaturalSizes({});
+      setImgEpoch(e => e + 1);
     } catch (e) {
       setManifest(null);
     } finally {
@@ -70,6 +86,19 @@ export default function ScoreViewerScreen({navigation, route}) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceName, studentId]);
+
+  useEffect(() => {
+    const unsub = navigation?.addListener?.('focus', () => {
+      setImgEpoch(e => e + 1);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [navigation]);
+
+  useEffect(() => {
+    setImgEpoch(e => e + 1);
+  }, [winW, winH]);
 
   const onStudentUpload = () => {
     Alert.alert('上传乐谱', '请选择来源', [
@@ -247,10 +276,11 @@ export default function ScoreViewerScreen({navigation, route}) {
                   </TouchableOpacity>
                 </View>
               </View>
-              <View style={{width: pageW, height: pageH}}>
+              <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
                 <Image
-                  source={{uri: `https://tutujiaolian.com${page.url}`}}
-                  style={{width: pageW, height: pageH, borderRadius: 12}}
+                  key={`vimg-${key}-${layoutEpoch}`}
+                  source={{uri: scoreImageUri(page, layoutEpoch)}}
+                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH, borderRadius: 12}}
                   resizeMode="contain"
                   onLoad={e => {
                     const src = e?.nativeEvent?.source || {};
@@ -358,11 +388,7 @@ export default function ScoreViewerScreen({navigation, route}) {
             const pageTerms = (manifest?.term_overlays || []).filter(
               t => (t.page || 0) === zoomPage.index,
             );
-            const imgUri = zoomPage.url
-              ? (String(zoomPage.url).startsWith('http')
-                  ? zoomPage.url
-                  : `https://tutujiaolian.com${zoomPage.url}`)
-              : '';
+            const imgUri = scoreImageUri(zoomPage, layoutEpoch);
             return (
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
@@ -371,6 +397,7 @@ export default function ScoreViewerScreen({navigation, route}) {
                 <View style={{width: zw * scale, height: zh * scale, backgroundColor: '#F4EFE6'}}>
                   {imgUri ? (
                     <Image
+                      key={`vzoom-${zoomPage.name || zoomPage.index}-${layoutEpoch}-${scale}`}
                       source={{uri: imgUri}}
                       style={{width: zw * scale, height: zh * scale}}
                       resizeMode="contain"

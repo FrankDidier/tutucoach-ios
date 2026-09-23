@@ -32,7 +32,31 @@ import {
   deleteScore,
 } from '../services/score';
 
-const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92};
+const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92, base64: true};
+
+function scoreImageUri(page, bust) {
+  const u = page?.url;
+  if (!u) return '';
+  let out = String(u);
+  if (!(out.startsWith('http') || out.startsWith('data:'))) {
+    out = `https://tutujiaolian.com${out}`;
+  }
+  // 旋转/重进后偶发 Image 缓存空白；http(s) 加 bust 强制重拉，data: 不动
+  if (bust && out.startsWith('http')) {
+    out += (out.includes('?') ? '&' : '?') + `_e=${encodeURIComponent(bust)}`;
+  }
+  return out;
+}
+
+function pendingPreviewUri(file) {
+  if (!file) return '';
+  if (file.dataUri) return file.dataUri;
+  const u = file.uri || '';
+  if (!u) return '';
+  // iOS 相册偶发给 ph://，Image 读不到 → 顺序页黑块；优先 dataUri
+  if (u.startsWith('ph://') || u.startsWith('assets-library://')) return '';
+  return u;
+}
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -94,7 +118,7 @@ function SimpleDivider({divider, pageW, pageH, onDelete}) {
 }
 
 function SimpleBox({box, pageW, pageH, onOpen}) {
-  // 一段跨好几行时会有好几个方框，只有第一个写标题，其余几行留白
+    // 一段跨好几行时会有好几个方框，只有第一个写标题，其余几行留白
   const cont = !!box.cont;
   return (
     <TapOnly
@@ -106,7 +130,8 @@ function SimpleBox({box, pageW, pageH, onOpen}) {
           left: (box.x || 0) * pageW,
           top: (box.y || 0) * pageH,
           width: clamp(box.w || 0.5, 0.06, 0.96) * pageW,
-          height: clamp(box.h || 0.1, 0.05, 0.55) * pageH,
+          // 以前上限 0.55 会把跨行大框裁掉，看起来像「漏段」
+          height: clamp(box.h || 0.1, 0.04, 0.92) * pageH,
         },
       ]}>
       {cont ? null : (
@@ -130,8 +155,12 @@ function normDividers(arr) {
 export default function ScoreEditorScreen({navigation, route}) {
   const {colors} = useTheme();
   const ui = useMemo(() => makeStyles(colors), [colors]);
-  const {width: winW} = useWindowDimensions();
+  const {width: winW, height: winH} = useWindowDimensions();
   const pageW = winW - 32;
+  // 旋转/尺寸变化时强制 Image 重挂，避免「退出重进 / 横竖屏后谱面消失」
+  const [imgEpoch, setImgEpoch] = useState(0);
+  const layoutEpoch = `${Math.round(winW)}x${Math.round(winH)}-${imgEpoch}`;
+
   const {studentId = '', studentName = '', pieceName = '', lines = []} = route?.params || {};
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -181,6 +210,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
       setDividers(normDividers(m?.dividers));
       setNaturalSizes({});
+      setImgEpoch(e => e + 1);
     } catch (e) {
       setManifest(null);
       setTerms([]);
@@ -195,6 +225,20 @@ export default function ScoreEditorScreen({navigation, route}) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, pieceName]);
+
+  // 退出重进 / 从后台回来：强制 Image 重挂，避免谱面空白
+  useEffect(() => {
+    const unsub = navigation?.addListener?.('focus', () => {
+      setImgEpoch(e => e + 1);
+    });
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [navigation]);
+
+  useEffect(() => {
+    setImgEpoch(e => e + 1);
+  }, [winW, winH]);
 
   const doUpload = async (picker, {forceReplace = false} = {}) => {
     const picked = await picker();
@@ -802,14 +846,12 @@ export default function ScoreEditorScreen({navigation, route}) {
                   </TouchableOpacity>
                 </View>
               </View>
-              <View style={{width: pageW, height: pageH}}>
-                <TapOnly
-                  onPress={e => onPageTap(page.index, pageH, e)}
-                  style={{width: pageW, height: pageH}}>
-                  {page.url ? (
+              <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
+                {page.url ? (
                   <Image
-                    source={{uri: `https://tutujiaolian.com${page.url}`}}
-                    style={{width: pageW, height: pageH, borderRadius: 12}}
+                    key={`img-${key}-${layoutEpoch}`}
+                    source={{uri: scoreImageUri(page, layoutEpoch)}}
+                    style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
                     resizeMode="contain"
                     onLoad={e => {
                       const src = e?.nativeEvent?.source || {};
@@ -822,10 +864,11 @@ export default function ScoreEditorScreen({navigation, route}) {
                       }
                     }}
                   />
-                  ) : (
-                    <View style={{width: pageW, height: pageH, borderRadius: 12, backgroundColor: '#F4EFE6'}} />
-                  )}
-                </TapOnly>
+                ) : null}
+                <TapOnly
+                  onPress={e => onPageTap(page.index, pageH, e)}
+                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
+                />
                 {boxes.map(box => (
                   <SimpleBox
                     key={box.id}
@@ -1045,13 +1088,19 @@ export default function ScoreEditorScreen({navigation, route}) {
             <Text style={ui.help}>按第 1、2、3… 页顺序上传。点「上移/下移」调整。</Text>
             <ScrollView style={{maxHeight: 360}}>
               {(pendingFiles?.files || []).map((f, idx) => (
-                <View key={`${f.uri || idx}_${idx}`} style={styles.orderRow}>
+                <View key={`${f.uri || f.dataUri || idx}_${idx}`} style={styles.orderRow}>
                   <Text style={styles.orderBadge}>{idx + 1}</Text>
-                  <Image
-                    source={{uri: f.uri}}
-                    style={styles.orderThumb}
-                    resizeMode="cover"
-                  />
+                  {pendingPreviewUri(f) ? (
+                    <Image
+                      source={{uri: pendingPreviewUri(f)}}
+                      style={styles.orderThumb}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={[styles.orderThumb, styles.orderThumbEmpty]}>
+                      <Text style={styles.orderThumbHint}>预览</Text>
+                    </View>
+                  )}
                   <View style={{flex: 1}}>
                     <Text style={ui.sub} numberOfLines={1}>
                       第 {idx + 1} 页
@@ -1122,11 +1171,7 @@ export default function ScoreEditorScreen({navigation, route}) {
             const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
             const boxes = (manifest?.annotations || []).filter(b => (b.page || 0) === zoomPage.index);
             const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
-            const imgUri = zoomPage.url
-              ? (String(zoomPage.url).startsWith('http')
-                  ? zoomPage.url
-                  : `https://tutujiaolian.com${zoomPage.url}`)
-              : '';
+            const imgUri = scoreImageUri(zoomPage, layoutEpoch);
             return (
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
@@ -1149,6 +1194,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                   }}>
                   {imgUri ? (
                     <Image
+                      key={`zoom-${zoomPage.name || zoomPage.index}-${layoutEpoch}-${scale}`}
                       source={{uri: imgUri}}
                       style={{
                         position: 'absolute',
@@ -1383,8 +1429,15 @@ const styles = StyleSheet.create({
     width: 56,
     height: 72,
     borderRadius: 8,
-    backgroundColor: '#222',
+    backgroundColor: '#F4EFE6',
   },
+  orderThumbEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D0C8B8',
+  },
+  orderThumbHint: {fontSize: 11, color: '#8A7E6A'},
   termOv: {
     position: 'absolute',
     backgroundColor: 'rgba(64, 156, 255, 0.88)',
