@@ -133,6 +133,30 @@ function AppInner(): React.JSX.Element {
       if (boot === 'Detection' || boot === 'DetectionPremium') {
         setBootParams({premium: boot === 'DetectionPremium'});
         setInitialRoute('Detection');
+      } else if (boot === 'ScoreEditor' || boot === 'ScoreEditorPreview') {
+        // Must run before the generic route list — ScoreEditor needs boot params.
+        const raw = (await getItem('verify_boot_params')) || '';
+        let params: Record<string, unknown> = {};
+        if (raw) {
+          try {
+            params = JSON.parse(raw);
+          } catch (e) {
+            params = {};
+          }
+        }
+        if (boot === 'ScoreEditorPreview' && !params.preview) {
+          params = {
+            preview: true,
+            studentId: 'preview',
+            studentName: '预览',
+            pieceName: '预览曲',
+          };
+        }
+        if (raw) {
+          await setItem('verify_boot_params', '');
+        }
+        setBootParams(params);
+        setInitialRoute('ScoreEditor');
       } else if (
         boot &&
         [
@@ -148,19 +172,10 @@ function AppInner(): React.JSX.Element {
           'MainTabs',
           'StudentReminder',
           'StudentEntry',
-          'ScoreEditor',
           'ScoreViewer',
         ].includes(boot)
       ) {
         setInitialRoute(boot);
-      } else if (boot === 'ScoreEditorPreview') {
-        setBootParams({
-          preview: true,
-          studentId: 'preview',
-          studentName: '预览',
-          pieceName: '预览曲',
-        });
-        setInitialRoute('ScoreEditor');
       } else if (tabNames.includes(boot)) {
         setBootParams({screen: boot});
         setInitialRoute('MainTabs');
