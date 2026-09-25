@@ -50,12 +50,21 @@ function scoreImageUri(page, bust) {
 
 function pendingPreviewUri(file) {
   if (!file) return '';
-  if (file.dataUri) return file.dataUri;
-  const u = file.uri || '';
-  if (!u) return '';
-  // iOS 相册偶发给 ph://，Image 读不到 → 顺序页黑块；优先 dataUri
-  if (u.startsWith('ph://') || u.startsWith('assets-library://')) return '';
-  return u;
+  const u = String(file.uri || '');
+  // 顺序页预览：优先可读的本地路径。大图 dataUri 塞进 Image 会整块发白（客户端反馈的「页序异常」）。
+  if (
+    u.startsWith('file://') ||
+    u.startsWith('content://') ||
+    u.startsWith('http://') ||
+    u.startsWith('https://')
+  ) {
+    return u;
+  }
+  if (file.previewUri) return file.previewUri;
+  const d = file.dataUri || '';
+  // 仅小图用 dataUri 预览；上传用的高清 base64 太大，RN Image 会空白
+  if (d && d.length > 0 && d.length < 350000) return d;
+  return '';
 }
 
 function clamp(n, min, max) {
@@ -1095,10 +1104,20 @@ export default function ScoreEditorScreen({navigation, route}) {
                       source={{uri: pendingPreviewUri(f)}}
                       style={styles.orderThumb}
                       resizeMode="cover"
+                      onError={() => {
+                        // file:// 失效或超大图解码失败时，换成占位，避免整块发白
+                        setPendingFiles(prev => {
+                          if (!prev) return prev;
+                          const files = prev.files.map((x, i) =>
+                            i === idx ? {...x, uri: '', previewUri: '', dataUri: ''} : x,
+                          );
+                          return {...prev, files};
+                        });
+                      }}
                     />
                   ) : (
                     <View style={[styles.orderThumb, styles.orderThumbEmpty]}>
-                      <Text style={styles.orderThumbHint}>预览</Text>
+                      <Text style={styles.orderThumbHint}>{idx + 1}</Text>
                     </View>
                   )}
                   <View style={{flex: 1}}>

@@ -4,6 +4,8 @@ import {BASE_URL} from './config';
 const TIMEOUT_MS = 15000;
 // 文件上传（头像 / 声音复刻）更慢：声音复刻服务端还要调百度，给足 120s。
 const UPLOAD_TIMEOUT_MS = 120000;
+// 乐谱上传：服务端还要压图 + 快 OCR，大谱单页可能超过 2 分钟。
+const SCORE_UPLOAD_TIMEOUT_MS = 300000;
 
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -42,14 +44,16 @@ export async function getJson(path, params, headers) {
 }
 
 // 上传 multipart/form-data（不要手动设置 Content-Type，交给 fetch 自动带 boundary）。
-export async function postForm(path, formData, headers) {
+export async function postForm(path, formData, headers, timeoutMs) {
   const res = await withTimeout(
     fetch(BASE_URL + path, {
       method: 'POST',
       headers: {...(headers || {})},
       body: formData,
     }),
-    UPLOAD_TIMEOUT_MS,
+    timeoutMs || UPLOAD_TIMEOUT_MS,
   );
   return res.json();
 }
+
+export {SCORE_UPLOAD_TIMEOUT_MS, UPLOAD_TIMEOUT_MS};

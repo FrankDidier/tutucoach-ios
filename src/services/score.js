@@ -1,4 +1,13 @@
-import {getJson, postForm, postJson} from './api';
+import {getJson, postForm, postJson, SCORE_UPLOAD_TIMEOUT_MS} from './api';
+
+function fileB64Payload(file) {
+  const raw = file?.dataUri || file?.base64 || '';
+  if (!raw) return '';
+  if (raw.indexOf(',') >= 0 && String(raw).toLowerCase().startsWith('data:')) {
+    return raw.split(',', 1)[1] || '';
+  }
+  return raw;
+}
 
 export async function uploadScore(
   teacherId,
@@ -13,12 +22,37 @@ export async function uploadScore(
   fd.append('piece_name', pieceName || '');
   fd.append('mode', mode || 'replace');
   fd.append('uploader', uploader || 'teacher');
-  fd.append('file', {
-    uri: file.uri,
-    type: file.type || 'image/jpeg',
-    name: file.name || 'score.jpg',
-  });
-  return postForm('/api/coach/score/upload', fd);
+  const uri = file?.uri || '';
+  const b64 = fileB64Payload(file);
+  const mime = file?.type || 'image/jpeg';
+  const name = file?.name || 'score.jpg';
+  // iOS 相册偶发 ph:// / assets-library://：FormData 读文件会挂死直到超时。
+  // 有 base64 时改走 file_b64，绕开坏 uri。
+  const badUri =
+    !uri ||
+    uri.startsWith('ph://') ||
+    uri.startsWith('assets-library://') ||
+    uri.startsWith('phassets-library://');
+  if (b64 && (badUri || file?.preferB64)) {
+    fd.append('file_b64', b64);
+    fd.append('file_name', name);
+    fd.append('file_mime', mime);
+  } else if (uri) {
+    fd.append('file', {uri, type: mime, name});
+    // 双保险：uri 传失败时服务端也能用 b64（body 略大，但比超时强）
+    if (b64 && b64.length < 6 * 1024 * 1024) {
+      fd.append('file_b64', b64);
+      fd.append('file_name', name);
+      fd.append('file_mime', mime);
+    }
+  } else if (b64) {
+    fd.append('file_b64', b64);
+    fd.append('file_name', name);
+    fd.append('file_mime', mime);
+  } else {
+    throw new Error('missing_file');
+  }
+  return postForm('/api/coach/score/upload', fd, null, SCORE_UPLOAD_TIMEOUT_MS);
 }
 
 export async function fetchScore(studentId, pieceName, teacherId = '', role = '') {

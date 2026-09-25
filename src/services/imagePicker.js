@@ -9,16 +9,24 @@ try {
 }
 
 function assetToFile(asset, fallbackName) {
-  if (!asset?.uri) return null;
+  if (!asset?.uri && !asset?.base64) return null;
+  const type = asset.type || 'image/jpeg';
   const out = {
-    uri: asset.uri,
-    type: asset.type || 'image/jpeg',
+    uri: asset.uri || '',
+    type,
     name: asset.fileName || fallbackName || `score_${Date.now()}.jpg`,
   };
   // 头像这类要长期存着的图，存 data URI：App 更新后沙盒目录会换名字，
   // 存 file:// 路径的话下次打开就找不到图了。
+  // 乐谱上传也靠 base64 兜底：iOS 偶发 ph://，FormData 读不到会超时。
   if (asset.base64) {
-    out.dataUri = `data:${out.type};base64,${asset.base64}`;
+    out.base64 = asset.base64;
+    out.dataUri = `data:${type};base64,${asset.base64}`;
+    // 顺序页缩略图：高清 dataUri 会让 Image 发白；另存一份短预览（截断 JPEG 不可行，
+    // 这里用「足够小才当 preview」——真正预览优先走 file://，见 pendingPreviewUri）
+    if (asset.base64.length < 260000) {
+      out.previewUri = out.dataUri;
+    }
   }
   return out;
 }
