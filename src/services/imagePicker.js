@@ -40,15 +40,19 @@ export function pickFromGallery(opts = {}) {
       return;
     }
     const limit = opts.selectionLimit == null ? 1 : opts.selectionLimit;
-    picker.launchImageLibrary(
-      {
-        mediaType: 'photo',
-        selectionLimit: limit,
-        maxWidth: opts.maxWidth || 512,
-        maxHeight: opts.maxHeight || 512,
-        quality: opts.quality || 0.88,
-        includeBase64: !!opts.base64,
-      },
+    const optsOut = {
+      mediaType: 'photo',
+      selectionLimit: limit,
+      quality: opts.quality == null ? 0.88 : opts.quality,
+      includeBase64: !!opts.base64,
+      assetRepresentationMode: 'compatible',
+    };
+    // maxWidth: 0 表示不在本机重编码（乐谱顺序预览要马上出来）。缺省仍按头像压到 512。
+    if (opts.maxWidth !== 0) {
+      optsOut.maxWidth = opts.maxWidth || 512;
+      optsOut.maxHeight = opts.maxHeight || opts.maxWidth || 512;
+    }
+    picker.launchImageLibrary(optsOut,
       response => {
         if (response.didCancel) {
           resolve({cancelled: true});

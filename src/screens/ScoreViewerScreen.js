@@ -20,7 +20,7 @@ import {fetchScore, uploadScore, deleteScore} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 
-const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92, base64: true};
+const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
 
 function scoreImageUri(page, bust) {
   const u = page?.url;

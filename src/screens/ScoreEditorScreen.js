@@ -32,7 +32,12 @@ import {
   deleteScore,
 } from '../services/score';
 
-const SCORE_IMG_OPTS = {maxWidth: 1800, maxHeight: 2400, quality: 0.92, base64: true};
+const SCORE_IMG_OPTS = {
+  // maxWidth 0：选图不在手机上重编码/转 base64，顺序预览马上出来。服务端再压图。
+  maxWidth: 0,
+  quality: 1,
+  base64: false,
+};
 
 function scoreImageUri(page, bust) {
   const u = page?.url;
