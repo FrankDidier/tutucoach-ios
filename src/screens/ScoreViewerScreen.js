@@ -376,7 +376,7 @@ export default function ScoreViewerScreen({navigation, route}) {
             </TouchableOpacity>
           </View>
           <Text style={{color: 'rgba(255,255,255,0.72)', fontSize: 12, textAlign: 'center', paddingBottom: 8}}>
-            用下方按钮放大缩小
+            放大后可以上下左右拖动查看
           </Text>
           {zoomPage ? (() => {
             const win = Dimensions.get('window');
@@ -392,8 +392,11 @@ export default function ScoreViewerScreen({navigation, route}) {
             return (
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
-                contentContainerStyle={{alignItems: 'center', paddingVertical: 8, minHeight: zh * scale + 40}}
-                showsVerticalScrollIndicator>
+                contentContainerStyle={{width: zw * scale, height: zh * scale}}
+                bounces
+                directionalLockEnabled={false}
+                showsVerticalScrollIndicator
+                showsHorizontalScrollIndicator>
                 <View style={{width: zw * scale, height: zh * scale, backgroundColor: '#F4EFE6'}}>
                   {imgUri ? (
                     <Image

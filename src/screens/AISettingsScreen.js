@@ -243,7 +243,7 @@ const AISettingsScreen = ({navigation, route}) => {
 
   const onChangeAvatar = async () => {
     if (!requireSaved()) return;
-    const r = await pickFromGallery({maxWidth: 1024, maxHeight: 1024, quality: 0.9});
+    const r = await pickFromGallery({maxWidth: 2048, maxHeight: 2048, quality: 0.92});
     if (r.cancelled) return;
     if (r.error) {
       Alert.alert('选择失败', r.error === 'no_module' ? '图片组件未就绪' : String(r.error));

@@ -205,14 +205,12 @@ export default function CompanionScreen({navigation}) {
             await setCachedCoachAvatarUri(id, uri);
           } catch (e) {}
           // 预热后切换；已缓存同图时 RN 会命中磁盘/内存，几乎瞬时
-          Image.prefetch(uri)
-            .catch(() => {})
-            .finally(() => {
-              if (aliveRef.current) {
-                setAvatarUri(uri);
-                setAvatarBgFailed(false);
-              }
-            });
+          // 马上铺上，不等下载结束。预热只为下次进页更快。
+          if (aliveRef.current) {
+            setAvatarUri(uri);
+            setAvatarBgFailed(false);
+          }
+          Image.prefetch(uri).catch(() => {});
         } else if (aliveRef.current) {
           setAvatarUri(null);
           setAvatarBgFailed(false);
@@ -596,9 +594,9 @@ export default function CompanionScreen({navigation}) {
           // 存 data URI：App 更新后沙盒目录会换名字，存 file:// 路径的话背景就丢了
           const r = await pickFromGallery({
             base64: true,
-            maxWidth: 1080,
-            maxHeight: 1080,
-            quality: 0.78,
+            maxWidth: 2048,
+            maxHeight: 2048,
+            quality: 0.92,
           });
           if (r?.cancelled || r?.error) return;
           const keep = r.dataUri || r.uri;

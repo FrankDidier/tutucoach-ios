@@ -1179,8 +1179,8 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
           <Text style={styles.zoomHint}>
             {tapMode === 'term'
-              ? '点谱面＝认术语 · 用下方按钮放大缩小'
-              : '点谱面＝加分段线 · 用下方按钮放大缩小'}
+              ? '放大后可以拖动查看 · 未放大时点谱面认术语'
+              : '放大后可以拖动查看 · 未放大时点谱面加分段线'}
           </Text>
           {zoomPage ? (() => {
             const win = Dimensions.get('window');
@@ -1200,13 +1200,11 @@ export default function ScoreEditorScreen({navigation, route}) {
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
                 contentContainerStyle={{
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  minHeight: zh * scale + 40,
+                  width: zw * scale,
+                  height: zh * scale,
                 }}
-                maximumZoomScale={1}
-                minimumZoomScale={1}
                 bounces
+                directionalLockEnabled={false}
                 showsVerticalScrollIndicator
                 showsHorizontalScrollIndicator>
                 <View

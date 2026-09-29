@@ -157,6 +157,19 @@ function AppInner(): React.JSX.Element {
         }
         setBootParams(params);
         setInitialRoute('ScoreEditor');
+      } else if (boot === 'ScoreViewer') {
+        const raw = (await getItem('verify_boot_params')) || '';
+        let params: Record<string, unknown> = {};
+        if (raw) {
+          try {
+            params = JSON.parse(raw);
+          } catch (e) {
+            params = {};
+          }
+          await setItem('verify_boot_params', '');
+        }
+        setBootParams(params);
+        setInitialRoute('ScoreViewer');
       } else if (
         boot &&
         [
@@ -237,7 +250,11 @@ function AppInner(): React.JSX.Element {
           component={ScoreEditorScreen}
           initialParams={initialRoute === 'ScoreEditor' ? bootParams : undefined}
         />
-        <Stack.Screen name="ScoreViewer" component={ScoreViewerScreen} />
+        <Stack.Screen
+          name="ScoreViewer"
+          component={ScoreViewerScreen}
+          initialParams={initialRoute === 'ScoreViewer' ? bootParams : undefined}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
