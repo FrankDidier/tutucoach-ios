@@ -626,10 +626,15 @@ export default function CompanionScreen({navigation}) {
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
+  const remoteSource = uri => {
+    if (!uri) return null;
+    if (String(uri).startsWith('http')) return {uri, cache: 'force-cache'};
+    return {uri};
+  };
   const bgSource = bgUri
-    ? {uri: bgUri}
+    ? remoteSource(bgUri)
     : avatarUri && !avatarBgFailed
-      ? {uri: avatarUri}
+      ? remoteSource(avatarUri)
       : Images.companionPhoto;
   // 必须用窗口像素铺满：部分机型上 Image 会按素材 intrinsic 宽（如 375）排版，
   // 在 iPhone 16 Pro(393) 等更宽屏右侧露出黑边。
@@ -694,7 +699,7 @@ export default function CompanionScreen({navigation}) {
             activeOpacity={0.7}
             onPress={() => navigation.navigate('AISelect')}>
             <Image
-              source={avatarUri ? {uri: avatarUri} : Images.coachPro}
+              source={avatarUri ? (String(avatarUri).startsWith('http') ? {uri: avatarUri, cache: 'force-cache'} : {uri: avatarUri}) : Images.coachPro}
               style={styles.headerAvatar}
             />
             <Text style={styles.coachName} numberOfLines={1}>

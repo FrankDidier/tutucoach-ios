@@ -29,6 +29,7 @@ import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
 import {initDeviceId, getDeviceId} from './src/services/device';
+import {getSelectedCoachId, getCachedCoachAvatarUri} from './src/services/coachPrefs';
 import {registerAccount} from './src/services/account';
 import {registerWeChat} from './src/services/wechat';
 import {ThemeProvider, useTheme} from './src/theme/ThemeContext';
@@ -105,6 +106,14 @@ function AppInner(): React.JSX.Element {
     (async () => {
       // 先固化稳定设备 ID（账号/会员/练习/入班绑定都依赖它），再决定首屏。
       await initDeviceId();
+      // 一进 App 就开始下陪练照片，老师拿给朋友看时不用等进到那一页才开始读。
+      try {
+        const coachId = await getSelectedCoachId();
+        const avatar = await getCachedCoachAvatarUri(coachId);
+        if (avatar && String(avatar).startsWith('http')) {
+          Image.prefetch(String(avatar)).catch(() => {});
+        }
+      } catch (e) {}
       // 冷启动即静默注册到服务端，避免学生没进过「我的」导致老师入班找不到 ID。
       try {
         await registerAccount(getDeviceId(), 'student');

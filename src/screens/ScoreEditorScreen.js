@@ -39,16 +39,18 @@ const SCORE_IMG_OPTS = {
   base64: false,
 };
 
-function scoreImageUri(page, bust) {
+function scoreImageUri(page, retry) {
   const u = page?.url;
   if (!u) return '';
   let out = String(u);
   if (!(out.startsWith('http') || out.startsWith('data:'))) {
     out = `https://tutujiaolian.com${out}`;
   }
-  // 旋转/重进后偶发 Image 缓存空白；http(s) 加 bust 强制重拉，data: 不动
-  if (bust && out.startsWith('http')) {
-    out += (out.includes('?') ? '&' : '?') + `_e=${encodeURIComponent(bust)}`;
+  // 地址本身带文件时间，重进不要再改地址，否则加载中的图会被拆掉，只剩米色底和术语条。
+  // 只有这一页真的加载失败，才加一次重试参数。
+  const n = Number(retry) || 0;
+  if (n > 0 && out.startsWith('http')) {
+    out += (out.includes('?') ? '&' : '?') + `_e=${n}`;
   }
   return out;
 }
@@ -169,11 +171,10 @@ function normDividers(arr) {
 export default function ScoreEditorScreen({navigation, route}) {
   const {colors} = useTheme();
   const ui = useMemo(() => makeStyles(colors), [colors]);
-  const {width: winW, height: winH} = useWindowDimensions();
+  const {width: winW} = useWindowDimensions();
   const pageW = winW - 32;
-  // 旋转/尺寸变化时强制 Image 重挂，避免「退出重进 / 横竖屏后谱面消失」
-  const [imgEpoch, setImgEpoch] = useState(0);
-  const layoutEpoch = `${Math.round(winW)}x${Math.round(winH)}-${imgEpoch}`;
+  // 只在某一页加载失败时 +1，最多两次。不要在退出重进或转屏时改图片地址。
+  const [imgRetry, setImgRetry] = useState({});
 
   const {studentId = '', studentName = '', pieceName = '', lines = []} = route?.params || {};
   const [loading, setLoading] = useState(true);
@@ -224,7 +225,6 @@ export default function ScoreEditorScreen({navigation, route}) {
       setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
       setDividers(normDividers(m?.dividers));
       setNaturalSizes({});
-      setImgEpoch(e => e + 1);
     } catch (e) {
       setManifest(null);
       setTerms([]);
@@ -240,19 +240,13 @@ export default function ScoreEditorScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, pieceName]);
 
-  // 退出重进 / 从后台回来：强制 Image 重挂，避免谱面空白
-  useEffect(() => {
-    const unsub = navigation?.addListener?.('focus', () => {
-      setImgEpoch(e => e + 1);
+  const retryPage = key => {
+    setImgRetry(prev => {
+      const n = prev[key] || 0;
+      if (n >= 2) return prev;
+      return {...prev, [key]: n + 1};
     });
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, [navigation]);
-
-  useEffect(() => {
-    setImgEpoch(e => e + 1);
-  }, [winW, winH]);
+  };
 
   const doUpload = async (picker, {forceReplace = false} = {}) => {
     const picked = await picker();
@@ -863,10 +857,11 @@ export default function ScoreEditorScreen({navigation, route}) {
               <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
                 {page.url ? (
                   <Image
-                    key={`img-${key}-${layoutEpoch}`}
-                    source={{uri: scoreImageUri(page, layoutEpoch)}}
+                    key={`img-${key}-${imgRetry[key] || 0}`}
+                    source={{uri: scoreImageUri(page, imgRetry[key] || 0), cache: 'force-cache'}}
                     style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
                     resizeMode="contain"
+                    onError={() => retryPage(key)}
                     onLoad={e => {
                       const src = e?.nativeEvent?.source || {};
                       const w = Number(src.width) || 0;
@@ -1195,7 +1190,8 @@ export default function ScoreEditorScreen({navigation, route}) {
             const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
             const boxes = (manifest?.annotations || []).filter(b => (b.page || 0) === zoomPage.index);
             const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
-            const imgUri = scoreImageUri(zoomPage, layoutEpoch);
+            const zoomKey = zoomPage.name || String(zoomPage.index);
+            const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
             return (
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
@@ -1216,8 +1212,8 @@ export default function ScoreEditorScreen({navigation, route}) {
                   }}>
                   {imgUri ? (
                     <Image
-                      key={`zoom-${zoomPage.name || zoomPage.index}-${layoutEpoch}-${scale}`}
-                      source={{uri: imgUri}}
+                      key={`zoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
+                      source={{uri: imgUri, cache: 'force-cache'}}
                       style={{
                         position: 'absolute',
                         left: 0,
@@ -1226,6 +1222,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                         height: zh * scale,
                       }}
                       resizeMode="contain"
+                      onError={() => retryPage(zoomKey)}
                     />
                   ) : (
                     <View

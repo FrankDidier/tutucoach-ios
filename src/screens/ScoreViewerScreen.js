@@ -22,15 +22,16 @@ import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 
 const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
 
-function scoreImageUri(page, bust) {
+function scoreImageUri(page, retry) {
   const u = page?.url;
   if (!u) return '';
   let out = String(u);
   if (!(out.startsWith('http') || out.startsWith('data:'))) {
     out = `https://tutujiaolian.com${out}`;
   }
-  if (bust && out.startsWith('http')) {
-    out += (out.includes('?') ? '&' : '?') + `_e=${encodeURIComponent(bust)}`;
+  const n = Number(retry) || 0;
+  if (n > 0 && out.startsWith('http')) {
+    out += (out.includes('?') ? '&' : '?') + `_e=${n}`;
   }
   return out;
 }
@@ -55,10 +56,9 @@ function pageFrameHeight(pageW, page, natural) {
 export default function ScoreViewerScreen({navigation, route}) {
   const {colors} = useTheme();
   const ui = useMemo(() => makeStyles(colors), [colors]);
-  const {width: winW, height: winH} = useWindowDimensions();
+  const {width: winW} = useWindowDimensions();
   const pageW = winW - 32;
-  const [imgEpoch, setImgEpoch] = useState(0);
-  const layoutEpoch = `${Math.round(winW)}x${Math.round(winH)}-${imgEpoch}`;
+  const [imgRetry, setImgRetry] = useState({});
   const {studentId = '', pieceName = ''} = route?.params || {};
   const sid = studentId || getDeviceId();
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,6 @@ export default function ScoreViewerScreen({navigation, route}) {
       const r = await fetchScore(sid, pieceName, '', 'student');
       setManifest(r?.manifest || null);
       setNaturalSizes({});
-      setImgEpoch(e => e + 1);
     } catch (e) {
       setManifest(null);
     } finally {
@@ -87,18 +86,13 @@ export default function ScoreViewerScreen({navigation, route}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceName, studentId]);
 
-  useEffect(() => {
-    const unsub = navigation?.addListener?.('focus', () => {
-      setImgEpoch(e => e + 1);
+  const retryPage = key => {
+    setImgRetry(prev => {
+      const n = prev[key] || 0;
+      if (n >= 2) return prev;
+      return {...prev, [key]: n + 1};
     });
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, [navigation]);
-
-  useEffect(() => {
-    setImgEpoch(e => e + 1);
-  }, [winW, winH]);
+  };
 
   const onStudentUpload = () => {
     Alert.alert('上传乐谱', '请选择来源', [
@@ -278,10 +272,11 @@ export default function ScoreViewerScreen({navigation, route}) {
               </View>
               <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
                 <Image
-                  key={`vimg-${key}-${layoutEpoch}`}
-                  source={{uri: scoreImageUri(page, layoutEpoch)}}
+                  key={`vimg-${key}-${imgRetry[key] || 0}`}
+                  source={{uri: scoreImageUri(page, imgRetry[key] || 0), cache: 'force-cache'}}
                   style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH, borderRadius: 12}}
                   resizeMode="contain"
+                  onError={() => retryPage(key)}
                   onLoad={e => {
                     const src = e?.nativeEvent?.source || {};
                     const w = Number(src.width) || 0;
@@ -388,7 +383,8 @@ export default function ScoreViewerScreen({navigation, route}) {
             const pageTerms = (manifest?.term_overlays || []).filter(
               t => (t.page || 0) === zoomPage.index,
             );
-            const imgUri = scoreImageUri(zoomPage, layoutEpoch);
+            const zoomKey = key;
+            const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
             return (
               <ScrollView
                 style={{flex: 1, backgroundColor: '#F4EFE6'}}
@@ -400,10 +396,11 @@ export default function ScoreViewerScreen({navigation, route}) {
                 <View style={{width: zw * scale, height: zh * scale, backgroundColor: '#F4EFE6'}}>
                   {imgUri ? (
                     <Image
-                      key={`vzoom-${zoomPage.name || zoomPage.index}-${layoutEpoch}-${scale}`}
-                      source={{uri: imgUri}}
+                      key={`vzoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
+                      source={{uri: imgUri, cache: 'force-cache'}}
                       style={{width: zw * scale, height: zh * scale}}
                       resizeMode="contain"
+                      onError={() => retryPage(zoomKey)}
                     />
                   ) : null}
                   {pageTerms.map(ov => {
