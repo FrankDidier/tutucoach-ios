@@ -29,7 +29,14 @@ import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
 import {initDeviceId, getDeviceId} from './src/services/device';
-import {getSelectedCoachId, getCachedCoachAvatarUri} from './src/services/coachPrefs';
+import {
+  getSelectedCoachId,
+  getCachedCoachAvatarUri,
+  getCachedCoachAvatarThumb,
+  previewAvatarUrl,
+  rememberCoachAvatarThumb,
+  rememberCompanionPhoto,
+} from './src/services/coachPrefs';
 import {registerAccount} from './src/services/account';
 import {registerWeChat} from './src/services/wechat';
 import {ThemeProvider, useTheme} from './src/theme/ThemeContext';
@@ -110,16 +117,18 @@ function AppInner(): React.JSX.Element {
       try {
         const coachId = await getSelectedCoachId();
         const avatar = await getCachedCoachAvatarUri(coachId);
+        const thumb = avatar ? await getCachedCoachAvatarThumb(coachId) : null;
+        rememberCompanionPhoto(coachId, avatar, thumb);
         if (avatar && String(avatar).startsWith('http')) {
+          const preview = previewAvatarUrl(String(avatar));
+          if (preview) Image.prefetch(preview).catch(() => {});
           Image.prefetch(String(avatar)).catch(() => {});
+          if (!thumb) rememberCoachAvatarThumb(coachId, String(avatar));
         }
       } catch (e) {}
       // 冷启动即静默注册到服务端，避免学生没进过「我的」导致老师入班找不到 ID。
-      try {
-        await registerAccount(getDeviceId(), 'student');
-      } catch (e) {
-        // 网络失败下次启动再试，不阻塞首屏
-      }
+      // 不等它返回，否则进陪练要先卡住账号请求。
+      registerAccount(getDeviceId(), 'student').catch(() => {});
       // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
       registerWeChat();
       // Lanhu emulator audit: seed via AsyncStorage keys set before launch

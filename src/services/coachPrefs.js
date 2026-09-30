@@ -5,7 +5,29 @@ import {builtInProfiles, getDefaultProfile} from '../utils/coachProfiles';
 const K_COACH = 'coach_profile_id';
 const K_VOICE_ENABLED = 'ai_voice_enabled';
 const K_AVATAR_CACHE_PREFIX = 'companion_avatar_uri:';
+const K_AVATAR_THUMB_PREFIX = 'companion_avatar_thumb:';
 const K_PROFILE_CACHE_PREFIX = 'companion_profile:';
+
+// 进陪练页的第一帧就能用，不用再等 AsyncStorage。
+const memPhoto = {coachId: null, uri: null, thumb: null};
+
+export function peekCompanionPhoto() {
+  return memPhoto;
+}
+
+export function rememberCompanionPhoto(coachId, uri, thumb) {
+  if (coachId) memPhoto.coachId = coachId;
+  if (uri) memPhoto.uri = String(uri);
+  if (thumb && String(thumb).startsWith('data:image')) memPhoto.thumb = thumb;
+}
+
+/** 进门先用的小图。同一张照片，体积大约是清楚图的十分之一。 */
+export function previewAvatarUrl(uri) {
+  if (!uri || !String(uri).startsWith('http')) return null;
+  const s = String(uri);
+  if (/[?&]p=1(&|$)/.test(s)) return s;
+  return s + (s.includes('?') ? '&' : '?') + 'p=1';
+}
 
 export async function getSelectedCoachId() {
   return (await getItem(K_COACH)) || 'coach_pro';
@@ -24,6 +46,35 @@ export async function getCachedCoachAvatarUri(coachId) {
 export async function setCachedCoachAvatarUri(coachId, uri) {
   if (!coachId || !uri) return;
   await setItem(K_AVATAR_CACHE_PREFIX + coachId, String(uri));
+}
+
+/** 上次已经看过的小图，下次进陪练不用等网络。 */
+export async function getCachedCoachAvatarThumb(coachId) {
+  if (!coachId) return null;
+  const v = await getItem(K_AVATAR_THUMB_PREFIX + coachId);
+  return v && String(v).startsWith('data:image') ? v : null;
+}
+
+export async function rememberCoachAvatarThumb(coachId, uri) {
+  if (!coachId || !uri) return;
+  try {
+    const preview = previewAvatarUrl(uri);
+    if (!preview) return;
+    const res = await fetch(preview);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    if (!blob || blob.size < 400 || blob.size > 180000) return;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('thumb'));
+      reader.readAsDataURL(blob);
+    });
+    if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image') && dataUrl.length < 250000) {
+      await setItem(K_AVATAR_THUMB_PREFIX + coachId, dataUrl);
+      rememberCompanionPhoto(coachId, uri, dataUrl);
+    }
+  } catch (e) {}
 }
 
 /**

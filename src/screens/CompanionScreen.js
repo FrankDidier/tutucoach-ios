@@ -64,10 +64,14 @@ import {
   getSelectedCoachId,
   getCachedCoachAvatarUri,
   setCachedCoachAvatarUri,
+  getCachedCoachAvatarThumb,
+  rememberCoachAvatarThumb,
+  previewAvatarUrl,
   getCachedCoachProfile,
   setCachedCoachProfile,
   profileById,
   isVoiceEnabled,
+  peekCompanionPhoto,
 } from '../services/coachPrefs';
 import {fetchCoaches} from '../services/coach';
 import MetronomeCard from '../components/MetronomeCard';
@@ -80,8 +84,11 @@ let bubbleKey = 1;
 export default function CompanionScreen({navigation}) {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const primed = peekCompanionPhoto();
   const [coachName, setCoachName] = useState('专业老师');
-  const [avatarUri, setAvatarUri] = useState(null);
+  const [avatarUri, setAvatarUri] = useState(primed.uri || null);
+  const [thumbData, setThumbData] = useState(primed.thumb || null);
+  const [sharpReady, setSharpReady] = useState(false);
   const [avatarBgFailed, setAvatarBgFailed] = useState(false);
   const [bgUri, setBgUri] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -94,6 +101,7 @@ export default function CompanionScreen({navigation}) {
   const scrollRef = useRef(null);
   const profileRef = useRef(profileById('coach_pro'));
   const coachIdRef = useRef('coach_pro');
+  const avatarUriRef = useRef(peekCompanionPhoto().uri || null);
   const studentIdRef = useRef('');
   const historyRef = useRef([]); // [{role, content}]
   const remindersRef = useRef([]);
@@ -154,9 +162,15 @@ export default function CompanionScreen({navigation}) {
     }
     // 瞬时：用上次成功的头像 URL 铺背景（第二次及以后进陪练不再「等一下才出图」）
     try {
-      const cached = await getCachedCoachAvatarUri(id);
-      if (aliveRef.current && cached) {
+      const [cached, thumb] = await Promise.all([
+        getCachedCoachAvatarUri(id),
+        getCachedCoachAvatarThumb(id),
+      ]);
+      if (aliveRef.current && thumb) setThumbData(thumb);
+      if (aliveRef.current && cached && cached !== avatarUriRef.current) {
+        avatarUriRef.current = cached;
         setAvatarUri(cached);
+        setSharpReady(false);
         setAvatarBgFailed(false);
       }
     } catch (e) {}
@@ -206,12 +220,18 @@ export default function CompanionScreen({navigation}) {
           } catch (e) {}
           // 预热后切换；已缓存同图时 RN 会命中磁盘/内存，几乎瞬时
           // 马上铺上，不等下载结束。预热只为下次进页更快。
-          if (aliveRef.current) {
+          if (aliveRef.current && uri !== avatarUriRef.current) {
+            avatarUriRef.current = uri;
             setAvatarUri(uri);
+            setSharpReady(false);
             setAvatarBgFailed(false);
           }
+          const preview = previewAvatarUrl(uri);
+          if (preview) Image.prefetch(preview).catch(() => {});
           Image.prefetch(uri).catch(() => {});
+          rememberCoachAvatarThumb(id, uri);
         } else if (aliveRef.current) {
+          avatarUriRef.current = null;
           setAvatarUri(null);
           setAvatarBgFailed(false);
         }
@@ -631,10 +651,12 @@ export default function CompanionScreen({navigation}) {
     if (String(uri).startsWith('http')) return {uri, cache: 'force-cache'};
     return {uri};
   };
+  const showRole = !bgUri && avatarUri && !avatarBgFailed;
+  const previewUri = showRole ? (thumbData || previewAvatarUrl(avatarUri)) : null;
   const bgSource = bgUri
     ? remoteSource(bgUri)
-    : avatarUri && !avatarBgFailed
-      ? remoteSource(avatarUri)
+    : previewUri
+      ? remoteSource(previewUri)
       : Images.companionPhoto;
   // 必须用窗口像素铺满：部分机型上 Image 会按素材 intrinsic 宽（如 375）排版，
   // 在 iPhone 16 Pro(393) 等更宽屏右侧露出黑边。
@@ -655,7 +677,7 @@ export default function CompanionScreen({navigation}) {
       <View style={styles.bgLayer} pointerEvents="box-none">
         <Image
           source={bgSource}
-          defaultSource={Images.companionPhoto}
+          defaultSource={previewUri ? undefined : Images.companionPhoto}
           style={bgFillStyle}
           resizeMode="cover"
           onError={() => {
@@ -668,6 +690,14 @@ export default function CompanionScreen({navigation}) {
             else if (avatarUri && !avatarBgFailed) setAvatarBgFailed(true);
           }}
         />
+        {showRole ? (
+          <Image
+            source={remoteSource(avatarUri)}
+            style={[bgFillStyle, {opacity: sharpReady ? 1 : 0}]}
+            resizeMode="cover"
+            onLoad={() => setSharpReady(true)}
+          />
+        ) : null}
         {/* 仅长按换背景：不拦截点击，避免挡住聊天/节拍器 */}
         <TouchableOpacity
           activeOpacity={1}
