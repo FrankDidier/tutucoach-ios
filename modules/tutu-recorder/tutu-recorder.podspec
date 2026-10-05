@@ -16,4 +16,5 @@ Pod::Spec.new do |s|
   s.public_header_files = "ios/**/*.h"
 
   s.dependency "React-Core"
+  s.frameworks = "AVFoundation", "Speech"
 end

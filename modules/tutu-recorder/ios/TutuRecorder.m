@@ -1,9 +1,15 @@
 #import "TutuRecorder.h"
+#import <Speech/Speech.h>
 
 @interface TutuRecorder ()
 @property(nonatomic, strong) AVAudioRecorder *recorder;
 @property(nonatomic, strong) NSURL *fileURL;
 @property(nonatomic, assign) NSTimeInterval startTime;
+@property(nonatomic, strong) AVAudioRecorder *meter;
+@property(nonatomic, strong) AVAudioEngine *listenEngine;
+@property(nonatomic, strong) SFSpeechRecognizer *recognizer;
+@property(nonatomic, strong) SFSpeechAudioBufferRecognitionRequest *speechRequest;
+@property(nonatomic, strong) SFSpeechRecognitionTask *speechTask;
 @end
 
 @implementation TutuRecorder
@@ -100,6 +106,134 @@ RCT_EXPORT_METHOD(cancel:(RCTPromiseResolveBlock)resolve
   }
   [self restorePlaybackSession];
   resolve(@{@"ok": @YES});
+}
+
+// 陪练听琴：只回一个 0~1 的响度，用来判断有没有在弹、稳不稳。
+RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if ((self.recorder && self.recorder.recording) || self.listenEngine != nil) {
+    resolve(@{@"rms": @0});
+    return;
+  }
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+  [session requestRecordPermission:^(BOOL granted) {
+    if (!granted) {
+      resolve(@{@"rms": @0});
+      return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSError *err = nil;
+      if (self.meter == nil || !self.meter.recording) {
+        [session setCategory:AVAudioSessionCategoryPlayAndRecord
+                 withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers
+                       error:&err];
+        [session setActive:YES error:&err];
+        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tutu_meter.caf"];
+        NSDictionary *settings = @{
+          AVFormatIDKey: @(kAudioFormatLinearPCM),
+          AVSampleRateKey: @16000.0,
+          AVNumberOfChannelsKey: @1,
+          AVLinearPCMBitDepthKey: @16,
+          AVLinearPCMIsFloatKey: @NO,
+        };
+        self.meter = [[AVAudioRecorder alloc] initWithURL:[NSURL fileURLWithPath:path]
+                                                 settings:settings
+                                                    error:&err];
+        self.meter.meteringEnabled = YES;
+        [self.meter prepareToRecord];
+        [self.meter record];
+      }
+      [self.meter updateMeters];
+      float db = [self.meter averagePowerForChannel:0];
+      float rms = (db + 45.f) / 45.f;
+      if (rms < 0) rms = 0;
+      if (rms > 1) rms = 1;
+      resolve(@{@"rms": @(rms)});
+    });
+  }];
+}
+
+RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.meter) {
+    [self.meter stop];
+    self.meter = nil;
+  }
+  resolve(@{@"ok": @YES});
+}
+
+// 听学生说一句。没有权限或听不到时返回空字符串，不报错。
+RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
+    if (status != SFSpeechRecognizerAuthorizationStatusAuthorized) {
+      resolve(@{@"text": @""});
+      return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.meter) {
+        [self.meter stop];
+        self.meter = nil;
+      }
+      if (self.listenEngine) {
+        resolve(@{@"text": @""});
+        return;
+      }
+      NSError *err = nil;
+      AVAudioSession *session = [AVAudioSession sharedInstance];
+      [session setCategory:AVAudioSessionCategoryPlayAndRecord
+               withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers
+                     error:&err];
+      [session setActive:YES error:&err];
+      if (self.recognizer == nil) {
+        self.recognizer = [[SFSpeechRecognizer alloc] initWithLocale:[NSLocale localeWithLocaleIdentifier:@"zh-CN"]];
+      }
+      self.speechRequest = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
+      self.speechRequest.shouldReportPartialResults = YES;
+      AVAudioEngine *engine = [[AVAudioEngine alloc] init];
+      self.listenEngine = engine;
+      AVAudioInputNode *input = engine.inputNode;
+      AVAudioFormat *format = [input outputFormatForBus:0];
+      __block BOOL done = NO;
+      __block NSString *latest = @"";
+      void (^finish)(NSString *) = ^(NSString *text) {
+        if (done) return;
+        done = YES;
+        [input removeTapOnBus:0];
+        [engine stop];
+        [self.speechTask cancel];
+        self.speechTask = nil;
+        self.speechRequest = nil;
+        self.listenEngine = nil;
+        [self restorePlaybackSession];
+        resolve(@{@"text": text ?: @""});
+      };
+      [input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
+        [self.speechRequest appendAudioPCMBuffer:buf];
+      }];
+      [engine prepare];
+      if (![engine startAndReturnError:&err]) {
+        self.listenEngine = nil;
+        resolve(@{@"text": @""});
+        return;
+      }
+      self.speechTask = [self.recognizer recognitionTaskWithRequest:self.speechRequest
+                                                      resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
+        if (result.bestTranscription.formattedString.length) {
+          latest = result.bestTranscription.formattedString;
+        }
+        if (result.final || error) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+            finish(latest);
+          });
+        }
+      }];
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self.speechRequest endAudio];
+        finish(latest);
+      });
+    });
+  }];
 }
 
 @end

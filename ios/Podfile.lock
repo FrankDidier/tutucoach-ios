@@ -2096,7 +2096,7 @@ SPEC CHECKSUMS:
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   TextToSpeech: 89b239221ec378d213af422d14789a729705360b
   tutu-detector: 1f84e886cde532c0092174c6c7fd0efd069b5f1d
-  tutu-recorder: 94ba49c4c453f89cfa63c0c0522830ac6a92fd06
+  tutu-recorder: c8ab716a232ac0a3222371c9f89d94929f34190d
   tutu-wechat: 32bc271b5807e5a10e512e5c6ca77d6b425413d2
   WechatOpenSDK-XCFramework: 36fb2bea0754266c17184adf4963d7e6ff98b69f
   Yoga: feb4910aba9742cfedc059e2b2902e22ffe9954a

@@ -424,6 +424,11 @@ export default function LessonPlanScreen({navigation}) {
               );
             })}
           </View>
+          <TouchableOpacity
+            style={[styles.modeTab, {marginBottom: 12}]}
+            onPress={() => navigation.navigate('LessonCapture')}>
+            <Text style={styles.modeTabText}>上课录音</Text>
+          </TouchableOpacity>
 
           {mode === 'plan' ? (
           <>

@@ -187,4 +187,85 @@ export async function savePieces(teacherId, studentId, studentName, pieces, freq
   }
 }
 
-export default {chat, fetchReminders, savePieces};
+/** 第二轮：问服务端这一轮该说什么。失败时返回空，调用方不要自己改规则。 */
+export async function planCompanion(body) {
+  try {
+    const resp = await postJson('/api/companion/plan', body || {}, null, 8000);
+    if (!resp || !resp.ok) return null;
+    return resp;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 塔罗那一句交给最强调版。失败就用牌面自带的那句。 */
+export async function refineTarot(label) {
+  try {
+    const resp = await postJson('/api/companion/tarot', {label: label || ''}, null, 20000);
+    if (!resp || !resp.ok || !resp.tarot) return null;
+    return resp.tarot;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function saveCompanionProfile(studentId, fields) {
+  try {
+    const resp = await postJson('/api/companion/profile', {
+      student_id: studentId || '',
+      ...(fields || {}),
+    });
+    return !!(resp && resp.ok);
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function startLesson(teacherId, studentId) {
+  try {
+    const resp = await postJson('/api/lesson/start', {
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+    });
+    return resp && resp.ok ? resp : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function pushLessonChunk(sessionId, text) {
+  try {
+    const resp = await postJson('/api/lesson/chunk', {
+      session_id: sessionId || '',
+      text: text || '',
+    }, null, 25000);
+    return resp && resp.ok ? resp : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function confirmLesson(sessionId, teacherId, studentId, segments) {
+  try {
+    const resp = await postJson('/api/lesson/confirm', {
+      session_id: sessionId || '',
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+      segments: segments || [],
+    });
+    return resp && resp.ok ? resp : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export default {
+  chat,
+  fetchReminders,
+  savePieces,
+  planCompanion,
+  saveCompanionProfile,
+  startLesson,
+  pushLessonChunk,
+  confirmLesson,
+};

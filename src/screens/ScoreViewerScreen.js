@@ -19,6 +19,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import {fetchScore, uploadScore, deleteScore} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
+import {peekCompanionTarot} from '../services/companionTarot';
 
 const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
 
@@ -62,6 +63,7 @@ export default function ScoreViewerScreen({navigation, route}) {
   const {studentId = '', pieceName = ''} = route?.params || {};
   const sid = studentId || getDeviceId();
   const [loading, setLoading] = useState(true);
+  const [tarot, setTarot] = useState(peekCompanionTarot());
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null);
   const [naturalSizes, setNaturalSizes] = useState({});
@@ -85,6 +87,11 @@ export default function ScoreViewerScreen({navigation, route}) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceName, studentId]);
+
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', () => setTarot(peekCompanionTarot()));
+    return unsub;
+  }, [navigation]);
 
   const retryPage = key => {
     setImgRetry(prev => {
@@ -288,6 +295,26 @@ export default function ScoreViewerScreen({navigation, route}) {
                     }
                   }}
                 />
+                {tarot && tarot.piece === pieceName && (tarot.page || 0) === page.index ? (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      left: 8,
+                      top: Math.max(8, (tarot.y || 0) * pageH),
+                      maxWidth: pageW * 0.72,
+                      backgroundColor: 'rgba(28, 18, 48, 0.88)',
+                      borderRadius: 10,
+                      paddingHorizontal: 8,
+                      paddingVertical: 6,
+                      zIndex: 20,
+                    }}>
+                    <Text style={{color: '#F3D48A', fontSize: 12, fontWeight: '700'}}>
+                      {tarot.name}
+                    </Text>
+                    <Text style={{color: '#FFFFFF', fontSize: 12}}>{tarot.line}</Text>
+                  </View>
+                ) : null}
                 {boxes.map(box => (
                   <View
                     key={box.id}

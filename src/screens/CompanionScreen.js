@@ -16,6 +16,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  AppState,
   useWindowDimensions,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -23,7 +24,8 @@ import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
 import {syncPractice} from '../services/account';
-import {chat, fetchReminders} from '../services/companionChat';
+import {chat, fetchReminders, saveCompanionProfile} from '../services/companionChat';
+import {createCompanionSession} from '../services/companionSession';
 import {pickFromGallery} from '../services/imagePicker';
 import {
   getCompanionBgUri,
@@ -123,6 +125,8 @@ export default function CompanionScreen({navigation}) {
   /** Keep companion TTS running while viewing score. */
   const scoreViewerOpenRef = useRef(false);
   const sessionStartRef = useRef(0); // 本次陪练开始时间，退出时计入练琴时长
+  const roundRef = useRef(null);
+  const [tarotOn, setTarotOn] = useState(false);
   const activeTimerRef = useRef(null); // 只累计前台时间（切到别的软件不计）
 
   // 退出陪练时，把本次时长计入练琴统计（match_rate=-1：只算时长、不参与正确率平均）。
@@ -293,11 +297,33 @@ export default function CompanionScreen({navigation}) {
         }
       } catch (e) {}
 
-      openingGreeting();
-      scheduleProactive();
+      roundRef.current = createCompanionSession({
+        studentId: () => studentIdRef.current,
+        pieceName: () =>
+          pieceIdxRef.current >= 0 && piecesRef.current[pieceIdxRef.current]
+            ? piecesRef.current[pieceIdxRef.current].name
+            : '',
+        globalLines: () => (remindersRef.current || []).slice(),
+        coachId: () => coachIdRef.current,
+        studentName: () => studentNameSafe(),
+        history: () => historyRef.current,
+        isPaused: () => pausedRef.current && !scoreViewerOpenRef.current,
+        isTyping: () => typingRef.current,
+        speak: text => {
+          if (text) addAiBubble(text, true);
+        },
+        pushAssistant: text => pushHistory('assistant', text),
+        onHeard: text => onSendText(text),
+      });
+      roundRef.current.start();
     })();
 
     return () => {
+      if (roundRef.current) {
+        const round = roundRef.current;
+        roundRef.current = null;
+        round.finish();
+      }
       aliveRef.current = false;
       pausedRef.current = true;
       recordCompanionPractice();
@@ -359,9 +385,15 @@ export default function CompanionScreen({navigation}) {
         stopSpeak();
       } catch (e) {}
     });
+    const appState = AppState.addEventListener('change', next => {
+      if (!roundRef.current) return;
+      if (next === 'background') roundRef.current.onBackground();
+      else if (next === 'active') roundRef.current.onForeground();
+    });
     return () => {
       unsubFocus();
       unsubBlur();
+      appState.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
@@ -380,11 +412,12 @@ export default function CompanionScreen({navigation}) {
     if (!piecesRef.current.length) return;
     const opts = piecesRef.current.map((p, i) => ({
       text: p.name || '曲目' + (i + 1),
-      onPress: () => {
+        onPress: () => {
         pieceIdxRef.current = i;
         applyPiece(i);
         setPieceIdx(i);
         nextContextualRef.current = false;
+        if (roundRef.current) roundRef.current.setPiece(piecesRef.current[i].name);
       },
     }));
     opts.push({text: '取消', style: 'cancel'});
@@ -560,12 +593,9 @@ export default function CompanionScreen({navigation}) {
   };
 
   // ============ 学生打字 ============
-  const onSend = () => {
-    const text = input.trim();
+  const onSendText = text => {
     if (!text) return;
-    setInput('');
-    Keyboard.dismiss();
-    clearTyping();
+    if (roundRef.current) roundRef.current.noteAnswer(text);
     addUserBubble(text);
     pushHistory('user', text);
     setSending(true);
@@ -587,6 +617,15 @@ export default function CompanionScreen({navigation}) {
         setSending(false);
         busyRef.current = false;
       });
+  };
+
+  const onSend = () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    Keyboard.dismiss();
+    clearTyping();
+    onSendText(text);
   };
 
   const toggleMute = () => {
@@ -756,6 +795,16 @@ export default function CompanionScreen({navigation}) {
             <TouchableOpacity style={{flex: 1}} onPress={pickPiece}>
               <Text style={styles.pieceText}>🎵 当前曲目：{pieceName}  ▾</Text>
             </TouchableOpacity>
+            {pieceIdx >= 0 && pieceIdx < pieces.length ? (
+              <TouchableOpacity
+                onPress={() => {
+                  const next = !tarotOn;
+                  setTarotOn(next);
+                  saveCompanionProfile(studentIdRef.current, {tarot_on: next});
+                }}>
+                <Text style={styles.pieceViewBtn}>{tarotOn ? '塔罗开' : '塔罗'}</Text>
+              </TouchableOpacity>
+            ) : null}
             {pieceIdx >= 0 && pieceIdx < pieces.length ? (
               <TouchableOpacity
                 onPress={() => {
