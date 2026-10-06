@@ -25,6 +25,20 @@ export function createCompanionSession(host) {
   let busyCount = 0;
   let tarotOn = false;
   let inBackground = false;
+  let lastSpokenText = '';
+  let awaitingField = '';
+  let listening = false;
+  let listenAgainPlan = null;
+
+  const echoes = (said, heard) => {
+    const a = String(said || '').replace(/\s/g, '');
+    const b = String(heard || '').replace(/\s/g, '');
+    if (a.length < 2 || b.length < 2) return false;
+    if (b.includes(a)) return true;
+    // 问句里带了「女孩」这类短词。学生真的回答这两个字时，不要当成自己的回声。
+    if (b.length < 4) return false;
+    return a.includes(b);
+  };
 
   const rememberSpeak = text => {
     // 自己的声音还会在麦里留一会儿。这段时间记成安静，避免把刚说的话当成琴声。
@@ -57,7 +71,9 @@ export function createCompanionSession(host) {
         });
       }
     }
+    awaitingField = plan.wait && plan.field ? plan.field : '';
     if (plan.verbatim || !plan.instruction) {
+      lastSpokenText = plan.say;
       rememberSpeak(plan.say);
       host.speak(plan.say, true);
       return;
@@ -74,6 +90,7 @@ export function createCompanionSession(host) {
     }
     if (stopped || (host.isPaused && host.isPaused())) return;
     const line = spoken || plan.say;
+    lastSpokenText = line;
     rememberSpeak(line);
     host.speak(line, true);
     if (host.pushAssistant) host.pushAssistant(line);
@@ -125,6 +142,8 @@ export function createCompanionSession(host) {
   const tick = async event => {
     if (stopped) return;
     const urgent = event === 'background' || event === 'done';
+    // 上一句还没说完，不要再要下一句，也不要开麦。
+    if (!urgent && Date.now() < speakingUntil) return;
     if (!urgent && busyCount > 0) return;
     if (host.isTyping && host.isTyping() && !urgent) return;
     if (inBackground && event === 'tick') return;
@@ -146,20 +165,78 @@ export function createCompanionSession(host) {
       });
       if (plan && plan.profile) tarotOn = !!plan.profile.tarot_on;
       await say(plan || null);
-      if (plan && plan.wait && Ear && Ear.listenOnce && !stopped) {
-        try {
-          const heard = await Ear.listenOnce();
-          const text = ((heard && heard.text) || '').trim();
-          if (text && !stopped && host.onHeard) host.onHeard(text);
-        } catch (e) {}
+      const follow = plan;
+      if (follow && follow.wait) {
+        listenLoop(follow);
+      } else if (event === 'tick' && awaitingField && !listening) {
+        listenLoop({wait: true});
       }
     } finally {
       busyCount = Math.max(0, busyCount - 1);
     }
   };
 
-  const noteAnswer = text =>
-    planCompanion({
+  const listenLoop = async plan => {
+    if (listening || stopped || !plan || !plan.wait || !Ear || !Ear.listenOnce) return;
+    listening = true;
+    try {
+      for (let tries = 0; tries < 3 && !stopped; tries += 1) {
+        const waitMs = tries === 0 ? Math.max(0, speakingUntil - Date.now()) + 600 : 500;
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        if (stopped) return;
+        let text = '';
+        try {
+          const heard = await Ear.listenOnce();
+          text = ((heard && heard.text) || '').trim();
+        } catch (e) {
+          text = '';
+        }
+        if (text) {
+          await takeHeard(text);
+          return;
+        }
+      }
+    } finally {
+      listening = false;
+      const next = listenAgainPlan;
+      listenAgainPlan = null;
+      if (next && !stopped) listenLoop(next);
+    }
+  };
+
+  const takeHeard = async text => {
+    const ownLine = echoes(lastSpokenText, text);
+    const profile = !!awaitingField;
+    const keepListening = () => {
+      if (listening) listenAgainPlan = {wait: true};
+      else listenLoop({wait: true});
+    };
+    // 麦里又听到了刚问的那句，或者琴声被认成了一句废话。问题留着，继续听。
+    if (ownLine) {
+      if (profile) keepListening();
+      return;
+    }
+    if (!profile) {
+      if (host.onHeard) host.onHeard(text);
+      return;
+    }
+    const plan = await noteAnswer(text);
+    if (plan && plan.hold) {
+      awaitingField = plan.field || 'section_ok';
+      keepListening();
+      return;
+    }
+    if (host.onHeard) host.onHeard(text, {profile: true});
+    await say(plan || null);
+    if (plan && plan.wait) {
+      if (listening) listenAgainPlan = plan;
+      else listenLoop(plan);
+    }
+  };
+
+  const noteAnswer = text => {
+    awaitingField = '';
+    return planCompanion({
       student_id: host.studentId(),
       piece: piece || host.pieceName(),
       event: 'answer',
@@ -170,6 +247,7 @@ export function createCompanionSession(host) {
       silent_sec: 0,
       roll: Math.random(),
     });
+  };
 
   return {
     start() {
@@ -197,6 +275,8 @@ export function createCompanionSession(host) {
       });
     },
     noteAnswer,
+    lastSpoken: () => lastSpokenText,
+    awaiting: () => awaitingField,
     stop() {
       stopped = true;
       if (timer) clearInterval(timer);

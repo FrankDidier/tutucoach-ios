@@ -24,8 +24,9 @@ import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
 import {syncPractice} from '../services/account';
-import {chat, fetchReminders, saveCompanionProfile} from '../services/companionChat';
+import {chat, fetchReminders, refineTarot, saveCompanionProfile} from '../services/companionChat';
 import {createCompanionSession} from '../services/companionSession';
+import {clearCompanionTarot, setCompanionTarot} from '../services/companionTarot';
 import {pickFromGallery} from '../services/imagePicker';
 import {
   getCompanionBgUri,
@@ -47,6 +48,15 @@ function stripParentheticals(s) {
     .replace(/\([^)]*\)/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+// 自由聊天只留第一句，避免角色把一句短回答扩成一段独白。
+function oneSentence(s) {
+  const t = stripParentheticals(s);
+  if (!t) return '';
+  const m = t.match(/^.{1,48}?[。！？!?]/);
+  if (m) return m[0];
+  return t.slice(0, 48);
 }
 
 // 从分身人设(systemPrompt)里的「语言：中文/英语/日语/韩语」一行解析朗读语言。
@@ -313,7 +323,13 @@ export default function CompanionScreen({navigation}) {
           if (text) addAiBubble(text, true);
         },
         pushAssistant: text => pushHistory('assistant', text),
-        onHeard: text => onSendText(text),
+        onHeard: (text, opts) => {
+          if (opts && opts.profile) {
+            addUserBubble(text);
+            return;
+          }
+          onSendText(text);
+        },
       });
       roundRef.current.start();
     })();
@@ -595,7 +611,16 @@ export default function CompanionScreen({navigation}) {
   // ============ 学生打字 ============
   const onSendText = text => {
     if (!text) return;
-    if (roundRef.current) roundRef.current.noteAnswer(text);
+    const round = roundRef.current;
+    if (round && round.awaiting && round.awaiting()) {
+      addUserBubble(text);
+      Promise.resolve(round.noteAnswer(text)).then(plan => {
+        if (plan && plan.say && plan.intent && plan.intent !== 'none') {
+          addAiBubble(plan.say, true);
+        }
+      });
+      return;
+    }
     addUserBubble(text);
     pushHistory('user', text);
     setSending(true);
@@ -605,9 +630,9 @@ export default function CompanionScreen({navigation}) {
         setSending(false);
         busyRef.current = false;
         if (res && res.ok && res.text) {
-          pushHistory('assistant', res.text);
-          // 学生打字后，AI 的回复也用语音念出来（去掉括号里的内心/情景描写）。
-          addAiBubble(res.text, true, stripParentheticals(res.text));
+          const line = oneSentence(res.text);
+          pushHistory('assistant', line);
+          addAiBubble(line, true);
           nextContextualRef.current = true;
         } else {
           Alert.alert('提示', '网络不太好，再发一次试试～');
@@ -801,6 +826,21 @@ export default function CompanionScreen({navigation}) {
                   const next = !tarotOn;
                   setTarotOn(next);
                   saveCompanionProfile(studentIdRef.current, {tarot_on: next});
+                  if (!next) {
+                    clearCompanionTarot();
+                    return;
+                  }
+                  refineTarot(pieceName || '这一段').then(card => {
+                    if (!card) return;
+                    setCompanionTarot({
+                      piece: pieceName,
+                      page: 0,
+                      y: 0,
+                      name: card.name,
+                      line: card.line,
+                    });
+                    addAiBubble((card.name || '塔罗') + '：' + (card.line || ''), false);
+                  });
                 }}>
                 <Text style={styles.pieceViewBtn}>{tarotOn ? '塔罗开' : '塔罗'}</Text>
               </TouchableOpacity>

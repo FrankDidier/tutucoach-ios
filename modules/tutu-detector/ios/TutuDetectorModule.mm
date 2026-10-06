@@ -261,19 +261,28 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
       @"%@/api/coach/tts?coachId=%@&lang=%@&text=%@", baseUrl, encCoach, encLang, encText];
   NSURL *url = [NSURL URLWithString:urlStr];
   if (url == nil) { fallback(); return; }
-  NSURLSessionDataTask *task = [[NSURLSession sharedSession]
-      dataTaskWithURL:url
-    completionHandler:^(NSData *data, NSURLResponse *resp, NSError *error) {
-      NSInteger code = [resp isKindOfClass:[NSHTTPURLResponse class]]
-                           ? ((NSHTTPURLResponse *)resp).statusCode : 0;
-      if (error != nil || code != 200 || data.length < 64) {
-        fallback();
-        return;
-      }
-      [data writeToFile:cachePath atomically:YES];
-      playFile(cachePath);
-    }];
-  [task resume];
+  // 切回来的第一句经常没拉到角色声音，就掉进系统音色。先再要一次，两次都不成才用系统声音。
+  __block void (^fetch)(NSInteger);
+  fetch = ^(NSInteger attempt) {
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession]
+        dataTaskWithURL:url
+      completionHandler:^(NSData *data, NSURLResponse *resp, NSError *error) {
+        NSInteger code = [resp isKindOfClass:[NSHTTPURLResponse class]]
+                             ? ((NSHTTPURLResponse *)resp).statusCode : 0;
+        if (error != nil || code != 200 || data.length < 64) {
+          if (attempt < 2) {
+            fetch(attempt + 1);
+            return;
+          }
+          fallback();
+          return;
+        }
+        [data writeToFile:cachePath atomically:YES];
+        playFile(cachePath);
+      }];
+    [task resume];
+  };
+  fetch(1);
 }
 
 - (void)playClonedFile:(NSString *)path {
