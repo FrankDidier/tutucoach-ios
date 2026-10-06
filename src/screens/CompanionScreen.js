@@ -556,6 +556,10 @@ export default function CompanionScreen({navigation}) {
   };
 
   const doProactive = () => {
+    // 刚聊完天，不要接着念练琴口令。等人声过去再提醒。
+    if (roundRef.current && roundRef.current.recentVoice && roundRef.current.recentVoice()) {
+      return;
+    }
     proactiveCountRef.current += 1;
     // 刚和学生聊过 → 这一条让大模型结合刚才的对话来说，更连贯。
     if (nextContextualRef.current) {

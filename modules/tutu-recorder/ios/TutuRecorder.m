@@ -1,5 +1,6 @@
 #import "TutuRecorder.h"
 #import <Speech/Speech.h>
+#import <math.h>
 
 @interface TutuRecorder ()
 @property(nonatomic, strong) AVAudioRecorder *recorder;
@@ -10,6 +11,8 @@
 @property(nonatomic, strong) SFSpeechRecognizer *recognizer;
 @property(nonatomic, strong) SFSpeechAudioBufferRecognitionRequest *speechRequest;
 @property(nonatomic, strong) SFSpeechRecognitionTask *speechTask;
+// 听人说话的同时记下响度。琴还在响时，不能因为开着识别就把响度记成 0。
+@property(nonatomic, assign) float listenRms;
 @end
 
 @implementation TutuRecorder
@@ -130,7 +133,14 @@ RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
     resolve(@{@"rms": @(rms)});
     return;
   }
-  if ((self.recorder && self.recorder.recording) || self.listenEngine != nil) {
+  if (self.listenEngine != nil) {
+    float rms = self.listenRms / 0.20f;
+    if (rms < 0) rms = 0;
+    if (rms > 1) rms = 1;
+    resolve(@{@"rms": @(rms)});
+    return;
+  }
+  if (self.recorder && self.recorder.recording) {
     resolve(@{@"rms": @0});
     return;
   }
@@ -315,7 +325,22 @@ RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
         resolve(@{@"text": text ?: @""});
       };
       [input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
-        [self.speechRequest appendAudioPCMBuffer:buf];
+        if (self.speechRequest) [self.speechRequest appendAudioPCMBuffer:buf];
+        AVAudioFrameCount n = buf.frameLength;
+        if (n > 0 && buf.floatChannelData != nil && buf.floatChannelData[0] != nil) {
+          float *ch = buf.floatChannelData[0];
+          double acc = 0;
+          for (AVAudioFrameCount i = 0; i < n; i++) acc += (double)ch[i] * (double)ch[i];
+          self.listenRms = (float)sqrt(acc / (double)n);
+        } else if (n > 0 && buf.int16ChannelData != nil && buf.int16ChannelData[0] != nil) {
+          int16_t *ch = buf.int16ChannelData[0];
+          double acc = 0;
+          for (AVAudioFrameCount i = 0; i < n; i++) {
+            double s = (double)ch[i] / 32768.0;
+            acc += s * s;
+          }
+          self.listenRms = (float)sqrt(acc / (double)n);
+        }
       }];
       [engine prepare];
       if (![engine startAndReturnError:&err]) {

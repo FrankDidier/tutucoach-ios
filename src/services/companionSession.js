@@ -12,6 +12,12 @@ function firstLine(text) {
   return t.split(/[。！？!?]/)[0].trim();
 }
 
+// 至少两个汉字才算学生在说话。琴声和房间噪声经常被认成一个字母，不能拿来停掉练琴判断。
+function spokenWords(text) {
+  const chars = String(text || '').match(/[\u4e00-\u9fff]/g);
+  return !!(chars && chars.length >= 2);
+}
+
 export function createCompanionSession(host) {
   let timer = null;
   let stopped = false;
@@ -178,8 +184,20 @@ export function createCompanionSession(host) {
     }
   };
 
+  const resumeListen = () => {
+    const next = listenAgainPlan;
+    listenAgainPlan = null;
+    if (stopped) return;
+    if (next) listenLoop(next);
+    else setTimeout(voiceWatch, 300);
+  };
+
   const listenLoop = async plan => {
-    if (listening || stopped || !plan || !plan.wait || !Ear || !Ear.listenOnce) return;
+    if (stopped || !plan || !plan.wait || !Ear || !Ear.listenOnce) return;
+    if (listening) {
+      listenAgainPlan = plan;
+      return;
+    }
     listening = true;
     try {
       for (let tries = 0; tries < 3 && !stopped; tries += 1) {
@@ -200,14 +218,45 @@ export function createCompanionSession(host) {
       }
     } finally {
       listening = false;
-      const next = listenAgainPlan;
-      listenAgainPlan = null;
-      if (next && !stopped) listenLoop(next);
+      resumeListen();
     }
   };
 
+  // 没有问题时也听。听到人说话就把这段响度清掉，别把聊天当成弹琴。
+  const voiceWatch = async () => {
+    if (stopped || !Ear || !Ear.listenOnce) return;
+    if (listening || awaitingField) {
+      setTimeout(voiceWatch, 700);
+      return;
+    }
+    if (Date.now() < speakingUntil) {
+      setTimeout(voiceWatch, Math.max(400, speakingUntil - Date.now() + 400));
+      return;
+    }
+    listening = true;
+    let text = '';
+    try {
+      const heard = await Ear.listenOnce();
+      text = ((heard && heard.text) || '').trim();
+    } catch (e) {
+      text = '';
+    } finally {
+      listening = false;
+    }
+    if (stopped) return;
+    if (text && (echoes(lastSpokenText, text) || spokenWords(text))) {
+      if (echoes(lastSpokenText, text)) markVoice();
+      else if (awaitingField) await takeHeard(text);
+      else if (host.onHeard) {
+        markVoice();
+        host.onHeard(text);
+      }
+    }
+    resumeListen();
+  };
+
   const markVoice = () => {
-    voiceUntil = Date.now() + 14000;
+    voiceUntil = Date.now() + 20000;
     levels = [];
     silentSec += 2;
   };
@@ -264,6 +313,7 @@ export function createCompanionSession(host) {
       loadPiece(host.pieceName()).then(() => tick('open'));
       if (timer) clearInterval(timer);
       timer = setInterval(() => tick('tick'), 4000);
+      setTimeout(voiceWatch, 1200);
     },
     async setPiece(name) {
       await loadPiece(name);
@@ -285,6 +335,7 @@ export function createCompanionSession(host) {
     },
     noteAnswer,
     markVoice,
+    recentVoice: () => Date.now() < voiceUntil,
     lastSpoken: () => lastSpokenText,
     awaiting: () => awaitingField,
     stop() {
