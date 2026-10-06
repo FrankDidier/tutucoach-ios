@@ -26,6 +26,7 @@ export function createCompanionSession(host) {
   let tarotOn = false;
   let inBackground = false;
   let lastSpokenText = '';
+  let voiceUntil = 0;
   let awaitingField = '';
   let listening = false;
   let listenAgainPlan = null;
@@ -121,7 +122,8 @@ export function createCompanionSession(host) {
 
   const sample = async () => {
     if (!Ear || !Ear.readLevel) return;
-    if (Date.now() < speakingUntil) {
+    // 刚说完话，或者学生刚开口，麦里是人声，不是琴。
+    if (Date.now() < speakingUntil || Date.now() < voiceUntil) {
       levels = levels.concat(0).slice(-6);
       silentSec += 2;
       return;
@@ -204,7 +206,14 @@ export function createCompanionSession(host) {
     }
   };
 
+  const markVoice = () => {
+    voiceUntil = Date.now() + 14000;
+    levels = [];
+    silentSec += 2;
+  };
+
   const takeHeard = async text => {
+    markVoice();
     const ownLine = echoes(lastSpokenText, text);
     const profile = !!awaitingField;
     const keepListening = () => {
@@ -275,6 +284,7 @@ export function createCompanionSession(host) {
       });
     },
     noteAnswer,
+    markVoice,
     lastSpoken: () => lastSpokenText,
     awaiting: () => awaitingField,
     stop() {

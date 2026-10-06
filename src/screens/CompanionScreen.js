@@ -612,6 +612,7 @@ export default function CompanionScreen({navigation}) {
   const onSendText = text => {
     if (!text) return;
     const round = roundRef.current;
+    if (round && round.markVoice) round.markVoice();
     if (round && round.awaiting && round.awaiting()) {
       addUserBubble(text);
       Promise.resolve(round.noteAnswer(text)).then(plan => {

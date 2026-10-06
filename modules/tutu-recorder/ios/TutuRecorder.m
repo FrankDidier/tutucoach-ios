@@ -163,8 +163,11 @@ RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
         [self.meter record];
       }
       [self.meter updateMeters];
+      // 分贝换成振幅。安静的房间大约 -50dB，不能算成在弹琴。
+      // 和安卓一样，除以 0.20 后才拿去跟 0.08 比。
       float db = [self.meter averagePowerForChannel:0];
-      float rms = (db + 45.f) / 45.f;
+      float amp = powf(10.f, db / 20.f);
+      float rms = amp / 0.20f;
       if (rms < 0) rms = 0;
       if (rms > 1) rms = 1;
       resolve(@{@"rms": @(rms)});
