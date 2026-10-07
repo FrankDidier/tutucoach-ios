@@ -15,6 +15,8 @@
 @property(nonatomic, strong) AVAudioPlayer *clonePlayer;
 // 播报序号：新的一句会自增；在途的克隆下载播放前会校验序号，丢弃过期请求（避免叠音/拖尾）。
 @property(nonatomic, assign) NSInteger speakSeq;
+// 角色声音要先从网上拉下来再播。这段时间麦里还没有声音，但马上就有，不能开麦。
+@property(nonatomic, assign) NSTimeInterval fetchUntil;
 // 期望的「不锁屏」状态。iOS 在 App 退到后台再回前台时会把 idleTimerDisabled 复位为 NO，
 // 于是「检测/陪练开着但一段时间后又锁屏」。这里记住期望值，并在回到前台时重新置上。
 @property(nonatomic, assign) BOOL wantKeepAwake;
@@ -134,7 +136,18 @@ RCT_EXPORT_METHOD(ttsSpeak:(NSString *)text rate:(double)rate pitch:(double)pitc
   float r = base * (float)(rate <= 0 ? 1.0 : rate);
   u.rate = MAX(AVSpeechUtteranceMinimumSpeechRate, MIN(AVSpeechUtteranceMaximumSpeechRate, r));
   u.pitchMultiplier = (float)(pitch <= 0 ? 1.0 : MAX(0.5, MIN(2.0, pitch)));
+  self.fetchUntil = 0;
   [self.synth speakUtterance:u];
+}
+
+// 角色还在拉声音、正在播，或系统合成器还在念，都算在说话。陪练据此等说完再开麦。
+RCT_EXPORT_METHOD(ttsBusy:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    BOOL fetching = [NSDate date].timeIntervalSince1970 < self.fetchUntil;
+    BOOL playing = self.clonePlayer.isPlaying || self.synth.isSpeaking;
+    resolve(@(fetching || playing));
+  });
 }
 
 // 声音复刻播报：voiceId>0 时从后端拉老师本人音色 WAV 播放（带本地缓存）；
@@ -147,6 +160,7 @@ RCT_EXPORT_METHOD(ttsSpeakCloned:(NSString *)text
   if (text.length == 0) return;
   self.speakSeq += 1;
   NSInteger seq = self.speakSeq;
+  self.fetchUntil = [NSDate date].timeIntervalSince1970 + 12.0;
   int vid = (int)voiceId;
   if (vid <= 0 || baseUrl.length == 0) {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -219,6 +233,7 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
   if (text.length == 0) return;
   self.speakSeq += 1;
   NSInteger seq = self.speakSeq;
+  self.fetchUntil = [NSDate date].timeIntervalSince1970 + 12.0;
   if (coachId.length == 0 || baseUrl.length == 0) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [self speakWithSynth:text rate:rate pitch:pitch];
@@ -295,6 +310,7 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
   NSError *err = nil;
   AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]
                                                             error:&err];
+  self.fetchUntil = 0;
   if (p == nil) return;
   self.clonePlayer = p;
   [p prepareToPlay];
@@ -312,6 +328,7 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
 
 RCT_EXPORT_METHOD(ttsStop) {
   self.speakSeq += 1;  // 让在途的克隆下载播放被丢弃
+  self.fetchUntil = 0;
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self.synth.isSpeaking) {
       [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];

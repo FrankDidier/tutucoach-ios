@@ -167,9 +167,22 @@ export function prewarm() {
   }
 }
 
+// 角色的声音还在拉或还在播。拿不到时返回 false，调用方再按字数估计。
+export async function isSpeaking() {
+  const native = iosNativeTts();
+  if (native && typeof native.ttsBusy === 'function') {
+    try {
+      return !!(await native.ttsBusy());
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+}
+
 export function isAvailable() {
   if (iosNativeTts()) return true;
   return ensure();
 }
 
-export default {speak, stop, prewarm, isAvailable, setKeepAwake};
+export default {speak, stop, prewarm, isAvailable, isSpeaking, setKeepAwake};

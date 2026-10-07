@@ -326,6 +326,7 @@ export default function CompanionScreen({navigation}) {
         onHeard: (text, opts) => {
           if (opts && opts.profile) {
             addUserBubble(text);
+            pushHistory('user', text);
             return;
           }
           onSendText(text);
@@ -472,6 +473,9 @@ export default function CompanionScreen({navigation}) {
       const p = profileRef.current || {};
       const toSpeak =
         spokenOverride !== undefined ? spokenOverride : full;
+      if (toSpeak && roundRef.current && roundRef.current.noteSpoken) {
+        roundRef.current.noteSpoken(toSpeak);
+      }
       if (toSpeak) {
         try {
           speak(toSpeak, {
@@ -583,7 +587,7 @@ export default function CompanionScreen({navigation}) {
 
   const doLlmProactive = topic => {
     busyRef.current = true;
-    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'proactive', topic)
+    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'proactive', topic, '', studentIdRef.current)
       .then(res => {
         busyRef.current = false;
         if (pausedRef.current || typingRef.current) return;
@@ -612,25 +616,75 @@ export default function CompanionScreen({navigation}) {
     }
   };
 
+  // ============ 清除记忆 ============
+  // 只忘掉学生是谁（名字、性别、年龄、爱好），不动角色性格，也不删练琴进度和老师的重点。
+  const forgetMe = () => {
+    const round = roundRef.current;
+    try {
+      stopSpeak();
+    } catch (e) {}
+    historyRef.current = [];
+    setMessages([]);
+    if (round && round.forget) round.forget();
+  };
+
+  const askForget = () => {
+    Alert.alert(
+      '重新认识',
+      'TA 会忘掉你的名字、性别、年龄和爱好，然后重新问你。练琴进度和老师的重点不会删。',
+      [
+        {text: '取消', style: 'cancel'},
+        {text: '重新认识', style: 'destructive', onPress: forgetMe},
+      ],
+    );
+  };
+
   // ============ 学生打字 ============
+  // 「我不叫杨同」「叫我小桐」「忘了我吧」这类话先交给陪练规则，认出来就不再走闲聊。
+  const FIX_WORDS = /我叫|叫我|名字|叫错|记错|忘了我|忘掉我|忘记我|把我忘|重新认识|记忆|我是(?:男|女)|岁/;
+
   const onSendText = text => {
     if (!text) return;
     const round = roundRef.current;
     if (round && round.markVoice) round.markVoice();
+    if (round && round.said && !(round.awaiting && round.awaiting()) && FIX_WORDS.test(text)) {
+      addUserBubble(text);
+      pushHistory('user', text);
+      setSending(true);
+      Promise.resolve(round.said(text))
+        .then(plan => {
+          if (plan) {
+            setSending(false);
+            return;
+          }
+          sendChat(text);
+        })
+        .catch(() => sendChat(text));
+      return;
+    }
     if (round && round.awaiting && round.awaiting()) {
       addUserBubble(text);
-      Promise.resolve(round.noteAnswer(text)).then(plan => {
-        if (plan && plan.say && plan.intent && plan.intent !== 'none') {
-          addAiBubble(plan.say, true);
-        }
-      });
+      pushHistory('user', text);
+      if (round.answerTyped) round.answerTyped(text);
       return;
     }
     addUserBubble(text);
     pushHistory('user', text);
+    sendChat(text);
+  };
+
+  const sendChat = () => {
     setSending(true);
     busyRef.current = true;
-    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'chat', '')
+    chat(
+      coachIdRef.current,
+      studentNameSafe(),
+      historyRef.current,
+      'chat',
+      '',
+      '',
+      studentIdRef.current,
+    )
       .then(res => {
         setSending(false);
         busyRef.current = false;
@@ -807,6 +861,12 @@ export default function CompanionScreen({navigation}) {
           </TouchableOpacity>
           <View style={{flex: 1}} />
           {/* 蓝湖仅「学生码 + 音量」；换背景走长按背景图（见上方） */}
+          <TouchableOpacity
+            onPress={askForget}
+            style={[styles.iconCircle, {marginRight: 10}]}
+            accessibilityLabel="重新认识">
+            <Text style={styles.forgetIcon}>↺</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={showMyCode} style={styles.iconCircle}>
             <Image source={Images.companionCode} style={styles.headerIcon} resizeMode="contain" />
           </TouchableOpacity>
@@ -979,6 +1039,7 @@ const makeStyles = colors =>
   },
   pieceText: {color: '#fff', fontSize: 13},
   pieceViewBtn: {color: '#FFE3A1', fontSize: 12.5, fontWeight: '700', marginLeft: 10},
+  forgetIcon: {color: '#fff', fontSize: 18, fontWeight: '700', marginTop: -1},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
   bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},

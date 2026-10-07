@@ -19,6 +19,7 @@ export async function chat(
   mode = 'chat',
   topic = '',
   situation = '',
+  studentId = '',
 ) {
   try {
     const body = {
@@ -26,6 +27,7 @@ export async function chat(
       student_name: studentName || '',
       messages: Array.isArray(history) ? history : [],
     };
+    if (studentId) body.student_id = studentId;
     if (mode) body.mode = mode;
     if (topic) body.topic = topic;
     if (situation) body.situation = situation;
@@ -204,6 +206,19 @@ export async function refineTarot(label) {
     const resp = await postJson('/api/companion/tarot', {label: label || ''}, null, 20000);
     if (!resp || !resp.ok || !resp.tarot) return null;
     return resp.tarot;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 清除记忆：只忘掉名字、性别、年龄、爱好。返回接下来要说的那一轮（重新问名字）。 */
+export async function forgetCompanionProfile(studentId) {
+  try {
+    const resp = await postJson('/api/companion/forget', {
+      student_id: studentId || '',
+      roll: Math.random(),
+    });
+    return resp && resp.ok ? resp : null;
   } catch (e) {
     return null;
   }

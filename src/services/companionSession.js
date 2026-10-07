@@ -1,10 +1,54 @@
 // 陪练开口循环。规则在服务端：先问一句、按段落说一句、错了马上说、离开时带情绪。
 import {NativeModules} from 'react-native';
-import {chat, planCompanion, refineTarot} from './companionChat';
+import {chat, forgetCompanionProfile, planCompanion, refineTarot} from './companionChat';
 import {fetchScore} from './score';
 import {setCompanionTarot} from './companionTarot';
+import {isSpeaking} from './voice';
 
 const Ear = NativeModules.TutuRecorder || null;
+
+const PROFILE_FIELDS = {
+  name: /名|叫|称呼/,
+  gender: /男[\s\S]*女|女[\s\S]*男/,
+  age: /岁|多大|年纪|年龄/,
+  likes: /喜欢|爱|玩|兴趣|干|做/,
+};
+
+function bigrams(text) {
+  const t = String(text || '').replace(/[\s，。！？、!?,.…~～：:；;「」"'（）()]/g, '');
+  const out = [];
+  for (let i = 0; i < t.length - 1; i += 1) out.push(t.slice(i, i + 2));
+  return out;
+}
+
+// 麦里听回来的自己的话常错一两个字（按→爱）。按两字片段重合来认。
+function soundsLike(heard, said) {
+  const h = bigrams(heard);
+  const s = new Set(bigrams(said));
+  if (h.length < 3 || !s.size) return false;
+  const hit = h.filter(g => s.has(g)).length;
+  return hit >= 3 && hit >= 0.6 * h.length;
+}
+
+// 人设改写的那句要能直接念：去掉括号旁白，最多两句。问身份时必须还是在问这件事，否则用原意。
+function fitLine(plan, text) {
+  let t = String(text || '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[「」“”"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return '';
+  const m = t.match(/^(?:[^。！？!?]*[。！？!?]){1,2}/);
+  if (m) t = m[0].trim();
+  if (t.length > 56) return '';
+  if (/按你的年纪|好好记住你|我记下了/.test(t)) return '';
+  const rule = PROFILE_FIELDS[plan.field];
+  if (plan.intent === 'ask' && rule) {
+    if (!/[？?]|吗|呢/.test(t) || !rule.test(t)) return '';
+  }
+  return t;
+}
 
 function firstLine(text) {
   const t = String(text || '').trim();
@@ -37,6 +81,18 @@ export function createCompanionSession(host) {
   let listening = false;
   let listenAgainPlan = null;
 
+  // 最近念出去的几句。聊天回复、提醒也由屏幕念，都要算进来，不然麦里听回来会当成学生在说话。
+  let recentSpoken = [];
+  const noteSpoken = text => {
+    const t = String(text || '').trim();
+    if (!t) return;
+    recentSpoken = recentSpoken.concat(t).slice(-4);
+    const ms = Math.max(2500, t.length * 220) + 1600;
+    speakingUntil = Math.max(speakingUntil, Date.now() + ms);
+  };
+  const heardOwn = heard =>
+    echoes(lastSpokenText, heard) || recentSpoken.some(s => echoes(s, heard));
+
   const echoes = (said, heard) => {
     const a = String(said || '').replace(/\s/g, '');
     const b = String(heard || '').replace(/\s/g, '');
@@ -44,12 +100,31 @@ export function createCompanionSession(host) {
     if (b.includes(a)) return true;
     // 问句里带了「女孩」这类短词。学生真的回答这两个字时，不要当成自己的回声。
     if (b.length < 4) return false;
-    return a.includes(b);
+    return a.includes(b) || soundsLike(b, a);
+  };
+
+  // 等角色把这句真正念完。声音要先从网上拉，按字数估的时间常常不够，麦就把自己录进去了。
+  const waitVoiceDone = async () => {
+    const until = Date.now() + 20000;
+    while (!stopped && Date.now() < until) {
+      if (Date.now() < speakingUntil) {
+        await new Promise(r => setTimeout(r, Math.min(600, speakingUntil - Date.now() + 50)));
+        continue;
+      }
+      if (await isSpeaking()) {
+        speakingUntil = Date.now() + 700;
+        continue;
+      }
+      break;
+    }
+    await new Promise(r => setTimeout(r, 700));
   };
 
   const rememberSpeak = text => {
     // 自己的声音还会在麦里留一会儿。这段时间记成安静，避免把刚说的话当成琴声。
     speakingUntil = Date.now() + Math.max(2500, String(text || '').length * 220) + 1600;
+    const t = String(text || '').trim();
+    if (t) recentSpoken = recentSpoken.concat(t).slice(-4);
   };
 
   const say = async plan => {
@@ -86,17 +161,27 @@ export function createCompanionSession(host) {
       return;
     }
     let spoken = '';
+    const personal = plan.intent === 'ask' || plan.intent === 'ack' || plan.intent === 'fix';
+    // 问身份、接住回答时让角色用自己的口吻说，多等一会儿；练琴中的短接话不能拖。
+    speakingUntil = Date.now() + (personal ? 5000 : 2400);
     try {
       spoken = await Promise.race([
-        chat(host.coachId(), host.studentName(), host.history(), 'proactive', '', plan.instruction)
-          .then(r => (r && r.text) || ''),
-        new Promise(resolve => setTimeout(() => resolve(''), 2200)),
+        chat(
+          host.coachId(),
+          host.studentName(),
+          host.history(),
+          'line',
+          '',
+          plan.instruction,
+          host.studentId ? host.studentId() : '',
+        ).then(r => (r && r.text) || ''),
+        new Promise(resolve => setTimeout(() => resolve(''), personal ? 4500 : 2200)),
       ]);
     } catch (e) {
       spoken = '';
     }
     if (stopped || (host.isPaused && host.isPaused())) return;
-    const line = spoken || plan.say;
+    const line = fitLine(plan, spoken) || plan.say;
     lastSpokenText = line;
     rememberSpeak(line);
     host.speak(line, true);
@@ -129,7 +214,7 @@ export function createCompanionSession(host) {
   const sample = async () => {
     if (!Ear || !Ear.readLevel) return;
     // 刚说完话，或者学生刚开口，麦里是人声，不是琴。
-    if (Date.now() < speakingUntil || Date.now() < voiceUntil) {
+    if (Date.now() < speakingUntil || Date.now() < voiceUntil || (await isSpeaking())) {
       levels = levels.concat(0).slice(-6);
       silentSec += 2;
       return;
@@ -201,8 +286,7 @@ export function createCompanionSession(host) {
     listening = true;
     try {
       for (let tries = 0; tries < 3 && !stopped; tries += 1) {
-        const waitMs = tries === 0 ? Math.max(0, speakingUntil - Date.now()) + 600 : 500;
-        await new Promise(resolve => setTimeout(resolve, waitMs));
+        await waitVoiceDone();
         if (stopped) return;
         let text = '';
         try {
@@ -233,6 +317,10 @@ export function createCompanionSession(host) {
       setTimeout(voiceWatch, Math.max(400, speakingUntil - Date.now() + 400));
       return;
     }
+    if (await isSpeaking()) {
+      setTimeout(voiceWatch, 600);
+      return;
+    }
     listening = true;
     let text = '';
     try {
@@ -244,8 +332,8 @@ export function createCompanionSession(host) {
       listening = false;
     }
     if (stopped) return;
-    if (text && (echoes(lastSpokenText, text) || spokenWords(text))) {
-      if (echoes(lastSpokenText, text)) markVoice();
+    if (text && (heardOwn(text) || spokenWords(text))) {
+      if (heardOwn(text)) markVoice();
       else if (awaitingField) await takeHeard(text);
       else if (host.onHeard) {
         markVoice();
@@ -263,7 +351,7 @@ export function createCompanionSession(host) {
 
   const takeHeard = async text => {
     markVoice();
-    const ownLine = echoes(lastSpokenText, text);
+    const ownLine = heardOwn(text);
     const profile = !!awaitingField;
     const keepListening = () => {
       if (listening) listenAgainPlan = {wait: true};
@@ -299,12 +387,52 @@ export function createCompanionSession(host) {
       piece: piece || host.pieceName(),
       event: 'answer',
       answer: text,
+      last_said: lastSpokenText,
       sections: sections.map(s => s.line),
       globals,
       had_playing: hadPlaying,
       silent_sec: 0,
       roll: Math.random(),
     });
+  };
+
+  const speakPlan = async plan => {
+    if (!plan || !plan.intent || plan.intent === 'none') return null;
+    await say(plan);
+    if (plan.wait) listenLoop(plan);
+    return plan;
+  };
+
+  // 聊天里顺口纠正：我不叫杨同 / 叫我小桐 / 忘了我吧。服务端认出来就由这一轮接话，不再走闲聊。
+  const said = async text => {
+    if (!host.studentId) return null;
+    const plan = await planCompanion({
+      student_id: host.studentId(),
+      event: 'said',
+      text,
+      last_said: lastSpokenText,
+      roll: Math.random(),
+    });
+    if (!plan || !plan.intent || plan.intent === 'none') return null;
+    return speakPlan(plan);
+  };
+
+  // 打字回答问题：和听到的回答走同一条路，没听懂就接着等，不再把同一个问题念一遍。
+  const answerTyped = async text => {
+    const field = awaitingField;
+    const plan = await noteAnswer(text);
+    if (plan && plan.hold) {
+      awaitingField = plan.field || field || 'section_ok';
+      return plan;
+    }
+    return speakPlan(plan);
+  };
+
+  const forget = async () => {
+    if (!host.studentId) return null;
+    awaitingField = '';
+    const plan = await forgetCompanionProfile(host.studentId());
+    return speakPlan(plan);
   };
 
   return {
@@ -335,6 +463,10 @@ export function createCompanionSession(host) {
     },
     noteAnswer,
     markVoice,
+    noteSpoken,
+    said,
+    answerTyped,
+    forget,
     recentVoice: () => Date.now() < voiceUntil,
     lastSpoken: () => lastSpokenText,
     awaiting: () => awaitingField,
