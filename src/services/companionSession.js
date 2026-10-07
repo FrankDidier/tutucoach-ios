@@ -47,6 +47,9 @@ function fitLine(plan, text) {
   if (plan.intent === 'ask' && rule) {
     if (!/[？?]|吗|呢/.test(t) || !rule.test(t)) return '';
   }
+  // 「」里是老师写的段落名，改写时丢了就不知道今天从哪弹了。
+  const named = String(plan.say || '').match(/「[^」]+」/g) || [];
+  if (named.some(q => !t.includes(q.slice(1, -1)))) return '';
   return t;
 }
 
@@ -257,6 +260,11 @@ export function createCompanionSession(host) {
         roll: Math.random(),
       });
       if (plan && plan.profile) tarotOn = !!plan.profile.tarot_on;
+      // 服务端把没回答的问题放下了（他开始弹琴或一直没出声），这边也别再等回答。
+      if (event === 'tick' && plan && plan.profile && plan.profile.pending_field === ''
+          && !plan.wait && awaitingField) {
+        awaitingField = '';
+      }
       await say(plan || null);
       const follow = plan;
       if (follow && follow.wait) {
@@ -332,7 +340,8 @@ export function createCompanionSession(host) {
       listening = false;
     }
     if (stopped) return;
-    if (text && (heardOwn(text) || spokenWords(text))) {
+    // 在等回答时，「女」「8」「9岁」这种短回答也要交给服务端认，不能按闲聊的两字门槛丢掉。
+    if (text && (awaitingField || heardOwn(text) || spokenWords(text))) {
       if (heardOwn(text)) markVoice();
       else if (awaitingField) await takeHeard(text);
       else if (host.onHeard) {
@@ -366,9 +375,14 @@ export function createCompanionSession(host) {
       if (host.onHeard) host.onHeard(text);
       return;
     }
+    const asked = awaitingField;
     const plan = await noteAnswer(text);
-    if (plan && plan.hold) {
-      awaitingField = plan.field || 'section_ok';
+    if (!plan) {
+      awaitingField = asked;
+      return;
+    }
+    if (plan.hold) {
+      awaitingField = plan.field || asked || 'section_ok';
       keepListening();
       return;
     }
@@ -421,7 +435,11 @@ export function createCompanionSession(host) {
   const answerTyped = async text => {
     const field = awaitingField;
     const plan = await noteAnswer(text);
-    if (plan && plan.hold) {
+    if (!plan) {
+      awaitingField = field;
+      return null;
+    }
+    if (plan.hold) {
       awaitingField = plan.field || field || 'section_ok';
       return plan;
     }
