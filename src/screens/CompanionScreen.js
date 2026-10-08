@@ -642,6 +642,7 @@ export default function CompanionScreen({navigation}) {
   // ============ 学生打字 ============
   // 「我不叫杨同」「叫我小桐」「忘了我吧」这类话先交给陪练规则，认出来就不再走闲聊。
   const FIX_WORDS = /我叫|叫我|名字|叫错|记错|忘了我|忘掉我|忘记我|把我忘|重新认识|记忆|我是(?:男|女)|岁/;
+  const SECTION_WORDS = /(?:练|弹)得?(?:差不多|好|会)了|差不多了|(?:这段|这一段).{0,4}(?:可以了|行了|好了)|下一段|还没(?:练|弹)好|再练(?:一会|会儿|练)/;
 
   const onSendText = text => {
     if (!text) return;
@@ -666,6 +667,22 @@ export default function CompanionScreen({navigation}) {
       addUserBubble(text);
       pushHistory('user', text);
       if (round.answerTyped) round.answerTyped(text);
+      return;
+    }
+    // 没被问也主动说「这段差不多了」「还没练好」：按他自己对这一段的判断走，不当闲聊。
+    if (round && round.volunteerSection && SECTION_WORDS.test(text)) {
+      addUserBubble(text);
+      pushHistory('user', text);
+      setSending(true);
+      Promise.resolve(round.volunteerSection(text))
+        .then(plan => {
+          if (plan) {
+            setSending(false);
+            return;
+          }
+          sendChat(text);
+        })
+        .catch(() => sendChat(text));
       return;
     }
     addUserBubble(text);

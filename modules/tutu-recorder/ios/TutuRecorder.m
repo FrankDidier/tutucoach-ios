@@ -13,6 +13,8 @@
 @property(nonatomic, strong) SFSpeechRecognitionTask *speechTask;
 // 听人说话的同时记下响度。琴还在响时，不能因为开着识别就把响度记成 0。
 @property(nonatomic, assign) float listenRms;
+// 角色要开口时把正在听的这一轮关掉，不然它自己的声音会被录成学生说的话。
+@property(nonatomic, copy) void (^listenCancel)(void);
 @end
 
 @implementation TutuRecorder
@@ -258,6 +260,16 @@ RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve
   });
 }
 
+// 关掉正在听的这一轮，结果按没听到处理。
+RCT_EXPORT_METHOD(cancelListen:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    void (^cancel)(void) = self.listenCancel;
+    if (cancel) cancel();
+    resolve(@(cancel != nil));
+  });
+}
+
 // 听学生说一句。没有权限或听不到时返回空字符串，不报错。
 RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
@@ -315,6 +327,7 @@ RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
       void (^finish)(NSString *) = ^(NSString *text) {
         if (done) return;
         done = YES;
+        self.listenCancel = nil;
         [input removeTapOnBus:0];
         [engine stop];
         [self.speechTask cancel];
@@ -344,10 +357,14 @@ RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
       }];
       [engine prepare];
       if (![engine startAndReturnError:&err]) {
+        [input removeTapOnBus:0];
         self.listenEngine = nil;
         resolve(@{@"text": @""});
         return;
       }
+      self.listenCancel = ^{
+        finish(@"");
+      };
       // 麦已经开着时，后放进来的口语音频也要认，不要等到这轮听完。
       void (^__block pickup)(void) = ^{
         if (done) return;

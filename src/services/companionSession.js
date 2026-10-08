@@ -43,6 +43,8 @@ function fitLine(plan, text) {
   if (m) t = m[0].trim();
   if (t.length > 56) return '';
   if (/按你的年纪|好好记住你|我记下了/.test(t)) return '';
+  // 改写把参考句原样说了两遍（「A：A」），不能念出来。
+  if (/([\u4e00-\u9fff，]{6,}).*\1/.test(t)) return '';
   const rule = PROFILE_FIELDS[plan.field];
   if (plan.intent === 'ask' && rule) {
     if (!/[？?]|吗|呢/.test(t) || !rule.test(t)) return '';
@@ -86,15 +88,29 @@ export function createCompanionSession(host) {
 
   // 最近念出去的几句。聊天回复、提醒也由屏幕念，都要算进来，不然麦里听回来会当成学生在说话。
   let recentSpoken = [];
+  // 角色一开口就把正在听的那一轮关掉。聊天回复常在麦已经打开之后才到，会被录成学生的话。
+  const closeEar = () => {
+    if (Ear && Ear.cancelListen) Ear.cancelListen().catch(() => {});
+  };
   const noteSpoken = text => {
     const t = String(text || '').trim();
     if (!t) return;
+    closeEar();
     recentSpoken = recentSpoken.concat(t).slice(-4);
     const ms = Math.max(2500, t.length * 220) + 1600;
     speakingUntil = Math.max(speakingUntil, Date.now() + ms);
   };
-  const heardOwn = heard =>
-    echoes(lastSpokenText, heard) || recentSpoken.some(s => echoes(s, heard));
+  const heardOwn = heard => {
+    if (echoes(lastSpokenText, heard) || recentSpoken.some(s => echoes(s, heard))) return true;
+    // 刚说完话时麦里漏进来的两三个字（「听到的」「那我」），是自己那句的碎片。
+    // 在等身份回答时，问句里的「女孩」这类短词仍算学生的回答。
+    const b = String(heard || '').replace(/[\s，。！？、!?,.…~～]/g, '');
+    if (b.length < 2 || b.length >= 4 || Date.now() > speakingUntil + 8000) return false;
+    const pool = awaitingField
+      ? recentSpoken.filter(s => s !== lastSpokenText)
+      : recentSpoken.concat(lastSpokenText);
+    return pool.some(s => String(s || '').replace(/[\s，。！？、!?,.…~～]/g, '').includes(b));
+  };
 
   const echoes = (said, heard) => {
     const a = String(said || '').replace(/\s/g, '');
@@ -124,6 +140,7 @@ export function createCompanionSession(host) {
   };
 
   const rememberSpeak = text => {
+    closeEar();
     // 自己的声音还会在麦里留一会儿。这段时间记成安静，避免把刚说的话当成琴声。
     speakingUntil = Date.now() + Math.max(2500, String(text || '').length * 220) + 1600;
     const t = String(text || '').trim();
@@ -167,6 +184,7 @@ export function createCompanionSession(host) {
     const personal = plan.intent === 'ask' || plan.intent === 'ack' || plan.intent === 'fix';
     // 问身份、接住回答时让角色用自己的口吻说，多等一会儿；练琴中的短接话不能拖。
     speakingUntil = Date.now() + (personal ? 5000 : 2400);
+    closeEar();
     try {
       spoken = await Promise.race([
         chat(
@@ -217,9 +235,9 @@ export function createCompanionSession(host) {
   const sample = async () => {
     if (!Ear || !Ear.readLevel) return;
     // 刚说完话，或者学生刚开口，麦里是人声，不是琴。
+    // 有人在说话就说明人还在，这段时间不算「没动静」，不然会说「一声不吭就走了」。
     if (Date.now() < speakingUntil || Date.now() < voiceUntil || (await isSpeaking())) {
       levels = levels.concat(0).slice(-6);
-      silentSec += 2;
       return;
     }
     try {
@@ -355,7 +373,7 @@ export function createCompanionSession(host) {
   const markVoice = () => {
     voiceUntil = Date.now() + 20000;
     levels = [];
-    silentSec += 2;
+    silentSec = 0;
   };
 
   const takeHeard = async text => {
@@ -394,13 +412,16 @@ export function createCompanionSession(host) {
     }
   };
 
-  const noteAnswer = text => {
+  const noteAnswer = (text, extra) => {
+    const field = awaitingField;
     awaitingField = '';
     return planCompanion({
       student_id: host.studentId(),
       piece: piece || host.pieceName(),
       event: 'answer',
       answer: text,
+      field,
+      ...(extra || {}),
       last_said: lastSpokenText,
       sections: sections.map(s => s.line),
       globals,
@@ -446,6 +467,18 @@ export function createCompanionSession(host) {
     return speakPlan(plan);
   };
 
+  // 没被问，自己说「这段差不多了」「还没练好」。服务端认不出就返回空，交给闲聊。
+  const volunteerSection = async text => {
+    if (!host.studentId || awaitingField) return null;
+    awaitingField = 'section_ok';
+    const plan = await noteAnswer(text, {volunteer: true});
+    if (!plan || plan.hold || !plan.intent || plan.intent === 'none') {
+      awaitingField = '';
+      return null;
+    }
+    return speakPlan(plan);
+  };
+
   const forget = async () => {
     if (!host.studentId) return null;
     awaitingField = '';
@@ -484,6 +517,7 @@ export function createCompanionSession(host) {
     noteSpoken,
     said,
     answerTyped,
+    volunteerSection,
     forget,
     recentVoice: () => Date.now() < voiceUntil,
     lastSpoken: () => lastSpokenText,
