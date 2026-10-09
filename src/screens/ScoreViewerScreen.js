@@ -20,6 +20,8 @@ import {fetchScore, uploadScore, deleteScore} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {peekCompanionTarot} from '../services/companionTarot';
+import SectionMarks from '../components/SectionMarks';
+import {cnNum, readingSections} from '../utils/sections';
 
 const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
 
@@ -69,6 +71,15 @@ export default function ScoreViewerScreen({navigation, route}) {
   const [naturalSizes, setNaturalSizes] = useState({});
   const [zoomPage, setZoomPage] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const marks = useMemo(
+    () => readingSections(manifest?.confirmed_annotations || manifest?.annotations || []),
+    [manifest],
+  );
+  const showSection = sec => {
+    const note = String(sec.head.note || '').trim();
+    const more = note && note !== '本段演奏重点' && note !== sec.line ? '\n' + note : '';
+    Alert.alert(`第${cnNum(sec.n)}段`, sec.line + more);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -256,9 +267,6 @@ export default function ScoreViewerScreen({navigation, route}) {
         {(manifest?.pages || []).map(page => {
           const key = page.name || String(page.index);
           const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
-          const boxes = (manifest.confirmed_annotations || manifest.annotations || []).filter(
-            b => (b.page || 0) === page.index,
-          );
           const pageTerms = (manifest.term_overlays || []).filter(t => (t.page || 0) === page.index);
           return (
             <View key={key} style={ui.pageCard}>
@@ -315,21 +323,13 @@ export default function ScoreViewerScreen({navigation, route}) {
                     <Text style={{color: '#FFFFFF', fontSize: 12}}>{tarot.line}</Text>
                   </View>
                 ) : null}
-                {boxes.map(box => (
-                  <View
-                    key={box.id}
-                    style={[
-                      ui.box,
-                      {
-                        left: (box.x || 0) * pageW,
-                        top: (box.y || 0) * pageH,
-                        width: (box.w || 0.84) * pageW,
-                        height: (box.h || 0.1) * pageH,
-                      },
-                    ]}>
-                    <Text style={ui.boxLabel}>{box.label}</Text>
-                  </View>
-                ))}
+                <SectionMarks
+                  sections={marks}
+                  page={page.index}
+                  pageW={pageW}
+                  pageH={pageH}
+                  onOpen={showSection}
+                />
                 {pageTerms.map(ov => {
                   const label = String(ov.short || ov.translation || ov.term || '');
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
@@ -430,6 +430,13 @@ export default function ScoreViewerScreen({navigation, route}) {
                       onError={() => retryPage(zoomKey)}
                     />
                   ) : null}
+                  <SectionMarks
+                    sections={marks}
+                    page={zoomPage.index}
+                    pageW={zw * scale}
+                    pageH={zh * scale}
+                    onOpen={showSection}
+                  />
                   {pageTerms.map(ov => {
                     const label = String(ov.short || ov.translation || ov.term || '');
                     return (

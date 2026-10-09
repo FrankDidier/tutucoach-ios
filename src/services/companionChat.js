@@ -20,6 +20,7 @@ export async function chat(
   topic = '',
   situation = '',
   studentId = '',
+  points = [],
 ) {
   try {
     const body = {
@@ -28,6 +29,7 @@ export async function chat(
       messages: Array.isArray(history) ? history : [],
     };
     if (studentId) body.student_id = studentId;
+    if (Array.isArray(points) && points.length) body.points = points;
     if (mode) body.mode = mode;
     if (topic) body.topic = topic;
     if (situation) body.situation = situation;

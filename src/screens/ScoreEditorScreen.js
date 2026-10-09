@@ -18,6 +18,8 @@ import {
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
+import SectionMarks from '../components/SectionMarks';
+import {readingSections} from '../utils/sections';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {pickPdf} from '../services/documentPicker';
@@ -133,34 +135,6 @@ function SimpleDivider({divider, pageW, pageH, onDelete}) {
   );
 }
 
-function SimpleBox({box, pageW, pageH, onOpen}) {
-    // 一段跨好几行时会有好几个方框，只有第一个写标题，其余几行留白
-  const cont = !!box.cont;
-  return (
-    <TapOnly
-      onPress={() => onOpen(box)}
-      style={[
-        styles.box,
-        cont ? styles.boxCont : null,
-        {
-          left: (box.x || 0) * pageW,
-          top: (box.y || 0) * pageH,
-          width: clamp(box.w || 0.5, 0.06, 0.96) * pageW,
-          // 以前上限 0.55 会把跨行大框裁掉，看起来像「漏段」
-          height: clamp(box.h || 0.1, 0.04, 0.92) * pageH,
-        },
-      ]}>
-      {cont ? null : (
-        <View style={styles.boxLabelPill}>
-          <Text style={styles.boxLabel} numberOfLines={1}>
-            {box.label || '重点'}
-          </Text>
-        </View>
-      )}
-    </TapOnly>
-  );
-}
-
 // 1.5.124 及更早存过横向分段线（只有 y），新版一律用竖线，旧数据直接丢掉。
 function normDividers(arr) {
   return (Array.isArray(arr) ? arr : [])
@@ -183,6 +157,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [terms, setTerms] = useState([]);
   const [termOverlays, setTermOverlays] = useState([]);
   const [dividers, setDividers] = useState([]);
+  const marks = useMemo(() => readingSections(manifest?.annotations || []), [manifest]);
   const [naturalSizes, setNaturalSizes] = useState({});
   const [pendingFiles, setPendingFiles] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -825,7 +800,6 @@ export default function ScoreEditorScreen({navigation, route}) {
         {(manifest?.pages || []).map(page => {
           const key = page.name || String(page.index);
           const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
-          const boxes = (manifest.annotations || []).filter(b => (b.page || 0) === page.index);
           const pageDivs = (dividers || []).filter(d => (d.page || 0) === page.index);
           const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === page.index);
           const badge = page.pending_review ? ' · 待审' : page.uploaded_by === 'student' ? ' · 学生补传' : '';
@@ -878,15 +852,13 @@ export default function ScoreEditorScreen({navigation, route}) {
                   onPress={e => onPageTap(page.index, pageH, e)}
                   style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
                 />
-                {boxes.map(box => (
-                  <SimpleBox
-                    key={box.id}
-                    box={box}
-                    pageW={pageW}
-                    pageH={pageH}
-                    onOpen={openEdit}
-                  />
-                ))}
+                <SectionMarks
+                  sections={marks}
+                  page={page.index}
+                  pageW={pageW}
+                  pageH={pageH}
+                  onOpen={sec => openEdit(sec.head)}
+                />
                 {pageDivs.map(d => (
                   <SimpleDivider
                     key={d.id}
@@ -1188,7 +1160,6 @@ export default function ScoreEditorScreen({navigation, route}) {
             const zh = Math.max(baseH, win.height * 0.55);
             const scale = zoomScale;
             const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
-            const boxes = (manifest?.annotations || []).filter(b => (b.page || 0) === zoomPage.index);
             const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
             const zoomKey = zoomPage.name || String(zoomPage.index);
             const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
@@ -1254,18 +1225,16 @@ export default function ScoreEditorScreen({navigation, route}) {
                       height: zh * scale,
                     }}
                   />
-                  {boxes.map(box => (
-                    <SimpleBox
-                      key={box.id}
-                      box={box}
-                      pageW={zw * scale}
-                      pageH={zh * scale}
-                      onOpen={b => {
-                        setZoomPage(null);
-                        openEdit(b);
-                      }}
-                    />
-                  ))}
+                  <SectionMarks
+                    sections={marks}
+                    page={zoomPage.index}
+                    pageW={zw * scale}
+                    pageH={zh * scale}
+                    onOpen={sec => {
+                      setZoomPage(null);
+                      openEdit(sec.head);
+                    }}
+                  />
                   {pageDivs.map(d => (
                     <SimpleDivider
                       key={d.id}

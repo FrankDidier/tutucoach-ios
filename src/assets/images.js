@@ -147,6 +147,8 @@ export const Images = {
   companionCode: require('./img/ic_companion_code.png'),
   companionVolume: require('./img/ic_companion_volume.png'),
   companionSend: require('./img/ic_companion_send.png'),
+  companionMic: require('./img/ic_companion_mic.png'),
+  companionKeyboard: require('./img/ic_companion_keyboard.png'),
   metroMinus: require('./img/ic_metro_minus.png'),
   metroPlus: require('./img/ic_metro_plus.png'),
   metroNote: require('./img/ic_metro_note.png'),

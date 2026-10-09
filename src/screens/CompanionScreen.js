@@ -17,12 +17,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   AppState,
+  NativeModules,
   useWindowDimensions,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {getDeviceId} from '../services/device';
+import {getItem, setItem} from '../services/storage';
 import {syncPractice} from '../services/account';
 import {chat, fetchReminders, refineTarot, saveCompanionProfile} from '../services/companionChat';
 import {createCompanionSession} from '../services/companionSession';
@@ -50,13 +52,24 @@ function stripParentheticals(s) {
     .trim();
 }
 
-// 自由聊天只留第一句，避免角色把一句短回答扩成一段独白。
-function oneSentence(s) {
-  const t = stripParentheticals(s);
-  if (!t) return '';
-  const m = t.match(/^.{1,48}?[。！？!?]/);
-  if (m) return m[0];
-  return t.slice(0, 48);
+// 聊天回复像微信一样连发几条短消息：按行拆，最多五条。
+// 括号里的小动作留在气泡里，只是不念；只有动作的一行并到下一条前面。
+function chatLines(s) {
+  const out = [];
+  let action = '';
+  String(s || '')
+    .split(/\n+/)
+    .map(x => x.replace(/^\s*(?:[-·•]|\d+[.、])\s*/, '').trim())
+    .filter(Boolean)
+    .forEach(x => {
+      if (!stripParentheticals(x)) {
+        action += x;
+        return;
+      }
+      out.push(action + x);
+      action = '';
+    });
+  return out.slice(0, 5).map(x => (x.length > 80 ? x.slice(0, 80) : x));
 }
 
 // 从分身人设(systemPrompt)里的「语言：中文/英语/日语/韩语」一行解析朗读语言。
@@ -93,6 +106,16 @@ import {useTheme} from '../theme/ThemeContext';
 
 let bubbleKey = 1;
 
+const Ear = NativeModules.TutuRecorder || null;
+const PRACTICE_MIN_KEY = 'companion_practice_min';
+const PRACTICE_CHOICES = [10, 15, 20, 30, 45, 60];
+
+function clock(sec) {
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
 export default function CompanionScreen({navigation}) {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -109,6 +132,16 @@ export default function CompanionScreen({navigation}) {
   const [muted, setMuted] = useState(false);
   const [pieces, setPieces] = useState([]);
   const [pieceIdx, setPieceIdx] = useState(-1);
+  // 默认按住说话：小朋友不会打字也能聊。
+  const [voiceMode, setVoiceMode] = useState(true);
+  const [talk, setTalk] = useState('');
+  const [talkHint, setTalkHint] = useState('');
+  const [practiceMin, setPracticeMin] = useState(0);
+  const [leftSec, setLeftSec] = useState(0);
+  const [timeUp, setTimeUp] = useState(false);
+  const talkRef = useRef(null);
+  const hintTimer = useRef(null);
+  const leftRef = useRef(0);
 
   const scrollRef = useRef(null);
   const profileRef = useRef(profileById('coach_pro'));
@@ -119,17 +152,12 @@ export default function CompanionScreen({navigation}) {
   const remindersRef = useRef([]);
   const piecesRef = useRef([]);
   const pieceIdxRef = useRef(-1);
-  const reminderIdxRef = useRef(0);
   const freqRef = useRef(45);
-  const proactiveCountRef = useRef(0);
   const busyRef = useRef(false);
   const pausedRef = useRef(false);
   const typingRef = useRef(false);
   const typingIdleTimer = useRef(null);
   const mutedRef = useRef(false);
-  const greetedRef = useRef(false);
-  const nextContextualRef = useRef(false);
-  const proactiveTimer = useRef(null);
   const aliveRef = useRef(true);
   const focusCountRef = useRef(0);
   /** Keep companion TTS running while viewing score. */
@@ -314,6 +342,7 @@ export default function CompanionScreen({navigation}) {
             ? piecesRef.current[pieceIdxRef.current].name
             : '',
         globalLines: () => (remindersRef.current || []).slice(),
+        freqSec: () => freqRef.current,
         coachId: () => coachIdRef.current,
         studentName: () => studentNameSafe(),
         history: () => historyRef.current,
@@ -348,7 +377,6 @@ export default function CompanionScreen({navigation}) {
         activeTimerRef.current.dispose();
         activeTimerRef.current = null;
       }
-      if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
       if (typingIdleTimer.current) clearTimeout(typingIdleTimer.current);
       try {
         stopSpeak();
@@ -415,9 +443,49 @@ export default function CompanionScreen({navigation}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
 
+  // 键盘弹起时把麦让给系统听写（键盘上的话筒），两边同时开麦会闪退。
+  useEffect(() => {
+    const showEv = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEv = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const shown = Keyboard.addListener(showEv, () => {
+      if (roundRef.current && roundRef.current.pauseEar) roundRef.current.pauseEar('keyboard', true);
+    });
+    const hidden = Keyboard.addListener(hideEv, () => {
+      if (roundRef.current && roundRef.current.pauseEar) roundRef.current.pauseEar('keyboard', false);
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+      if (hintTimer.current) clearTimeout(hintTimer.current);
+      if (talkRef.current && Ear && Ear.talkCancel) Ear.talkCancel().catch(() => {});
+    };
+  }, []);
+
+  // 练琴计时：只在陪练页开着、App 在前台时走（看乐谱也算）。
+  useEffect(() => {
+    getItem(PRACTICE_MIN_KEY).then(v => {
+      const min = parseInt(v, 10) || 0;
+      if (!aliveRef.current || min <= 0) return;
+      setPracticeMin(min);
+      leftRef.current = min * 60;
+      setLeftSec(min * 60);
+    });
+    const tickTimer = setInterval(() => {
+      if (leftRef.current <= 0) return;
+      if (AppState.currentState !== 'active') return;
+      if (pausedRef.current && !scoreViewerOpenRef.current) return;
+      leftRef.current -= 1;
+      setLeftSec(leftRef.current);
+      if (leftRef.current <= 0) {
+        setTimeUp(true);
+        if (roundRef.current && roundRef.current.timeUp) roundRef.current.timeUp();
+      }
+    }, 1000);
+    return () => clearInterval(tickTimer);
+  }, []);
+
   // ============ 曲目 ============
   const applyPiece = idx => {
-    reminderIdxRef.current = 0;
     if (idx >= 0 && idx < piecesRef.current.length) {
       remindersRef.current = (piecesRef.current[idx].lines || []).slice();
     } else {
@@ -433,7 +501,6 @@ export default function CompanionScreen({navigation}) {
         pieceIdxRef.current = i;
         applyPiece(i);
         setPieceIdx(i);
-        nextContextualRef.current = false;
         if (roundRef.current) roundRef.current.setPiece(piecesRef.current[i].name);
       },
     }));
@@ -509,21 +576,6 @@ export default function CompanionScreen({navigation}) {
     }, per);
   };
 
-  // ============ 开场 & 主动陪伴 ============
-  const openingGreeting = () => {
-    const p = profileRef.current || {};
-    const greeting = p.greeting || '我在呢，我们一起练琴吧～';
-    greetedRef.current = true;
-    addAiBubble(greeting, true);
-    // 大模型补一句更自然的招呼（不朗读，避免抢话）。
-    chat(coachIdRef.current, studentNameSafe(), [], 'chat', '').then(res => {
-      if (res && res.ok && res.text && aliveRef.current) {
-        pushHistory('assistant', res.text);
-        addAiBubble(res.text, false);
-      }
-    });
-  };
-
   const studentNameSafe = () => '同学';
 
   // 「正在打字」只表示学生此刻在操作输入框，用来避免主动播报打断打字。
@@ -544,75 +596,6 @@ export default function CompanionScreen({navigation}) {
     if (typingIdleTimer.current) {
       clearTimeout(typingIdleTimer.current);
       typingIdleTimer.current = null;
-    }
-  };
-
-  const scheduleProactive = () => {
-    if (proactiveTimer.current) clearTimeout(proactiveTimer.current);
-    const base = Math.max(10, freqRef.current) * 1000;
-    const delay = base * (0.8 + Math.random() * 0.6);
-    proactiveTimer.current = setTimeout(() => {
-      if (!pausedRef.current && !busyRef.current && !typingRef.current) {
-        doProactive();
-      }
-      scheduleProactive();
-    }, delay);
-  };
-
-  const doProactive = () => {
-    // 刚聊完天，不要接着念练琴口令。等人声过去再提醒。
-    if (roundRef.current && roundRef.current.recentVoice && roundRef.current.recentVoice()) {
-      return;
-    }
-    proactiveCountRef.current += 1;
-    // 刚和学生聊过 → 这一条让大模型结合刚才的对话来说，更连贯。
-    if (nextContextualRef.current) {
-      nextContextualRef.current = false;
-      doLlmProactive('');
-      return;
-    }
-    const reminders = remindersRef.current;
-    const useReminder = reminders.length && proactiveCountRef.current % 2 === 1;
-    if (useReminder) {
-      const r = reminders[reminderIdxRef.current % reminders.length];
-      reminderIdxRef.current += 1;
-      if (r) addAiBubble(r, true);
-      return;
-    }
-    const topic = reminders.length
-      ? reminders[reminderIdxRef.current % reminders.length]
-      : '';
-    doLlmProactive(topic);
-  };
-
-  const doLlmProactive = topic => {
-    busyRef.current = true;
-    chat(coachIdRef.current, studentNameSafe(), historyRef.current, 'proactive', topic, '', studentIdRef.current)
-      .then(res => {
-        busyRef.current = false;
-        if (pausedRef.current || typingRef.current) return;
-        if (res && res.ok && res.text) {
-          pushHistory('assistant', res.text);
-          addAiBubble(res.text, true);
-        } else {
-          speakLocalEncouragement();
-        }
-      })
-      .catch(() => {
-        busyRef.current = false;
-        if (!pausedRef.current && !typingRef.current) speakLocalEncouragement();
-      });
-  };
-
-  const speakLocalEncouragement = () => {
-    const p = profileRef.current || {};
-    const banks = p.encouragements || [];
-    if (banks.length) {
-      addAiBubble(banks[Math.floor(Math.random() * banks.length)], true);
-    } else if (remindersRef.current.length) {
-      const r = remindersRef.current[reminderIdxRef.current % remindersRef.current.length];
-      reminderIdxRef.current += 1;
-      addAiBubble(r, true);
     }
   };
 
@@ -644,55 +627,67 @@ export default function CompanionScreen({navigation}) {
   const FIX_WORDS = /我叫|叫我|名字|叫错|记错|忘了我|忘掉我|忘记我|把我忘|重新认识|记忆|我是(?:男|女)|岁/;
   const SECTION_WORDS = /(?:练|弹)得?(?:差不多|好|会)了|差不多了|(?:这段|这一段).{0,4}(?:可以了|行了|好了)|下一段|还没(?:练|弹)好|再练(?:一会|会儿|练)/;
 
+  // 「要注意什么」「重点是什么」：照老师的原话按编号说，不让角色自己编。
+  const POINT_WORDS = /重点|注意(?:些|点)?什么|要注意|老师(?:说|讲|交代)了?什么/;
+
+  const showUser = text => {
+    addUserBubble(text);
+    pushHistory('user', text);
+  };
+
+  // 先给陪练规则认；规则不接（返回空）就当聊天。
+  const ruleOrChat = (text, run) => {
+    setSending(true);
+    Promise.resolve(run())
+      .then(plan => {
+        if (plan && !plan.chat) {
+          setSending(false);
+          return;
+        }
+        sendChat(text);
+      })
+      .catch(() => sendChat(text));
+  };
+
   const onSendText = text => {
     if (!text) return;
     const round = roundRef.current;
-    if (round && round.markVoice) round.markVoice();
-    if (round && round.said && !(round.awaiting && round.awaiting()) && FIX_WORDS.test(text)) {
-      addUserBubble(text);
-      pushHistory('user', text);
-      setSending(true);
-      Promise.resolve(round.said(text))
-        .then(plan => {
-          if (plan) {
-            setSending(false);
-            return;
-          }
-          sendChat(text);
-        })
-        .catch(() => sendChat(text));
+    if (round && round.ended && round.ended()) {
+      showUser(text);
+      sendChat(text);
       return;
     }
-    if (round && round.awaiting && round.awaiting()) {
-      addUserBubble(text);
-      pushHistory('user', text);
-      if (round.answerTyped) round.answerTyped(text);
+    if (round && round.markVoice) round.markVoice();
+    const awaiting = !!(round && round.awaiting && round.awaiting());
+    if (round && round.said && !awaiting && FIX_WORDS.test(text)) {
+      showUser(text);
+      ruleOrChat(text, () => round.said(text));
+      return;
+    }
+    if (round && round.askPoints && POINT_WORDS.test(text)) {
+      showUser(text);
+      ruleOrChat(text, () => round.askPoints());
+      return;
+    }
+    if (awaiting && round.answerTyped) {
+      showUser(text);
+      ruleOrChat(text, () => round.answerTyped(text));
       return;
     }
     // 没被问也主动说「这段差不多了」「还没练好」：按他自己对这一段的判断走，不当闲聊。
     if (round && round.volunteerSection && SECTION_WORDS.test(text)) {
-      addUserBubble(text);
-      pushHistory('user', text);
-      setSending(true);
-      Promise.resolve(round.volunteerSection(text))
-        .then(plan => {
-          if (plan) {
-            setSending(false);
-            return;
-          }
-          sendChat(text);
-        })
-        .catch(() => sendChat(text));
+      showUser(text);
+      ruleOrChat(text, () => round.volunteerSection(text));
       return;
     }
-    addUserBubble(text);
-    pushHistory('user', text);
+    showUser(text);
     sendChat(text);
   };
 
   const sendChat = () => {
     setSending(true);
     busyRef.current = true;
+    const round = roundRef.current;
     chat(
       coachIdRef.current,
       studentNameSafe(),
@@ -701,18 +696,26 @@ export default function CompanionScreen({navigation}) {
       '',
       '',
       studentIdRef.current,
+      round && round.numberedPoints ? round.numberedPoints() : [],
     )
       .then(res => {
         setSending(false);
         busyRef.current = false;
-        if (res && res.ok && res.text) {
-          const line = oneSentence(res.text);
-          pushHistory('assistant', line);
-          addAiBubble(line, true);
-          nextContextualRef.current = true;
-        } else {
+        const lines = res && res.ok ? chatLines(res.text) : [];
+        if (!lines.length) {
           Alert.alert('提示', '网络不太好，再发一次试试～');
+          return;
         }
+        pushHistory('assistant', lines.join('\n'));
+        const spoken = lines.map(stripParentheticals).filter(Boolean).join(' ');
+        addAiBubble(lines[0], true, spoken);
+        let wait = 0;
+        lines.slice(1).forEach((line, i) => {
+          wait += 700 + lines[i].length * 70;
+          setTimeout(() => {
+            if (aliveRef.current) addAiBubble(line, false);
+          }, wait);
+        });
       })
       .catch(() => {
         setSending(false);
@@ -727,6 +730,120 @@ export default function CompanionScreen({navigation}) {
     Keyboard.dismiss();
     clearTyping();
     onSendText(text);
+  };
+
+  // ============ 按住说话（像微信） ============
+  const flashHint = text => {
+    setTalkHint(text);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setTalkHint(''), 1800);
+  };
+
+  const toggleVoiceMode = () => {
+    const next = !voiceMode;
+    setVoiceMode(next);
+    if (next) {
+      Keyboard.dismiss();
+      clearTyping();
+    }
+  };
+
+  const finishTalk = (t, r) => {
+    if (talkRef.current === t) {
+      talkRef.current = null;
+      setTalk('');
+    }
+    const round = roundRef.current;
+    if (round && round.pauseEar) round.pauseEar('talk', false);
+    if (r && r.denied) {
+      Alert.alert('需要麦克风', '请在「设置 › 兔兔教练」里打开麦克风和语音识别，就能按住说话了。');
+      return;
+    }
+    if (r && r.busy) {
+      flashHint('麦克风正忙，松开再按一次试试');
+      return;
+    }
+    if (t.cancel) return;
+    const text = String((r && r.text) || '').trim();
+    if (!text) {
+      flashHint('没听清，按住再说一次');
+      return;
+    }
+    onSendText(text);
+  };
+
+  const onTalkGrant = e => {
+    if (!Ear || !Ear.talkStart) {
+      flashHint('这台设备暂时不能语音输入，点左边换成打字');
+      return;
+    }
+    try {
+      stopSpeak();
+    } catch (err) {}
+    const round = roundRef.current;
+    if (round && round.pauseEar) round.pauseEar('talk', true);
+    const t = {startY: e.nativeEvent.pageY, at: Date.now(), cancel: false};
+    talkRef.current = t;
+    setTalk('talking');
+    Ear.talkStart()
+      .catch(() => ({text: ''}))
+      .then(r => finishTalk(t, r));
+  };
+
+  const onTalkMove = e => {
+    const t = talkRef.current;
+    if (!t) return;
+    const up = t.startY - e.nativeEvent.pageY > 60;
+    if (up !== t.cancel) {
+      t.cancel = up;
+      setTalk(up ? 'cancel' : 'talking');
+    }
+  };
+
+  const onTalkRelease = () => {
+    const t = talkRef.current;
+    if (!t) return;
+    const short = Date.now() - t.at < 500;
+    if (short && !t.cancel) flashHint('说话时间太短');
+    if (t.cancel || short) {
+      t.cancel = true;
+      Ear.talkCancel().catch(() => {});
+    } else {
+      Ear.talkEnd().catch(() => {});
+    }
+    talkRef.current = null;
+    setTalk('');
+  };
+
+  const onTalkTerminate = () => {
+    const t = talkRef.current;
+    if (!t) return;
+    t.cancel = true;
+    Ear.talkCancel().catch(() => {});
+    talkRef.current = null;
+    setTalk('');
+  };
+
+  // ============ 练琴计时 ============
+  const startCountdown = min => {
+    setPracticeMin(min);
+    setItem(PRACTICE_MIN_KEY, String(min));
+    leftRef.current = min * 60;
+    setLeftSec(min * 60);
+    if (timeUp) {
+      setTimeUp(false);
+      if (roundRef.current && roundRef.current.restart) roundRef.current.restart();
+    }
+  };
+
+  const pickPracticeTime = () => {
+    const opts = PRACTICE_CHOICES.map(m => ({
+      text: `${m} 分钟`,
+      onPress: () => startCountdown(m),
+    }));
+    opts.push({text: '不限时', onPress: () => startCountdown(0)});
+    opts.push({text: '取消', style: 'cancel'});
+    Alert.alert('这次练多久？', '时间到了 TA 会提醒你休息', opts);
   };
 
   const toggleMute = () => {
@@ -877,6 +994,14 @@ export default function CompanionScreen({navigation}) {
             </Text>
           </TouchableOpacity>
           <View style={{flex: 1}} />
+          <TouchableOpacity
+            onPress={pickPracticeTime}
+            style={[styles.timerPill, timeUp && styles.timerPillDone]}
+            accessibilityLabel="练琴计时">
+            <Text style={styles.timerText} numberOfLines={1}>
+              {timeUp ? '时间到' : practiceMin > 0 ? '⏱ ' + clock(leftSec) : '⏱ 计时'}
+            </Text>
+          </TouchableOpacity>
           {/* 蓝湖仅「学生码 + 音量」；换背景走长按背景图（见上方） */}
           <TouchableOpacity
             onPress={askForget}
@@ -962,36 +1087,79 @@ export default function CompanionScreen({navigation}) {
         {/* 大号节拍器 */}
         <MetronomeCard style={styles.metro} />
 
-        {/* 输入区：发送图标在输入胶囊内右侧（蓝湖） */}
+        {/* 输入区：左边切换按住说话 / 打字，像微信 */}
+        {talkHint ? (
+          <View style={styles.hintWrap} pointerEvents="none">
+            <Text style={styles.hintText}>{talkHint}</Text>
+          </View>
+        ) : null}
         <View style={styles.inputBar}>
           <View style={styles.inputShell}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={t => {
-                setInput(t);
-                markTyping();
-              }}
-              onFocus={() => {
-                markTyping();
-              }}
-              onBlur={() => {
-                clearTyping();
-              }}
-              placeholder="和Ta聊天"
-              placeholderTextColor="#979797"
-              multiline
-            />
             <TouchableOpacity
-              style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
-              onPress={onSend}
-              disabled={sending}>
-              <Image source={Images.companionSend} style={styles.sendIcon} resizeMode="contain" />
+              style={styles.modeBtn}
+              onPress={toggleVoiceMode}
+              accessibilityLabel={voiceMode ? '切换到打字' : '切换到按住说话'}>
+              <Image
+                source={voiceMode ? Images.companionKeyboard : Images.companionMic}
+                style={styles.modeIcon}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
+            {voiceMode ? (
+              <View
+                style={[styles.holdBtn, talk ? styles.holdBtnOn : null]}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderTerminationRequest={() => false}
+                onResponderGrant={onTalkGrant}
+                onResponderMove={onTalkMove}
+                onResponderRelease={onTalkRelease}
+                onResponderTerminate={onTalkTerminate}
+                accessibilityRole="button"
+                accessibilityLabel="按住说话">
+                <Text style={styles.holdText}>{talk ? '松开 发送' : '按住 说话'}</Text>
+              </View>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={input}
+                  onChangeText={t => {
+                    setInput(t);
+                    markTyping();
+                  }}
+                  onFocus={() => {
+                    markTyping();
+                  }}
+                  onBlur={() => {
+                    clearTyping();
+                  }}
+                  placeholder="和Ta聊天"
+                  placeholderTextColor="#979797"
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+                  onPress={onSend}
+                  disabled={sending}>
+                  <Image source={Images.companionSend} style={styles.sendIcon} resizeMode="contain" />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      {talk ? (
+        <View style={styles.talkLayer} pointerEvents="none">
+          <View style={[styles.talkCard, talk === 'cancel' && styles.talkCardCancel]}>
+            <Image source={Images.companionMic} style={styles.talkMic} resizeMode="contain" />
+            <Text style={styles.talkCardText}>
+              {talk === 'cancel' ? '松开手指，取消发送' : '松开 发送，上滑 取消'}
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1027,8 +1195,20 @@ const makeStyles = colors =>
     paddingRight: 10,
     borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.2)',
-    maxWidth: 160,
+    maxWidth: 124,
   },
+  timerPill: {
+    height: 30,
+    minWidth: 64,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    marginRight: 10,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerPillDone: {backgroundColor: 'rgba(255,170,60,0.85)'},
+  timerText: {color: '#fff', fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums']},
   headerAvatar: {
     width: 28,
     height: 28,
@@ -1036,7 +1216,7 @@ const makeStyles = colors =>
     marginRight: 6,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  coachName: {color: '#fff', fontSize: 14, fontWeight: '600', maxWidth: 110},
+  coachName: {color: '#fff', fontSize: 14, fontWeight: '600', maxWidth: 80},
   iconCircle: {
     width: 30,
     height: 30,
@@ -1076,11 +1256,51 @@ const makeStyles = colors =>
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    paddingLeft: 18,
+    borderRadius: 22,
+    paddingLeft: 4,
     paddingRight: 6,
-    height: 40,
+    minHeight: 44,
   },
+  modeBtn: {width: 38, height: 38, alignItems: 'center', justifyContent: 'center', marginRight: 4},
+  modeIcon: {width: 24, height: 24},
+  holdBtn: {
+    flex: 1,
+    height: 36,
+    marginRight: 2,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holdBtnOn: {backgroundColor: 'rgba(255,255,255,0.38)'},
+  holdText: {color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 1},
+  hintWrap: {alignItems: 'center', marginBottom: 2},
+  hintText: {
+    color: '#fff',
+    fontSize: 12.5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  talkLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  talkCard: {
+    width: 168,
+    height: 168,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  talkCardCancel: {backgroundColor: 'rgba(200,40,40,0.82)'},
+  talkMic: {width: 64, height: 64, marginBottom: 16},
+  talkCardText: {color: '#fff', fontSize: 13, textAlign: 'center'},
   input: {
     flex: 1,
     maxHeight: 100,
