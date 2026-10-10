@@ -73,6 +73,7 @@ export function createCompanionSession(host) {
   let stopped = false;
   let levels = [];
   let silentSec = 0;
+  let quietAt = 0;
   let hadPlaying = false;
   let sections = [];
   let globals = [];
@@ -110,7 +111,9 @@ export function createCompanionSession(host) {
     // 「老师说先分段练」和问句「先分段练还是整首弹」字面很像，只挑了一边就是学生在回答。
     if (awaitingField === 'mode' && /分段|整首|一段|整个|从头/.test(heard)
         && !PROFILE_FIELDS.mode.test(heard)) return false;
-    if (echoes(lastSpokenText, heard) || recentSpoken.some(s => echoes(s, heard))) return true;
+    // 回答常照着问句的词说（「我最喜欢弹琴」对「你最喜欢干啥」），等回答时只把问句里原样的一截当回声。
+    const strict = !!awaitingField;
+    if (echoes(lastSpokenText, heard, strict) || recentSpoken.some(s => echoes(s, heard, strict))) return true;
     // 在等回答时，「女生」「九岁」这种短回答常和问句里的词一样，仍算学生的回答。
     if (awaitingField) return false;
     // 刚说完话时麦里漏进来的两三个字（「听到的」「那我」），是自己那句的碎片。
@@ -121,14 +124,14 @@ export function createCompanionSession(host) {
       .some(s => String(s || '').replace(/[\s，。！？、!?,.…~～]/g, '').includes(b));
   };
 
-  const echoes = (said, heard) => {
+  const echoes = (said, heard, strict) => {
     const a = String(said || '').replace(/\s/g, '');
     const b = String(heard || '').replace(/\s/g, '');
     if (a.length < 2 || b.length < 2) return false;
     if (b.includes(a)) return true;
     // 问句里带了「女孩」这类短词。学生真的回答这两个字时，不要当成自己的回声。
     if (b.length < 4) return false;
-    return a.includes(b) || soundsLike(b, a);
+    return a.includes(b) || (!strict && soundsLike(b, a));
   };
 
   // 等角色把这句真正念完。声音要先从网上拉，按字数估的时间常常不够，麦就把自己录进去了。
@@ -255,11 +258,15 @@ export function createCompanionSession(host) {
       const lv = await Ear.readLevel();
       const rms = Number(lv && lv.rms) || 0;
       levels = levels.concat(rms).slice(-6);
+      // 按真实过去的秒数算没动静多久；角色自己说话那几秒最多算一个间隔。
+      const at = Date.now();
+      const gap = quietAt ? Math.min(5, Math.max(0, (at - quietAt) / 1000)) : 4;
+      quietAt = at;
       if (rms >= 0.08) {
         hadPlaying = true;
         silentSec = 0;
       } else {
-        silentSec += 2;
+        silentSec += gap;
       }
     } catch (e) {}
   };
@@ -287,7 +294,7 @@ export function createCompanionSession(host) {
         boxed,
         freq_sec: host.freqSec ? host.freqSec() : 45,
         had_playing: hadPlaying,
-        silent_sec: silentSec,
+        silent_sec: Math.round(silentSec),
         background: event === 'background',
         roll: Math.random(),
       });
