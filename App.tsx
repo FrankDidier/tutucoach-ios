@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {View, Image, Platform} from 'react-native';
-import {NavigationContainer} from '@react-navigation/native';
+import {NavigationContainer, createNavigationContainerRef} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
@@ -30,6 +30,19 @@ import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
 import {initDeviceId, getDeviceId} from './src/services/device';
+import {startStoreListener} from './src/services/appStore';
+import {askAiConsent, getAiConsent} from './src/services/aiConsent';
+import AiConsentHost from './src/components/AiConsentHost';
+import withAiConsent from './src/components/withAiConsent';
+
+const CompanionGated = withAiConsent(CompanionScreen);
+const DetectionGated = withAiConsent(DetectionScreen);
+const AISettingsGated = withAiConsent(AISettingsScreen);
+const LessonPlanGated = withAiConsent(LessonPlanScreen);
+const LessonCaptureGated = withAiConsent(LessonCaptureScreen);
+const ScoreEditorGated = withAiConsent(ScoreEditorScreen);
+
+const navigationRef = createNavigationContainerRef<any>();
 import {
   getSelectedCoachId,
   getCachedCoachAvatarUri,
@@ -132,6 +145,8 @@ function AppInner(): React.JSX.Element {
       registerAccount(getDeviceId(), 'student').catch(() => {});
       // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
       registerWeChat();
+      // App Store 订阅：续费等不经过购买按钮的交易也要收下并开通会员。
+      startStoreListener();
       // Lanhu emulator audit: seed via AsyncStorage keys set before launch
       // (audit_skip_guide=1, audit_theme=dark|light, verify_boot_route).
       const auditSkip = await getItem('audit_skip_guide');
@@ -222,8 +237,15 @@ function AppInner(): React.JSX.Element {
     return <View style={{flex: 1, backgroundColor: colors.bg}} />;
   }
 
+  // 第一次打开就先讲清楚 AI 功能会把哪些数据发给谁；不同意的话进 AI 功能时会再问。
+  const onNavReady = () => {
+    getAiConsent().then(v => {
+      if (!v) setTimeout(() => askAiConsent(), 900);
+    });
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={onNavReady}>
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{headerShown: false}}>
@@ -241,14 +263,14 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="Subscription" component={SubscriptionScreen} />
         <Stack.Screen
           name="Detection"
-          component={DetectionScreen}
+          component={DetectionGated}
           initialParams={
             initialRoute === 'Detection' ? bootParams : undefined
           }
         />
         <Stack.Screen
           name="Companion"
-          component={CompanionScreen}
+          component={CompanionGated}
           options={{
             // 进陪练立刻盖住上一页，避免粉兔水印/练琴页透出约 1s
             animation: 'fade',
@@ -259,16 +281,16 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="ClassManage" component={ClassManageScreen} />
         <Stack.Screen name="AISelect" component={AISelectScreen} />
         <Stack.Screen name="AIList" component={AIListScreen} />
-        <Stack.Screen name="AISettings" component={AISettingsScreen} />
+        <Stack.Screen name="AISettings" component={AISettingsGated} />
         <Stack.Screen name="StudentReminder" component={StudentReminderScreen} />
-        <Stack.Screen name="LessonPlan" component={LessonPlanScreen} />
-        <Stack.Screen name="LessonCapture" component={LessonCaptureScreen} />
+        <Stack.Screen name="LessonPlan" component={LessonPlanGated} />
+        <Stack.Screen name="LessonCapture" component={LessonCaptureGated} />
         <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
         <Stack.Screen
           name="ScoreEditor"
-          component={ScoreEditorScreen}
+          component={ScoreEditorGated}
           initialParams={initialRoute === 'ScoreEditor' ? bootParams : undefined}
         />
         <Stack.Screen
@@ -277,6 +299,7 @@ function AppInner(): React.JSX.Element {
           initialParams={initialRoute === 'ScoreViewer' ? bootParams : undefined}
         />
       </Stack.Navigator>
+      <AiConsentHost navigationRef={navigationRef} />
     </NavigationContainer>
   );
 }

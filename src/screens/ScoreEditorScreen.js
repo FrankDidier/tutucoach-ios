@@ -19,7 +19,7 @@ import {
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import SectionMarks from '../components/SectionMarks';
-import {readingSections} from '../utils/sections';
+import {cnNum, readingSections} from '../utils/sections';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {pickPdf} from '../services/documentPicker';
@@ -160,10 +160,6 @@ export default function ScoreEditorScreen({navigation, route}) {
   const marks = useMemo(() => readingSections(manifest?.annotations || []), [manifest]);
   const [naturalSizes, setNaturalSizes] = useState({});
   const [pendingFiles, setPendingFiles] = useState(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [label, setLabel] = useState('');
-  const [note, setNote] = useState('');
   const [termOpen, setTermOpen] = useState(false);
   const [termIdx, setTermIdx] = useState(-1);
   const [termKey, setTermKey] = useState('');
@@ -182,7 +178,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       setManifest({
         pages: [{index: 0, name: 'preview', url: '', width: 800, height: 1400}],
         annotations: [
-          {id: 'preview_box', page: 0, x: 0.06, y: 0.22, w: 0.7, h: 0.28, label: '预览重点框'},
+          {id: 'preview_box', page: 0, x: 0.06, y: 0.22, w: 0.7, h: 0.28, label: ''},
         ],
       });
       setTerms([]);
@@ -440,7 +436,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         if (Array.isArray(r.dividers)) {
           setDividers(normDividers(r.dividers));
         }
-        Alert.alert('已生成重点框', '每条分段线往前一个大框。点框可改文字，最后点「保存确认」。');
+        Alert.alert('已生成重点框', '划了几条段尾线就是几段，按顺序叫第一段、第二段……一段可以跨行、跨页。最后点「保存确认」。');
       } else {
         Alert.alert('生成失败', '请稍后重试。');
       }
@@ -593,18 +589,21 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
-  const openEdit = box => {
-    setEditing(box);
-    setLabel(box?.label || '');
-    setNote(box?.note || '');
-    setEditOpen(true);
-  };
-
-  const updateBox = next => {
-    setManifest(prev => {
-      const annotations = (prev?.annotations || []).map(b => (b.id === next.id ? next : b));
-      return {...(prev || {}), annotations};
-    });
+  // 段落只有编号，不写标题：点「第N段」只能看编号或删掉这一段的框。
+  const openSection = sec => {
+    const ids = new Set((sec.rects || [sec.head]).map(r => r.id));
+    Alert.alert(`第${cnNum(sec.n)}段`, '段落只按编号，不写标题。要改分段，删掉或重新点段尾线，再点「生成重点框」。', [
+      {text: '好', style: 'cancel'},
+      {
+        text: '删除这一段的框',
+        style: 'destructive',
+        onPress: () =>
+          setManifest(prev => ({
+            ...(prev || {}),
+            annotations: (prev?.annotations || []).filter(b => !ids.has(b.id)),
+          })),
+      },
+    ]);
   };
 
   const addBox = pageIdx => {
@@ -615,7 +614,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       y: 0.16,
       w: 0.84,
       h: 0.1,
-      label: '新重点',
+      label: '',
       note: '',
       status: 'confirmed',
       kind: 'phrase',
@@ -624,16 +623,6 @@ export default function ScoreEditorScreen({navigation, route}) {
       ...(prev || {}),
       annotations: [...(prev?.annotations || []), next],
     }));
-    openEdit(next);
-  };
-
-  const removeBox = () => {
-    if (!editing) return;
-    setManifest(prev => ({
-      ...(prev || {}),
-      annotations: (prev?.annotations || []).filter(b => b.id !== editing.id),
-    }));
-    setEditOpen(false);
   };
 
   const saveAll = async (approvePending = false) => {
@@ -857,7 +846,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                   page={page.index}
                   pageW={pageW}
                   pageH={pageH}
-                  onOpen={sec => openEdit(sec.head)}
+                  onOpen={openSection}
                 />
                 {pageDivs.map(d => (
                   <SimpleDivider
@@ -935,42 +924,6 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
         ) : null}
       </ScrollView>
-
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
-        <View style={ui.modalMask}>
-          <View style={ui.modalCard}>
-            <Text style={ui.section}>编辑重点框</Text>
-            <TextInput
-              style={ui.input}
-              value={label}
-              onChangeText={setLabel}
-              placeholder="重点标题"
-              placeholderTextColor={colors.textSecondary}
-            />
-            <TextInput
-              style={[ui.input, ui.noteInput]}
-              value={note}
-              onChangeText={setNote}
-              placeholder="补充说明（可选）"
-              placeholderTextColor={colors.textSecondary}
-              multiline
-            />
-            <View style={ui.row}>
-              <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={removeBox}>
-                <Text style={ui.btnText}>删除</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={ui.btn}
-                onPress={() => {
-                  if (editing) updateBox({...editing, label, note, status: 'confirmed'});
-                  setEditOpen(false);
-                }}>
-                <Text style={ui.btnText}>确定</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={termOpen} transparent animationType="fade" onRequestClose={() => setTermOpen(false)}>
         <View style={ui.modalMask}>
@@ -1232,7 +1185,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                     pageH={zh * scale}
                     onOpen={sec => {
                       setZoomPage(null);
-                      openEdit(sec.head);
+                      openSection(sec);
                     }}
                   />
                   {pageDivs.map(d => (

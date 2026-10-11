@@ -21,6 +21,7 @@ export async function chat(
   situation = '',
   studentId = '',
   points = [],
+  practice = null,
 ) {
   try {
     const body = {
@@ -30,6 +31,7 @@ export async function chat(
     };
     if (studentId) body.student_id = studentId;
     if (Array.isArray(points) && points.length) body.points = points;
+    if (practice) body.practice = practice;
     if (mode) body.mode = mode;
     if (topic) body.topic = topic;
     if (situation) body.situation = situation;

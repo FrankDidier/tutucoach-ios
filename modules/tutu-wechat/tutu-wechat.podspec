@@ -12,8 +12,10 @@ Pod::Spec.new do |s|
   s.platforms    = { :ios => "15.1" }
   s.source       = { :path => "." }
 
-  s.source_files = "ios/**/*.{h,m}"
+  s.source_files = "ios/**/*.{h,m,swift}"
   s.public_header_files = "ios/**/*.h"
+  s.swift_version = "5.0"
+  s.frameworks = "AuthenticationServices", "StoreKit"
 
   s.dependency "React-Core"
   # 微信 Open SDK（登录/支付/分享）。2.0.5 暂未稳定上架 trunk，锁定 2.0.4。

@@ -31,6 +31,16 @@ export async function registerWeChat() {
   }
 }
 
+/** 本机装了微信才显示微信登录（Guideline 4.2.3：不能要求先装微信）。 */
+export async function isWeChatInstalled() {
+  if (!RNWeChat || typeof RNWeChat.isWXAppInstalled !== 'function') return false;
+  try {
+    return !!(await RNWeChat.isWXAppInstalled());
+  } catch (e) {
+    return false;
+  }
+}
+
 /** 登录：唤起授权 → 拿 code → 交后端换 OpenID。返回后端账号结果。 */
 export async function loginWithWeChat(deviceId) {
   if (!RNWeChat) {

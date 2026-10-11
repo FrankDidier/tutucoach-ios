@@ -20,6 +20,9 @@ import {getDeviceId} from '../services/device';
 import {getMembership} from '../services/account';
 import {payWithWeChat} from '../services/wechat';
 import {getJson} from '../services/api';
+import {buy as buyAppStore, loadProducts, restore as restoreAppStore} from '../services/appStore';
+
+const IOS = Platform.OS === 'ios';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 const S = SCREEN_W / 375;
@@ -62,6 +65,9 @@ const SubscriptionScreen = ({navigation}) => {
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
+  // iOS：价格以 App Store 返回的为准（按 Apple ID 所在地区显示币种）
+  const [storePrices, setStorePrices] = useState({});
+  const [busy, setBusy] = useState(false);
 
   const refreshPlans = useCallback(async () => {
     try {
@@ -82,6 +88,10 @@ const SubscriptionScreen = ({navigation}) => {
         if (alive && m && m.ok) setVip(m);
       } catch (e) {}
       if (alive) await refreshPlans();
+      if (IOS) {
+        const got = await loadProducts();
+        if (alive) setStorePrices(got);
+      }
     })();
     return () => {
       alive = false;
@@ -99,13 +109,21 @@ const SubscriptionScreen = ({navigation}) => {
       Alert.alert('提示', '请先阅读并同意《会员购买协议》');
       return;
     }
-    // App Store 2.1：iOS 数字会员必须走 Apple IAP，不能再用微信支付下单。
-    if (Platform.OS === 'ios') {
-      Alert.alert(
-        '开通会员',
-        'iOS 会员通过 App Store 内购开通。审核账号可用设备登录正常体验全部功能；正式内购上线后可在此页购买。',
-        [{text: '好的'}],
-      );
+    // iOS 数字会员走 App Store 自动续期订阅
+    if (IOS) {
+      if (busy) return;
+      setBusy(true);
+      try {
+        const r = await buyAppStore(selected);
+        if (r.ok) {
+          await refreshVip();
+          Alert.alert('开通会员', '订阅成功，会员已开通');
+        } else if (!r.cancelled) {
+          Alert.alert('开通会员', r.message || '购买没有完成，请稍后重试');
+        }
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     try {
@@ -124,10 +142,38 @@ const SubscriptionScreen = ({navigation}) => {
     }
   };
 
+  const refreshVip = async () => {
+    try {
+      const m = await getMembership(getDeviceId());
+      if (m && m.ok) setVip(m);
+    } catch (e) {}
+  };
+
+  const onRestore = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await restoreAppStore(true);
+      if (r.ok) {
+        await refreshVip();
+        Alert.alert('恢复购买', '已恢复，会员已开通');
+      } else {
+        Alert.alert('恢复购买', r.message || '恢复购买没有完成，请稍后重试');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const priceText = plan => {
+    const sp = storePrices[plan.id];
+    return sp && sp.displayPrice ? sp.displayPrice : `¥${plan.price}`;
+  };
+
   const isVip = vip && vip.is_vip;
   const curPlan = plans.find(p => p.id === selected) || plans[0] || {};
   const curCycle = (PLAN_CN[selected] || {}).cycle || '每月';
-  const curPrice = curPlan.price || '';
+  const curPrice = curPlan.price ? priceText(curPlan) : '';
   const curName = (PLAN_CN[selected] || {}).name || curPlan.name || '会员';
 
   return (
@@ -157,11 +203,19 @@ const SubscriptionScreen = ({navigation}) => {
       {/* 顶部导航：返回 + 居中标题 */}
       <SafeAreaView style={styles.headerSafe}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backHit} onPress={() => navigation?.goBack?.()}>
+          <TouchableOpacity
+            style={[styles.backHit, IOS && styles.backHitWide]}
+            onPress={() => navigation?.goBack?.()}>
             <Text style={styles.backChevron}>‹</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>会员订阅</Text>
-          <View style={styles.backHit} />
+          {IOS ? (
+            <TouchableOpacity style={styles.restoreHit} activeOpacity={0.7} onPress={onRestore}>
+              <Text style={styles.restoreText}>恢复购买</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.backHit} />
+          )}
         </View>
       </SafeAreaView>
 
@@ -209,10 +263,21 @@ const SubscriptionScreen = ({navigation}) => {
                 activeOpacity={0.88}
                 onPress={() => setSelected(plan.id)}>
                 <Text style={styles.planName}>{cn.name || plan.name}</Text>
-                <Text style={styles.originalPrice}>{plan.original}</Text>
+                {IOS ? null : <Text style={styles.originalPrice}>{plan.original}</Text>}
                 <View style={styles.priceRow}>
-                  <Text style={[styles.priceCurrency, on && styles.priceOn]}>¥</Text>
-                  <Text style={[styles.priceValue, on && styles.priceOn]}>{plan.price}</Text>
+                  {IOS ? (
+                    <Text
+                      style={[styles.priceValue, styles.priceStore, on && styles.priceOn]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit>
+                      {priceText(plan)}
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={[styles.priceCurrency, on && styles.priceOn]}>¥</Text>
+                      <Text style={[styles.priceValue, on && styles.priceOn]}>{plan.price}</Text>
+                    </>
+                  )}
                 </View>
                 <Text style={styles.planCycle}>
                   {cn.cycle ? `${cn.cycle}自动续费` : '自动续费'}
@@ -228,7 +293,7 @@ const SubscriptionScreen = ({navigation}) => {
           <Text style={styles.renewText}>
             · 本会员为<Text style={styles.renewStrong}>连续订阅（自动续费）</Text>
             ，不是一次性购买。{'\n'}
-            · 订阅后按所选周期（{curCycle}）自动续费 ¥{curPrice}，
+            · 订阅后按所选周期（{curCycle}）自动续费 {curPrice}，
             {Platform.OS === 'ios' ? '由 Apple ID 账户扣款。' : '由所选支付方式扣款。'}
             {'\n'}
             · 在当前订阅期结束前 24 小时内自动续订；
@@ -274,7 +339,7 @@ const SubscriptionScreen = ({navigation}) => {
             pointerEvents="none"
           />
           <Text style={styles.purchaseBtnText}>
-            {`开通${curName} ¥${curPrice}/${(PLAN_CN[selected] || {}).unit || '月'} 自动续费`}
+            {busy ? '请稍候…' : `开通${curName} ${curPrice}/${(PLAN_CN[selected] || {}).unit || '月'} 自动续费`}
           </Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -316,6 +381,9 @@ const makeStyles = (colors, dark) =>
       paddingHorizontal: 8,
     },
     backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
+    backHitWide: {width: 72, alignItems: 'flex-start', paddingLeft: 10},
+    restoreHit: {width: 72, height: 44, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 6},
+    restoreText: {fontSize: 14, color: colors.primary},
     backChevron: {fontSize: 30, fontWeight: '400', color: colors.textPrimary, marginTop: -4},
     headerTitle: {
       fontSize: 18,
@@ -407,6 +475,7 @@ const makeStyles = (colors, dark) =>
     priceCurrency: {fontSize: 15, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216', marginBottom: 3},
     priceValue: {fontSize: 22, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216'},
     priceOn: {color: colors.primary},
+    priceStore: {fontSize: 19, marginTop: 14},
     planCycle: {fontSize: 10.5, color: colors.textSecondary, marginTop: 4},
     renewCard: {
       marginTop: px(14),

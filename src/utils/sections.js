@@ -24,7 +24,7 @@ export function readingCompare(a, b) {
   return (a.x || 0) - (b.x || 0);
 }
 
-// 自动分段的默认标题（第1页·第2段）念出来很生硬。老师写了说明就念说明。
+// 旧乐谱框上的字。段落不念、不显示标题，这里只交给服务器认出并进重点里的旧框字。
 export function sectionLine(box) {
   const label = firstLine(box.label || box.text || '');
   const note = firstLine(box.note || '');
@@ -32,8 +32,8 @@ export function sectionLine(box) {
   return label;
 }
 
-// 一段可能跨好几行（好几个框）。返回按阅读顺序编号的段落：
-// {n, head, line, end, rects}，end 是这一段最后一个框，段落线就在它右边。
+// 一段可能跨好几行、好几页（好几个框）。返回按阅读顺序编号的段落：
+// {n, head, line, end, rects}。段落只有编号，没有标题。
 export function readingSections(annotations) {
   const all = (annotations || []).filter(Boolean).slice().sort(readingCompare);
   const groups = new Map();
@@ -45,9 +45,7 @@ export function readingSections(annotations) {
   const out = [];
   groups.forEach(rects => {
     const head = rects.find(r => !r.cont) || rects[0];
-    const line = sectionLine(head);
-    if (!line) return;
-    out.push({head, line, end: rects[rects.length - 1], rects});
+    out.push({head, line: sectionLine(head), end: rects[rects.length - 1], rects});
   });
   out.sort((a, b) => readingCompare(a.head, b.head));
   return out.map((s, i) => ({...s, n: i + 1}));

@@ -27,7 +27,9 @@ import {
 import {getPoints} from '../services/companion';
 import {getDeviceId} from '../services/device';
 import {registerAccount, getMembership} from '../services/account';
-import {loginWithWeChat} from '../services/wechat';
+import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
+import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
+import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
 import {useTheme} from '../theme/ThemeContext';
 
 let Clipboard = null;
@@ -48,6 +50,13 @@ const ProfileScreen = ({navigation}) => {
   const [displayName, setName] = useState('钢琴小达人');
   const [avatarUri, setAvatar] = useState(null);
   const [points, setPoints] = useState(0);
+  // 没装微信就不显示微信登录；iOS 另给「通过 Apple 登录」
+  const [hasWeChat, setHasWeChat] = useState(Platform.OS !== 'ios');
+  const appleReady = isAppleSignInReady();
+
+  useEffect(() => {
+    isWeChatInstalled().then(ok => setHasWeChat(ok || Platform.OS !== 'ios'));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -164,16 +173,52 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
+  const onAppleLogin = async () => {
+    try {
+      const r = await loginWithApple();
+      if (r.cancelled) return;
+      if (r.ok) {
+        const id = getDeviceId();
+        setUserId(id);
+        try {
+          const m = await getMembership(id);
+          if (m && m.ok) setVip(m);
+        } catch (e) {}
+      }
+      Alert.alert('通过 Apple 登录', r.ok ? '登录成功，数据已同步' : r.message || '登录没有完成，请重试');
+    } catch (e) {
+      Alert.alert('通过 Apple 登录', '网络异常，请重试');
+    }
+  };
+
+  const onAiConsent = async () => {
+    const now = await getAiConsent();
+    if (now !== 'yes') {
+      askAiConsent();
+      return;
+    }
+    Alert.alert(
+      'AI 数据授权',
+      '你已同意 AI 功能把对话内容、称呼/年龄等资料和练习记录发送给 DeepSeek、百度文心、MiniMax 和 Apple 处理。撤回后将不能使用 AI 陪练等 AI 功能。',
+      [
+        {text: '保持同意', style: 'cancel'},
+        {text: '撤回同意', style: 'destructive', onPress: () => setAiConsent(false)},
+      ],
+    );
+  };
+
   // 蓝湖展示「ID:…」；列表只展示尾号，点复制仍复制完整 ID（老师入班必须用完整 ID）。
   const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
 
-  const MenuRow = ({icon, label, onPress, last}) => (
+  const MenuRow = ({icon, glyph, label, onPress, last}) => (
     <TouchableOpacity
       style={[styles.menuItem, last && styles.menuItemLast]}
       activeOpacity={0.7}
       onPress={onPress}>
       {icon ? (
         <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
+      ) : glyph ? (
+        <Text style={[styles.menuIcon, styles.menuGlyph]}>{glyph}</Text>
       ) : (
         <View style={styles.menuIcon} />
       )}
@@ -247,14 +292,20 @@ const ProfileScreen = ({navigation}) => {
             icon={Images.pfCheckin}
             label="打卡统计"
             onPress={() => navigation.navigate('CheckinStats')}
+            last={!appleReady && !hasWeChat}
           />
-          <View style={styles.menuDivider} />
-          <MenuRow
-            icon={Images.pfWechat}
-            label="微信登录"
-            onPress={onWeChatLogin}
-            last
-          />
+          {appleReady ? (
+            <>
+              <View style={styles.menuDivider} />
+              <MenuRow glyph={'\uF8FF'} label="通过 Apple 登录" onPress={onAppleLogin} last={!hasWeChat} />
+            </>
+          ) : null}
+          {hasWeChat ? (
+            <>
+              <View style={styles.menuDivider} />
+              <MenuRow icon={Images.pfWechat} label="微信登录" onPress={onWeChatLogin} last />
+            </>
+          ) : null}
         </View>
 
         <View style={styles.menuSection}>
@@ -275,6 +326,8 @@ const ProfileScreen = ({navigation}) => {
             label="隐私与用户协议"
             onPress={() => navigation.navigate('Legal')}
           />
+          <View style={styles.menuDivider} />
+          <MenuRow icon={Images.pfHelp} label="AI 数据授权" onPress={onAiConsent} />
           <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfTheme}
@@ -376,6 +429,17 @@ const makeStyles = (colors, dark) =>
     },
     menuItemLast: {},
     menuIcon: {width: 28, height: 28, marginRight: 10},
+    menuGlyph: {
+      fontSize: 19,
+      lineHeight: 28,
+      textAlign: 'center',
+      color: '#FFFFFF',
+      backgroundColor: '#000000',
+      borderRadius: 7,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(255,255,255,0.35)',
+    },
     menuLabel: {
       flex: 1,
       fontSize: 14,

@@ -17,7 +17,7 @@ const PROFILE_FIELDS = {
 };
 
 // 这些是角色自己发挥的话（打招呼、哄回来、开场、道别），可以多说一点。
-const FREE_INTENTS = /^(?:leave|nudge|start|review|bye|ack)$/;
+const FREE_INTENTS = /^(?:leave|nudge|start|review|bye|ack|stay)$/;
 
 function bigrams(text) {
   const t = String(text || '').replace(/[\s，。！？、!?,.…~～：:；;「」"'（）()]/g, '');
@@ -56,6 +56,8 @@ function fitLine(plan, text) {
   }
   if (t.length > (free || plan.intent === 'ask' ? 80 : 56)) return '';
   if (/按你的年纪|好好记住你|我记下了/.test(t)) return '';
+  // 时间还没到，改写时不能顺嘴说了再见。
+  if (plan.intent === 'stay' && /明天见|下次再|再见|拜拜|今天就到这|明天再/.test(t)) return '';
   // 改写把参考句原样说了两遍（「A：A」），不能念出来。
   if (/([\u4e00-\u9fff，]{6,}).*\1/.test(t)) return '';
   const rule = PROFILE_FIELDS[plan.field];
@@ -84,11 +86,13 @@ export function createCompanionSession(host) {
   let inBackground = false;
   let lastSpokenText = '';
   let voiceUntil = 0;
+  let talkingUntil = 0;
   let awaitingField = '';
   let listening = false;
   let listenAgainPlan = null;
   let boxed = false;
   let ended = false;
+  const timerLeft = () => Math.max(0, Math.round((host.timerLeftSec && host.timerLeftSec()) || 0));
   // 按住说话、键盘弹起时把麦让出来：系统听写和我们同时开麦会让 App 闪退。
   const earHolds = new Set();
   const earHeld = () => earHolds.size > 0;
@@ -171,7 +175,7 @@ export function createCompanionSession(host) {
         line: plan.tarot.line,
       });
       if (host.onTarot) host.onTarot(plan.tarot);
-      const label = box ? box.line : '';
+      const label = box && !boxed ? box.line : '';
       if (label) {
         refineTarot(label).then(card => {
           if (stopped || !card) return;
@@ -234,8 +238,9 @@ export function createCompanionSession(host) {
     try {
       const score = await fetchScore(host.studentId(), piece);
       const manifest = (score && (score.manifest || score)) || {};
+      // line 只交给服务器认出并进重点里的旧框字；陪练只说「第几段」，不念框上的字
       sections = readingSections(manifest.confirmed_annotations || manifest.annotations || []).map(s => ({
-        line: s.line,
+        line: s.line || `第${s.n}段`,
         page: s.head.page || 0,
         y: s.head.y || 0,
       }));
@@ -256,7 +261,11 @@ export function createCompanionSession(host) {
     }
     try {
       const lv = await Ear.readLevel();
-      const rms = Number(lv && lv.rms) || 0;
+      const raw = Number(lv && lv.rms) || 0;
+      // 原生层分辨了是不是琴声：说话、电视、角色自己的声音再响也不算在弹。
+      const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
+      const rms = piano ? Math.max(raw, 0.08) : 0;
+      if (!piano && raw >= 0.08) talkingUntil = Date.now() + 10000;
       levels = levels.concat(rms).slice(-6);
       // 按真实过去的秒数算没动静多久；角色自己说话那几秒最多算一个间隔。
       const at = Date.now();
@@ -295,6 +304,8 @@ export function createCompanionSession(host) {
         freq_sec: host.freqSec ? host.freqSec() : 45,
         had_playing: hadPlaying,
         silent_sec: Math.round(silentSec),
+        timer_left_sec: timerLeft(),
+        talking: Date.now() < talkingUntil || Date.now() < voiceUntil,
         background: event === 'background',
         roll: Math.random(),
       });
@@ -373,8 +384,13 @@ export function createCompanionSession(host) {
       if (profile) keepListening();
       return;
     }
-    // 问题已经放下了：自己听到的话不发到聊天里，想聊就按住说或打字。
-    if (!profile) return;
+    // 正听着的时候问题被放下了（等太久、他开始弹了）：麦是因为问他才开的，这句话是冲着角色说的，照样接话。
+    if (!profile) {
+      if (host.onHeard && text.replace(/[\s，。！？、,.!?]/g, '').length >= 2) {
+        host.onHeard(text, {free: true});
+      }
+      return;
+    }
     const asked = awaitingField;
     const plan = await noteAnswer(text, {auto: true});
     if (!plan) {
@@ -383,10 +399,19 @@ export function createCompanionSession(host) {
     }
     if (plan.hold) {
       awaitingField = plan.field || asked || 'section_ok';
+      // 问「这段练得怎么样」时他说的是别的事（问重点、说不想练、聊天）：照样接话，不能吞掉。
+      if (asked === 'section_ok' && host.onHeard && text.replace(/[\s，。！？、,.!?]/g, '').length >= 2) {
+        host.onHeard(text, {free: true});
+        return;
+      }
       keepListening();
       return;
     }
     if (host.onHeard) host.onHeard(text, {profile: true});
+    if (plan && plan.intent === 'bye') {
+      await speakPlan(plan);
+      return;
+    }
     await say(plan || null);
     if (plan && plan.wait) {
       if (listening) listenAgainPlan = plan;
@@ -405,6 +430,7 @@ export function createCompanionSession(host) {
       field,
       ...(extra || {}),
       last_said: lastSpokenText,
+      timer_left_sec: timerLeft(),
       sections: sections.map(s => s.line),
       globals,
       boxed,
@@ -417,13 +443,11 @@ export function createCompanionSession(host) {
 
   // 老师的重点，编好号，聊天时交给角色照着说。
   const numberedPoints = () => {
-    if (boxed && sections.length) {
-      return sections
-        .map((s, i) => `第${cnNum(i + 1)}段：${s.line}`)
-        .concat((globals || []).map(g => `老师还说：${g}`))
-        .slice(0, 8);
-    }
-    return (globals || []).map((g, i) => `第${cnNum(i + 1)}，${g}`).slice(0, 8);
+    const echoes = new Set(boxed ? sections.map(s => s.line) : []);
+    return (globals || [])
+      .filter(g => !String(g).split(/[：:]/).some(p => echoes.has(p.trim())))
+      .map((g, i) => `第${cnNum(i + 1)}，${g}`)
+      .slice(0, 8);
   };
 
   // 他问「要注意什么」「重点是什么」：照老师的原话按编号说。
@@ -443,18 +467,24 @@ export function createCompanionSession(host) {
     return speakPlan(plan);
   };
 
-  // 计时到了：道别，然后不再听琴、不再开口。
-  const timeUp = async () => {
-    if (stopped || ended) return;
-    closeEar();
-    await tick('timeup');
+  // 道别以后不再听琴、不再开口，重点也不再念。
+  const endNow = () => {
     ended = true;
     stopped = true;
+    awaitingField = '';
     if (timer) clearInterval(timer);
     timer = null;
     try {
       if (Ear && Ear.stopMeter) Ear.stopMeter();
     } catch (e) {}
+  };
+
+  // 计时到了：道别，然后停下。
+  const timeUp = async () => {
+    if (stopped || ended) return;
+    closeEar();
+    await tick('timeup');
+    endNow();
   };
 
   // 按住说话、键盘弹起：先把麦让出来。放开后如果还在等回答，接着听。
@@ -476,8 +506,29 @@ export function createCompanionSession(host) {
   const speakPlan = async plan => {
     if (!plan || !plan.intent || plan.intent === 'none') return null;
     await say(plan);
+    // 没定时间时他说不练了，角色道别以后就真的停下，不再念重点、不再哄。
+    if (plan.intent === 'bye') {
+      endNow();
+      if (host.onEnded) host.onEnded();
+      return plan;
+    }
     if (plan.wait) listenLoop(plan);
     return plan;
+  };
+
+  // 他说「不练了」「明天再练」：定了时间就哄他坚持到点，没定时间就道别并停下。
+  const wantsEnd = async text => {
+    if (!host.studentId || ended) return null;
+    const plan = await planCompanion({
+      student_id: host.studentId(),
+      event: 'said',
+      text,
+      last_said: lastSpokenText,
+      timer_left_sec: timerLeft(),
+      roll: Math.random(),
+    });
+    if (!plan || !plan.intent || plan.intent === 'none') return null;
+    return speakPlan(plan);
   };
 
   // 聊天里顺口纠正：我不叫杨同 / 叫我小桐 / 忘了我吧。服务端认出来就由这一轮接话，不再走闲聊。
@@ -488,6 +539,7 @@ export function createCompanionSession(host) {
       event: 'said',
       text,
       last_said: lastSpokenText,
+      timer_left_sec: timerLeft(),
       roll: Math.random(),
     });
     if (!plan || !plan.intent || plan.intent === 'none') return null;
@@ -578,6 +630,7 @@ export function createCompanionSession(host) {
     volunteerSection,
     forget,
     askPoints,
+    wantsEnd,
     timeUp,
     pauseEar,
     numberedPoints,

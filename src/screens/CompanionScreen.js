@@ -139,6 +139,7 @@ export default function CompanionScreen({navigation}) {
   const [practiceMin, setPracticeMin] = useState(0);
   const [leftSec, setLeftSec] = useState(0);
   const [timeUp, setTimeUp] = useState(false);
+  const [restWord, setRestWord] = useState('时间到');
   const talkRef = useRef(null);
   const hintTimer = useRef(null);
   const leftRef = useRef(0);
@@ -348,6 +349,12 @@ export default function CompanionScreen({navigation}) {
         history: () => historyRef.current,
         isPaused: () => pausedRef.current && !scoreViewerOpenRef.current,
         isTyping: () => typingRef.current,
+        timerLeftSec: () => leftRef.current,
+        onEnded: () => {
+          if (!aliveRef.current) return;
+          setRestWord('休息啦');
+          setTimeUp(true);
+        },
         speak: text => {
           if (text) addAiBubble(text, true);
         },
@@ -358,7 +365,7 @@ export default function CompanionScreen({navigation}) {
             pushHistory('user', text);
             return;
           }
-          onSendText(text);
+          onSendText(text, opts && opts.free);
         },
       });
       roundRef.current.start();
@@ -477,6 +484,7 @@ export default function CompanionScreen({navigation}) {
       leftRef.current -= 1;
       setLeftSec(leftRef.current);
       if (leftRef.current <= 0) {
+        setRestWord('时间到');
         setTimeUp(true);
         if (roundRef.current && roundRef.current.timeUp) roundRef.current.timeUp();
       }
@@ -629,6 +637,8 @@ export default function CompanionScreen({navigation}) {
 
   // 「要注意什么」「重点是什么」：照老师的原话按编号说，不让角色自己编。
   const POINT_WORDS = /重点|注意(?:些|点)?什么|要注意|老师(?:说|讲|交代)了?什么/;
+  // 「不练了」「明天再练」：定了时间就哄他坚持，没定时间就道别并停下。和服务端的规则一致。
+  const END_WORDS = /不(?:想|要)?再?(?:练|弹)琴?了|不(?:想|要)再?(?:练|弹)琴?(?:[啦呀啊嘛吧呢]|(?=[，。！？!?,.~～]|$))|(?:就)?(?:练|弹)到这|(?:明天|下次|改天|晚点|待会儿?)再(?:练|弹|来)|(?:结束|停止)(?:练琴|练习|陪练|吧|了)|^结束$|我(?:要|先)?走了|拜拜|再见/;
 
   const showUser = text => {
     addUserBubble(text);
@@ -649,7 +659,8 @@ export default function CompanionScreen({navigation}) {
       .catch(() => sendChat(text));
   };
 
-  const onSendText = text => {
+  // notAnswer：这句已经被认定不是在回答刚才的问题，不要再当回答送一次。
+  const onSendText = (text, notAnswer) => {
     if (!text) return;
     const round = roundRef.current;
     if (round && round.ended && round.ended()) {
@@ -658,10 +669,15 @@ export default function CompanionScreen({navigation}) {
       return;
     }
     if (round && round.markVoice) round.markVoice();
-    const awaiting = !!(round && round.awaiting && round.awaiting());
+    const awaiting = !notAnswer && !!(round && round.awaiting && round.awaiting());
     if (round && round.said && !awaiting && FIX_WORDS.test(text)) {
       showUser(text);
       ruleOrChat(text, () => round.said(text));
+      return;
+    }
+    if (round && round.wantsEnd && END_WORDS.test(text.replace(/\s/g, ''))) {
+      showUser(text);
+      ruleOrChat(text, () => round.wantsEnd(text));
       return;
     }
     if (round && round.askPoints && POINT_WORDS.test(text)) {
@@ -697,6 +713,11 @@ export default function CompanionScreen({navigation}) {
       '',
       studentIdRef.current,
       round && round.numberedPoints ? round.numberedPoints() : [],
+      {
+        on: !!round,
+        ended: !!(round && round.ended && round.ended()),
+        timer_left_sec: Math.max(0, leftRef.current || 0),
+      },
     )
       .then(res => {
         setSending(false);
@@ -999,7 +1020,7 @@ export default function CompanionScreen({navigation}) {
             style={[styles.timerPill, timeUp && styles.timerPillDone]}
             accessibilityLabel="练琴计时">
             <Text style={styles.timerText} numberOfLines={1}>
-              {timeUp ? '时间到' : practiceMin > 0 ? '⏱ ' + clock(leftSec) : '⏱ 计时'}
+              {timeUp ? restWord : practiceMin > 0 ? '⏱ ' + clock(leftSec) : '⏱ 计时'}
             </Text>
           </TouchableOpacity>
           {/* 蓝湖仅「学生码 + 音量」；换背景走长按背景图（见上方） */}

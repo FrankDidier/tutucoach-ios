@@ -75,10 +75,9 @@ export default function ScoreViewerScreen({navigation, route}) {
     () => readingSections(manifest?.confirmed_annotations || manifest?.annotations || []),
     [manifest],
   );
+  // 段落只有编号，不写标题
   const showSection = sec => {
-    const note = String(sec.head.note || '').trim();
-    const more = note && note !== '本段演奏重点' && note !== sec.line ? '\n' + note : '';
-    Alert.alert(`第${cnNum(sec.n)}段`, sec.line + more);
+    Alert.alert(`第${cnNum(sec.n)}段`, '陪练会按这个编号带你一段一段练。');
   };
 
   const load = async () => {

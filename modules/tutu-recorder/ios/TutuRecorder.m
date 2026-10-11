@@ -1,18 +1,91 @@
 #import "TutuRecorder.h"
 #import <Speech/Speech.h>
 #import <math.h>
+#import <os/lock.h>
+#import "TutuPianoTone.h"
+
+// 麦里的声音换成 16k 送进琴声分辨。听琴的麦和听人说话的麦都往这里送。
+@interface TutuToneFeed : NSObject
+- (void)feed:(AVAudioPCMBuffer *)buf rate:(double)rate;
+- (NSDictionary *)level;
+@end
+
+@implementation TutuToneFeed {
+  TutuPianoTone *_tone;
+  os_unfair_lock _lock;
+  double _pos;
+  double _acc;
+  int _count;
+  float _out[4096];
+  NSTimeInterval _fedAt;
+}
+
+- (instancetype)init {
+  if ((self = [super init])) {
+    _tone = calloc(1, sizeof(TutuPianoTone));
+    tutu_tone_reset(_tone);
+    _lock = OS_UNFAIR_LOCK_INIT;
+  }
+  return self;
+}
+
+- (void)dealloc {
+  free(_tone);
+}
+
+- (void)feed:(AVAudioPCMBuffer *)buf rate:(double)rate {
+  AVAudioFrameCount n = buf.frameLength;
+  if (n == 0 || rate <= 0) return;
+  float *f = buf.floatChannelData ? buf.floatChannelData[0] : NULL;
+  int16_t *s = (!f && buf.int16ChannelData) ? buf.int16ChannelData[0] : NULL;
+  if (!f && !s) return;
+  double step = rate / TUTU_TONE_RATE;
+  os_unfair_lock_lock(&_lock);
+  NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+  // 麦停过一阵再开，之前那两秒不能算进现在。
+  if (now - _fedAt > 1.0) tutu_tone_reset(_tone);
+  _fedAt = now;
+  int m = 0;
+  for (AVAudioFrameCount i = 0; i < n; i++) {
+    _acc += f ? f[i] : s[i] / 32768.0;
+    _count++;
+    _pos += 1.0;
+    if (_pos >= step) {
+      _out[m++] = (float)(_acc / _count);
+      _acc = 0;
+      _count = 0;
+      _pos -= step;
+      if (m == 4096) {
+        tutu_tone_push(_tone, _out, m);
+        m = 0;
+      }
+    }
+  }
+  if (m) tutu_tone_push(_tone, _out, m);
+  os_unfair_lock_unlock(&_lock);
+}
+
+- (NSDictionary *)level {
+  os_unfair_lock_lock(&_lock);
+  BOOL stale = [NSDate date].timeIntervalSince1970 - _fedAt > 1.0;
+  TutuToneLevel lv = tutu_tone_level(_tone);
+  os_unfair_lock_unlock(&_lock);
+  if (stale) return @{@"rms": @0, @"piano": @0, @"loud": @0, @"swing": @0, @"tone": @0};
+  return @{@"rms": @(lv.rms), @"piano": @(lv.piano), @"loud": @(lv.loud), @"swing": @(lv.swing),
+           @"tone": @(tutu_tone_is_piano(lv) ? 1 : 0)};
+}
+@end
 
 @interface TutuRecorder ()
 @property(nonatomic, strong) AVAudioRecorder *recorder;
 @property(nonatomic, strong) NSURL *fileURL;
 @property(nonatomic, assign) NSTimeInterval startTime;
-@property(nonatomic, strong) AVAudioRecorder *meter;
+@property(nonatomic, strong) AVAudioEngine *meterEngine;
+@property(nonatomic, strong) TutuToneFeed *tone;
 @property(nonatomic, strong) AVAudioEngine *listenEngine;
 @property(nonatomic, strong) SFSpeechRecognizer *recognizer;
 @property(nonatomic, strong) SFSpeechAudioBufferRecognitionRequest *speechRequest;
 @property(nonatomic, strong) SFSpeechRecognitionTask *speechTask;
-// 听人说话的同时记下响度。琴还在响时，不能因为开着识别就把响度记成 0。
-@property(nonatomic, assign) float listenRms;
 // 角色要开口时把正在听的这一轮关掉，不然它自己的声音会被录成学生说的话。
 // 传 nil 表示停麦但不出结果（测试换成识别口语音频）。
 @property(nonatomic, copy) void (^listenFinish)(NSString *text);
@@ -129,76 +202,99 @@ RCT_EXPORT_METHOD(cancel:(RCTPromiseResolveBlock)resolve
   return [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 陪练听琴：只回一个 0~1 的响度，用来判断有没有在弹、稳不稳。
+- (TutuToneFeed *)toneFeed {
+  if (self.tone == nil) self.tone = [[TutuToneFeed alloc] init];
+  return self.tone;
+}
+
+- (void)stopMeterEngine {
+  AVAudioEngine *engine = self.meterEngine;
+  self.meterEngine = nil;
+  if (engine == nil) return;
+  @try {
+    [engine.inputNode removeTapOnBus:0];
+    [engine stop];
+  } @catch (NSException *e) {
+  }
+}
+
+// 一直开着麦，把声音送去分辨是不是琴声。麦被占着（0Hz）时不装 tap，免得闪退。
+- (BOOL)startMeterEngine {
+  if (self.meterEngine != nil && self.meterEngine.isRunning) return YES;
+  [self stopMeterEngine];
+  NSError *err = nil;
+  AVAudioSession *session = [AVAudioSession sharedInstance];
+  [session setCategory:AVAudioSessionCategoryPlayAndRecord
+           withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers
+                 error:&err];
+  [session setActive:YES error:&err];
+  AVAudioEngine *engine = [[AVAudioEngine alloc] init];
+  AVAudioInputNode *input = engine.inputNode;
+  AVAudioFormat *format = [input outputFormatForBus:0];
+  if (format == nil || format.sampleRate <= 0 || format.channelCount == 0) return NO;
+  TutuToneFeed *feed = [self toneFeed];
+  double rate = format.sampleRate;
+  @try {
+    [input installTapOnBus:0 bufferSize:2048 format:format block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
+      [feed feed:buf rate:rate];
+    }];
+    [engine prepare];
+    if (![engine startAndReturnError:&err]) {
+      [input removeTapOnBus:0];
+      return NO;
+    }
+  } @catch (NSException *e) {
+    return NO;
+  }
+  self.meterEngine = engine;
+  return YES;
+}
+
+// 陪练听琴：rms 是 0~1 的响度；tone=1 表示这两秒像琴声（音高稳、一下一下按），说话、角色自己的声音是 0。
 RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
+  // 测试写「0.3」是琴声，「0.3 voice」是有人在说话。
   NSString *scripted = [self scriptAt:@"tutu_level.txt" consume:NO];
   if (scripted != nil) {
     float rms = [scripted floatValue];
     if (rms < 0) rms = 0;
     if (rms > 1) rms = 1;
-    resolve(@{@"rms": @(rms)});
+    BOOL voice = [scripted rangeOfString:@"voice"].location != NSNotFound;
+    BOOL loud = rms >= 0.08f;
+    resolve(@{@"rms": @(rms), @"piano": @(voice ? 0 : 1), @"loud": @(loud ? 1 : 0), @"swing": @3,
+              @"tone": @((loud && !voice) ? 1 : 0)});
     return;
   }
   if (self.listenEngine != nil) {
-    float rms = self.listenRms / 0.20f;
-    if (rms < 0) rms = 0;
-    if (rms > 1) rms = 1;
-    resolve(@{@"rms": @(rms)});
+    resolve([[self toneFeed] level]);
     return;
   }
   if (self.recorder && self.recorder.recording) {
-    resolve(@{@"rms": @0});
+    resolve(@{@"rms": @0, @"tone": @0});
     return;
   }
   AVAudioSession *session = [AVAudioSession sharedInstance];
   [session requestRecordPermission:^(BOOL granted) {
     if (!granted) {
-      resolve(@{@"rms": @0});
+      resolve(@{@"rms": @0, @"tone": @0});
       return;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-      NSError *err = nil;
-      if (self.meter == nil || !self.meter.recording) {
-        [session setCategory:AVAudioSessionCategoryPlayAndRecord
-                 withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers
-                       error:&err];
-        [session setActive:YES error:&err];
-        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tutu_meter.caf"];
-        NSDictionary *settings = @{
-          AVFormatIDKey: @(kAudioFormatLinearPCM),
-          AVSampleRateKey: @16000.0,
-          AVNumberOfChannelsKey: @1,
-          AVLinearPCMBitDepthKey: @16,
-          AVLinearPCMIsFloatKey: @NO,
-        };
-        self.meter = [[AVAudioRecorder alloc] initWithURL:[NSURL fileURLWithPath:path]
-                                                 settings:settings
-                                                    error:&err];
-        self.meter.meteringEnabled = YES;
-        [self.meter prepareToRecord];
-        [self.meter record];
+      if (self.listenEngine == nil && ![self startMeterEngine]) {
+        resolve(@{@"rms": @0, @"tone": @0});
+        return;
       }
-      [self.meter updateMeters];
-      // 分贝换成振幅。安静的房间大约 -50dB，不能算成在弹琴。
-      // 和安卓一样，除以 0.20 后才拿去跟 0.08 比。
-      float db = [self.meter averagePowerForChannel:0];
-      float amp = powf(10.f, db / 20.f);
-      float rms = amp / 0.20f;
-      if (rms < 0) rms = 0;
-      if (rms > 1) rms = 1;
-      resolve(@{@"rms": @(rms)});
+      resolve([[self toneFeed] level]);
     });
   }];
 }
 
 RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-  if (self.meter) {
-    [self.meter stop];
-    self.meter = nil;
-  }
-  resolve(@{@"ok": @YES});
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self stopMeterEngine];
+    resolve(@{@"ok": @YES});
+  });
 }
 
 // 测试用的口语音频。走系统语音识别，不把写好的字直接当听到的话。
@@ -269,11 +365,8 @@ RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve
 // 这时装 tap 会抛异常让整个 App 闪退，所以先检查、再兜住，用不了就返回 NO。
 // done 在主线程回调；text 为 nil 表示被测试脚本截走了。
 - (BOOL)hearFor:(NSTimeInterval)maxSec done:(void (^)(NSString *text))done {
-  if (self.meter) {
-    [self.meter stop];
-    self.meter = nil;
-  }
   if (self.listenEngine) return NO;
+  [self stopMeterEngine];
   NSError *err = nil;
   AVAudioSession *session = [AVAudioSession sharedInstance];
   [session setCategory:AVAudioSessionCategoryPlayAndRecord
@@ -321,28 +414,15 @@ RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve
     [observers removeAllObjects];
     if (self.listenEngine == engine) self.listenEngine = nil;
     self.speechRequest = nil;
-    self.listenRms = 0;
     [self restorePlaybackSession];
     done(text);
   };
+  TutuToneFeed *feed = [self toneFeed];
+  double rate = format.sampleRate;
   @try {
     [input installTapOnBus:0 bufferSize:1024 format:format block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
       [request appendAudioPCMBuffer:buf];
-      AVAudioFrameCount n = buf.frameLength;
-      if (n > 0 && buf.floatChannelData != nil && buf.floatChannelData[0] != nil) {
-        float *ch = buf.floatChannelData[0];
-        double acc = 0;
-        for (AVAudioFrameCount i = 0; i < n; i++) acc += (double)ch[i] * (double)ch[i];
-        self.listenRms = (float)sqrt(acc / (double)n);
-      } else if (n > 0 && buf.int16ChannelData != nil && buf.int16ChannelData[0] != nil) {
-        int16_t *ch = buf.int16ChannelData[0];
-        double acc = 0;
-        for (AVAudioFrameCount i = 0; i < n; i++) {
-          double s = (double)ch[i] / 32768.0;
-          acc += s * s;
-        }
-        self.listenRms = (float)sqrt(acc / (double)n);
-      }
+      [feed feed:buf rate:rate];
     }];
     tapped = YES;
     [engine prepare];
