@@ -22,12 +22,14 @@ export async function chat(
   studentId = '',
   points = [],
   practice = null,
+  extra = null,
 ) {
   try {
     const body = {
       coach_id: coachId || '',
       student_name: studentName || '',
       messages: Array.isArray(history) ? history : [],
+      ...(extra || {}),
     };
     if (studentId) body.student_id = studentId;
     if (Array.isArray(points) && points.length) body.points = points;
@@ -216,10 +218,11 @@ export async function refineTarot(label) {
 }
 
 /** 清除记忆：只忘掉名字、性别、年龄、爱好。返回接下来要说的那一轮（重新问名字）。 */
-export async function forgetCompanionProfile(studentId) {
+export async function forgetCompanionProfile(studentId, coachId = '') {
   try {
     const resp = await postJson('/api/companion/forget', {
       student_id: studentId || '',
+      coach_id: coachId || '',
       roll: Math.random(),
     });
     return resp && resp.ok ? resp : null;

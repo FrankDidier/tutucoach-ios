@@ -118,7 +118,10 @@ export async function suggestScore(teacherId, studentId, pieceName, existingFocu
   );
 }
 
-export async function boxesFromDividers(teacherId, studentId, pieceName, dividers, existingFocus = []) {
+// annotations：手机上现在的段落框（带老师刚写、可能还没存上的重点），重新分段时按段号带过去。
+export async function boxesFromDividers(
+  teacherId, studentId, pieceName, dividers, existingFocus = [], annotations = [],
+) {
   return postJson(
     '/api/coach/score/boxes_from_dividers',
     {
@@ -127,6 +130,7 @@ export async function boxesFromDividers(teacherId, studentId, pieceName, divider
       piece_name: pieceName || '',
       dividers: Array.isArray(dividers) ? dividers : [],
       existing_focus: Array.isArray(existingFocus) ? existingFocus : [],
+      annotations: Array.isArray(annotations) ? annotations : [],
     },
     null,
     60000,

@@ -93,12 +93,16 @@ export function createCompanionSession(host) {
   let boxed = false;
   let ended = false;
   const timerLeft = () => Math.max(0, Math.round((host.timerLeftSec && host.timerLeftSec()) || 0));
+  // 每个角色各自认识学生：问到哪、记住了什么，都按角色分开。
+  const planCompanionTick = body => planCompanion({coach_id: host.coachId ? host.coachId() || '' : '', ...(body || {})});
   // 按住说话、键盘弹起时把麦让出来：系统听写和我们同时开麦会让 App 闪退。
   const earHolds = new Set();
   const earHeld = () => earHolds.size > 0;
 
   // 最近念出去的几句。聊天回复、提醒也由屏幕念，都要算进来，不然麦里听回来会当成学生在说话。
   let recentSpoken = [];
+  // 开场那一拍被别的事挡住（正在说话、在打字）时，下一拍补上。
+  let needOpen = false;
   // 角色一开口就把正在听的那一轮关掉。聊天回复常在麦已经打开之后才到，会被录成学生的话。
   const closeEar = () => {
     if (Ear && Ear.cancelListen) Ear.cancelListen().catch(() => {});
@@ -241,6 +245,7 @@ export function createCompanionSession(host) {
       // line 只交给服务器认出并进重点里的旧框字；陪练只说「第几段」，不念框上的字
       sections = readingSections(manifest.confirmed_annotations || manifest.annotations || []).map(s => ({
         line: s.line || `第${s.n}段`,
+        note: s.note || '',
         page: s.head.page || 0,
         y: s.head.y || 0,
       }));
@@ -282,6 +287,7 @@ export function createCompanionSession(host) {
 
   const tick = async event => {
     if (stopped) return;
+    if (event === 'tick' && needOpen) event = 'open';
     const urgent = event === 'background' || event === 'done' || event === 'timeup';
     // 上一句还没说完，不要再要下一句，也不要开麦。
     if (!urgent && Date.now() < speakingUntil) return;
@@ -291,14 +297,17 @@ export function createCompanionSession(host) {
     if (inBackground && event === 'tick') return;
     if (!urgent && host.isPaused && host.isPaused()) return;
     busyCount += 1;
+    if (event === 'open') needOpen = false;
     try {
       if (event === 'tick') await sample();
-      const plan = await planCompanion({
+      const plan = await planCompanionTick({
         student_id: host.studentId(),
         piece: piece || host.pieceName(),
         event,
         levels,
         sections: sections.map(s => s.line),
+        section_notes: sections.map(s => s.note || ''),
+        recent_lines: recentSpoken.slice(-3),
         globals,
         boxed,
         freq_sec: host.freqSec ? host.freqSec() : 45,
@@ -419,10 +428,20 @@ export function createCompanionSession(host) {
     }
   };
 
-  const noteAnswer = (text, extra) => {
+  // 回答发出去到回来之前不让 tick 插进来，不然服务端可能刚好把问题放下，先说一句「没听清」。
+  const noteAnswer = async (text, extra) => {
     const field = awaitingField;
     awaitingField = '';
-    return planCompanion({
+    busyCount += 1;
+    try {
+      return await planAnswer(text, field, extra);
+    } finally {
+      busyCount = Math.max(0, busyCount - 1);
+    }
+  };
+
+  const planAnswer = (text, field, extra) =>
+    planCompanionTick({
       student_id: host.studentId(),
       piece: piece || host.pieceName(),
       event: 'answer',
@@ -432,6 +451,7 @@ export function createCompanionSession(host) {
       last_said: lastSpokenText,
       timer_left_sec: timerLeft(),
       sections: sections.map(s => s.line),
+      section_notes: sections.map(s => s.note || ''),
       globals,
       boxed,
       freq_sec: host.freqSec ? host.freqSec() : 45,
@@ -439,25 +459,31 @@ export function createCompanionSession(host) {
       silent_sec: 0,
       roll: Math.random(),
     });
-  };
 
-  // 老师的重点，编好号，聊天时交给角色照着说。
+  // 老师的重点，编好号，聊天时交给角色照着说。老师在谱上给某一段写的重点排在前面。
   const numberedPoints = () => {
     const echoes = new Set(boxed ? sections.map(s => s.line) : []);
-    return (globals || [])
-      .filter(g => !String(g).split(/[：:]/).some(p => echoes.has(p.trim())))
-      .map((g, i) => `第${cnNum(i + 1)}，${g}`)
+    const own = sections
+      .map((s, i) => (s.note ? `第${cnNum(i + 1)}段：${s.note}` : ''))
+      .filter(Boolean);
+    return own
+      .concat(
+        (globals || [])
+          .filter(g => !String(g).split(/[：:]/).some(p => echoes.has(p.trim())))
+          .map((g, i) => `第${cnNum(i + 1)}，${g}`),
+      )
       .slice(0, 8);
   };
 
   // 他问「要注意什么」「重点是什么」：照老师的原话按编号说。
   const askPoints = async () => {
     if (!host.studentId) return null;
-    const plan = await planCompanion({
+    const plan = await planCompanionTick({
       student_id: host.studentId(),
       piece: piece || host.pieceName(),
       event: 'points',
       sections: sections.map(s => s.line),
+      section_notes: sections.map(s => s.note || ''),
       globals,
       boxed,
       freq_sec: host.freqSec ? host.freqSec() : 45,
@@ -519,10 +545,11 @@ export function createCompanionSession(host) {
   // 他说「不练了」「明天再练」：定了时间就哄他坚持到点，没定时间就道别并停下。
   const wantsEnd = async text => {
     if (!host.studentId || ended) return null;
-    const plan = await planCompanion({
+    const plan = await planCompanionTick({
       student_id: host.studentId(),
       event: 'said',
       text,
+      typed: true,
       last_said: lastSpokenText,
       timer_left_sec: timerLeft(),
       roll: Math.random(),
@@ -534,10 +561,12 @@ export function createCompanionSession(host) {
   // 聊天里顺口纠正：我不叫杨同 / 叫我小桐 / 忘了我吧。服务端认出来就由这一轮接话，不再走闲聊。
   const said = async text => {
     if (!host.studentId) return null;
-    const plan = await planCompanion({
+    const plan = await planCompanionTick({
       student_id: host.studentId(),
+      piece: piece || host.pieceName(),
       event: 'said',
       text,
+      typed: true,
       last_said: lastSpokenText,
       timer_left_sec: timerLeft(),
       roll: Math.random(),
@@ -550,7 +579,7 @@ export function createCompanionSession(host) {
   // 「这段怎么样」没答成好了/再练，多半是在跟角色说别的事，返回 {chat:true} 交给聊天接，问题留着。
   const answerTyped = async text => {
     const field = awaitingField;
-    const plan = await noteAnswer(text);
+    const plan = await noteAnswer(text, {typed: true});
     if (!plan) {
       awaitingField = field;
       return null;
@@ -577,12 +606,13 @@ export function createCompanionSession(host) {
   const forget = async () => {
     if (!host.studentId) return null;
     awaitingField = '';
-    const plan = await forgetCompanionProfile(host.studentId());
+    const plan = await forgetCompanionProfile(host.studentId(), host.coachId ? host.coachId() : '');
     return speakPlan(plan);
   };
 
   const start = () => {
     stopped = false;
+    needOpen = true;
     loadPiece(host.pieceName()).then(() => tick('open'));
     if (timer) clearInterval(timer);
     timer = setInterval(() => tick('tick'), 4000);
@@ -602,6 +632,14 @@ export function createCompanionSession(host) {
     },
     async setPiece(name) {
       await loadPiece(name);
+    },
+    // 换了角色：新角色有自己的记忆，重新开场（认识他、问练法），不接着上一个角色的话说。
+    reopen() {
+      awaitingField = '';
+      recentSpoken = [];
+      lastSpokenText = '';
+      needOpen = true;
+      tick('open');
     },
     onBackground() {
       inBackground = true;

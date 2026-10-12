@@ -157,6 +157,7 @@ export default function CompanionScreen({navigation}) {
   const busyRef = useRef(false);
   const pausedRef = useRef(false);
   const typingRef = useRef(false);
+  const typedRef = useRef(true);
   const typingIdleTimer = useRef(null);
   const mutedRef = useRef(false);
   const aliveRef = useRef(true);
@@ -198,8 +199,18 @@ export default function CompanionScreen({navigation}) {
   const reloadCoach = async ({blocking = false} = {}) => {
     const id = await getSelectedCoachId();
     const base = profileById(id);
+    const before = coachIdRef.current;
     coachIdRef.current = id;
     profileRef.current = base;
+    // 每个角色各记各的：换了角色就清掉上一个角色的对话，由新角色重新开场。
+    if (!blocking && before && before !== id && roundRef.current && roundRef.current.reopen) {
+      try {
+        stopSpeak();
+      } catch (e) {}
+      historyRef.current = [];
+      if (aliveRef.current) setMessages([]);
+      roundRef.current.reopen();
+    }
     if (aliveRef.current) {
       setCoachName(base.displayName || '专业老师');
     }
@@ -365,7 +376,7 @@ export default function CompanionScreen({navigation}) {
             pushHistory('user', text);
             return;
           }
-          onSendText(text, opts && opts.free);
+          onSendText(text, opts && opts.free, true);
         },
       });
       roundRef.current.start();
@@ -637,6 +648,8 @@ export default function CompanionScreen({navigation}) {
 
   // 「要注意什么」「重点是什么」：照老师的原话按编号说，不让角色自己编。
   const POINT_WORDS = /重点|注意(?:些|点)?什么|要注意|老师(?:说|讲|交代)了?什么/;
+  // 「先分段练」「老师让整首弹」：问题放下以后才说，也按他说的改练法，不当闲聊。
+  const MODE_WORDS = /分段|整首|一段一段|从头到尾|[分奋粉份][段锻断]/;
   // 「不练了」「明天再练」：定了时间就哄他坚持，没定时间就道别并停下。和服务端的规则一致。
   const END_WORDS = /不(?:想|要)?再?(?:练|弹)琴?了|不(?:想|要)再?(?:练|弹)琴?(?:[啦呀啊嘛吧呢]|(?=[，。！？!?,.~～]|$))|(?:就)?(?:练|弹)到这|(?:明天|下次|改天|晚点|待会儿?)再(?:练|弹|来)|(?:结束|停止)(?:练琴|练习|陪练|吧|了)|^结束$|我(?:要|先)?走了|拜拜|再见/;
 
@@ -660,7 +673,9 @@ export default function CompanionScreen({navigation}) {
   };
 
   // notAnswer：这句已经被认定不是在回答刚才的问题，不要再当回答送一次。
-  const onSendText = (text, notAnswer) => {
+  // heard：麦自己听来的。打字和按住说的都不是，服务端不用当回声去挡。
+  const onSendText = (text, notAnswer, heard) => {
+    typedRef.current = !heard;
     if (!text) return;
     const round = roundRef.current;
     if (round && round.ended && round.ended()) {
@@ -670,7 +685,7 @@ export default function CompanionScreen({navigation}) {
     }
     if (round && round.markVoice) round.markVoice();
     const awaiting = !notAnswer && !!(round && round.awaiting && round.awaiting());
-    if (round && round.said && !awaiting && FIX_WORDS.test(text)) {
+    if (round && round.said && !awaiting && (FIX_WORDS.test(text) || MODE_WORDS.test(text))) {
       showUser(text);
       ruleOrChat(text, () => round.said(text));
       return;
@@ -718,6 +733,7 @@ export default function CompanionScreen({navigation}) {
         ended: !!(round && round.ended && round.ended()),
         timer_left_sec: Math.max(0, leftRef.current || 0),
       },
+      {typed: typedRef.current},
     )
       .then(res => {
         setSending(false);

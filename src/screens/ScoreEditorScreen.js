@@ -19,6 +19,7 @@ import {
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import SectionMarks from '../components/SectionMarks';
+import {SectionNoteList, SectionNoteSheet, NOTE_MAX} from '../components/SectionNotes';
 import {cnNum, readingSections} from '../utils/sections';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
@@ -164,8 +165,10 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [termIdx, setTermIdx] = useState(-1);
   const [termKey, setTermKey] = useState('');
   const [termValue, setTermValue] = useState('');
-  // 点谱面时做什么：'divider' 加分段线 / 'term' 认术语
+  // 点谱面时做什么：'note' 点一段写重点 / 'divider' 加分段线 / 'term' 认术语
   const [tapMode, setTapMode] = useState('divider');
+  const [editSec, setEditSec] = useState(null);
+  const modeChosen = useRef(false);
   // 认不出来时，让老师照着 OCR 读到的字补一个
   const [askTerm, setAskTerm] = useState(null);
   const [askText, setAskText] = useState('');
@@ -196,6 +199,10 @@ export default function ScoreEditorScreen({navigation, route}) {
       setTermOverlays(Array.isArray(m?.term_overlays) ? m.term_overlays : []);
       setDividers(normDividers(m?.dividers));
       setNaturalSizes({});
+      // 已经分好段的谱，进来先是「写重点」：点哪一段就写哪一段，不会一点就多出一条线。
+      if (!modeChosen.current && readingSections(m?.annotations || []).length) {
+        setTapMode('note');
+      }
     } catch (e) {
       setManifest(null);
       setTerms([]);
@@ -427,7 +434,9 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
     setBusy(true);
     try {
-      const r = await boxesFromDividers(getDeviceId(), studentId, pieceName, dividers, lines);
+      const r = await boxesFromDividers(
+        getDeviceId(), studentId, pieceName, dividers, lines, manifest?.annotations || [],
+      );
       if (r?.ok) {
         setManifest(prev => ({
           ...(prev || {}),
@@ -436,7 +445,14 @@ export default function ScoreEditorScreen({navigation, route}) {
         if (Array.isArray(r.dividers)) {
           setDividers(normDividers(r.dividers));
         }
-        Alert.alert('已生成重点框', '划了几条段尾线就是几段，按顺序叫第一段、第二段……一段可以跨行、跨页。最后点「保存确认」。');
+        modeChosen.current = true;
+        setTapMode('note');
+        Alert.alert(
+          '已分好段',
+          '划了几条段尾线就是几段，按顺序叫第一段、第二段……已经写过的重点按段号留着。\n现在点谱上某一段，就能写这一段的重点。',
+        );
+      } else if (r?.error === 'not_found') {
+        Alert.alert('生成失败', '没找到这首曲子的乐谱，请退出重进后再试。');
       } else {
         Alert.alert('生成失败', '请稍后重试。');
       }
@@ -471,15 +487,46 @@ export default function ScoreEditorScreen({navigation, route}) {
     ]);
   };
 
-  const onPageTap = (pageIdx, pageH, evt) => {
+  // 这一点落在哪一段上（框外一点点也算，手指粗）。
+  const sectionAt = (pageIdx, x, y) => {
+    const pad = 0.012;
+    return (
+      marks.find(sec =>
+        (sec.rects || []).some(
+          r =>
+            (r.page || 0) === pageIdx &&
+            x >= (r.x || 0) - pad &&
+            x <= (r.x || 0) + (r.w || 0) + pad &&
+            y >= (r.y || 0) - pad &&
+            y <= (r.y || 0) + (r.h || 0) + pad,
+        ),
+      ) || null
+    );
+  };
+
+  const onPageTap = (pageIdx, pageH, evt, frameW = pageW) => {
     const ne = evt?.nativeEvent || {};
     const locationX = ne.locationX;
     const locationY = ne.locationY;
     if (!(locationX >= 0) || !(locationY >= 0) || !pageH) return;
-    const x = clamp(locationX / Math.max(1, pageW), 0.02, 0.98);
+    const x = clamp(locationX / Math.max(1, frameW), 0.02, 0.98);
     const y = clamp(locationY / Math.max(1, pageH), 0.02, 0.98);
     if (tapMode === 'term') {
       recognizeAtTap(pageIdx, x, y);
+      return;
+    }
+    if (tapMode === 'note') {
+      const sec = sectionAt(pageIdx, x, y);
+      if (sec) {
+        openSection(sec);
+      } else {
+        Alert.alert(
+          '这里还没有分段',
+          marks.length
+            ? '点有颜色的地方写那一段的重点。要在这里加分段线，先点上面的「加分段线」。'
+            : '先点上面的「加分段线」，在每段结尾点一下，再点「按分段线生成重点框」。',
+        );
+      }
       return;
     }
     // 分段线 = 前一段的终点。点哪里就立一条短竖线，不满意删了重点。
@@ -589,19 +636,48 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
   };
 
-  // 段落只有编号，不写标题：点「第N段」只能看编号或删掉这一段的框。
+  // 点「第N段」或在「写重点」模式下点这一段：写这一段给学生的重点。段落本身只有编号，不写标题。
+  // 全屏看谱时先关掉全屏，再弹出来：两个弹层叠在一起 iOS 会弹不出来。
   const openSection = sec => {
+    if (zoomPage) {
+      setZoomPage(null);
+      setTimeout(() => setEditSec(sec), 450);
+      return;
+    }
+    setEditSec(sec);
+  };
+
+  const saveSectionNote = text => {
+    const sec = editSec;
+    setEditSec(null);
+    if (!sec) return;
+    const headId = (sec.head || {}).id;
+    const ids = new Set((sec.rects || []).map(r => r.id));
+    const nextAnn = (manifest?.annotations || []).map(b => {
+      if (!ids.has(b.id)) return b;
+      return {...b, note: b.id === headId ? String(text || '').slice(0, NOTE_MAX) : ''};
+    });
+    setManifest(prev => ({...(prev || {}), annotations: nextAnn}));
+    // 写完就存，学生端马上能看到；不用再记着点「保存确认」。
+    saveAll(false, {quiet: true, annotations: nextAnn});
+  };
+
+  const deleteSection = () => {
+    const sec = editSec;
+    if (!sec) return;
     const ids = new Set((sec.rects || [sec.head]).map(r => r.id));
-    Alert.alert(`第${cnNum(sec.n)}段`, '段落只按编号，不写标题。要改分段，删掉或重新点段尾线，再点「生成重点框」。', [
-      {text: '好', style: 'cancel'},
+    Alert.alert(`删除第${cnNum(sec.n)}段？`, '这一段的颜色和写的重点都会去掉。要重新分段，删掉段尾线再点「生成重点框」。', [
+      {text: '取消', style: 'cancel'},
       {
-        text: '删除这一段的框',
+        text: '删除',
         style: 'destructive',
-        onPress: () =>
+        onPress: () => {
+          setEditSec(null);
           setManifest(prev => ({
             ...(prev || {}),
             annotations: (prev?.annotations || []).filter(b => !ids.has(b.id)),
-          })),
+          }));
+        },
       },
     ]);
   };
@@ -625,17 +701,19 @@ export default function ScoreEditorScreen({navigation, route}) {
     }));
   };
 
-  const saveAll = async (approvePending = false) => {
+  const saveAll = async (approvePending = false, opts = {}) => {
+    const quiet = !!opts.quiet;
     if (!manifest?.pages?.length) {
-      Alert.alert('提示', '请先上传乐谱。');
+      if (!quiet) Alert.alert('提示', '请先上传乐谱。');
       return;
     }
-    setBusy(true);
+    if (route?.params?.preview) return;
+    if (!quiet) setBusy(true);
     try {
-      const annotations = (manifest.annotations || []).map(b => ({
+      const annotations = (opts.annotations || manifest.annotations || []).map(b => ({
         ...b,
         label: String(b.label || '').trim().slice(0, 18),
-        note: String(b.note || '').trim().slice(0, 36),
+        note: String(b.note || '').trim().slice(0, NOTE_MAX),
         status: 'confirmed',
       }));
       const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms, {
@@ -646,8 +724,9 @@ export default function ScoreEditorScreen({navigation, route}) {
       if (r?.ok) {
         setManifest(r.manifest || {...manifest, annotations});
         if (Array.isArray(r.manifest?.dividers)) {
-          setDividers(r.manifest.dividers);
+          setDividers(normDividers(r.manifest.dividers));
         }
+        if (quiet) return;
         Alert.alert(
           approvePending ? '已通过并发布' : '已保存',
           approvePending
@@ -655,12 +734,12 @@ export default function ScoreEditorScreen({navigation, route}) {
             : '学生端进入该曲目后即可查看乐谱和重点框。',
         );
       } else {
-        Alert.alert('保存失败', '请稍后重试。');
+        Alert.alert('保存失败', quiet ? '重点没存上，请点「保存确认」再试一次。' : '请稍后重试。');
       }
     } catch (e) {
       Alert.alert('保存失败', '网络异常，请稍后重试。');
     } finally {
-      setBusy(false);
+      if (!quiet) setBusy(false);
     }
   };
 
@@ -699,28 +778,32 @@ export default function ScoreEditorScreen({navigation, route}) {
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
           <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
           <Text style={ui.help}>
-            操作很简单：①点谱面某处 = 加一条「段尾」竖线；不满意就点线删除再重点。②点「按分段线生成重点框」= 从上一条线到这条线，整段（可跨好几行）都会圈进来。③点框可改文字。相册多选会先显示页序。
+            三步：①「加分段线」：在每一段的结尾点一下，立一条竖线（点线可删）。②点「按分段线生成重点框」，每段一个颜色。③「写重点」：点谱上某一段，写给学生看的重点，写完自动保存。
           </Text>
+          <Text style={[ui.help, {fontWeight: '700', color: colors.textPrimary}]}>点谱面时：</Text>
           <View style={ui.modeRow}>
-            <TouchableOpacity
-              style={[ui.modeBtn, tapMode === 'divider' && ui.modeBtnOn]}
-              onPress={() => setTapMode('divider')}>
-              <Text style={[ui.modeText, tapMode === 'divider' && ui.modeTextOn]}>
-                点谱＝加分段线
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[ui.modeBtn, tapMode === 'term' && ui.modeBtnOn]}
-              onPress={() => setTapMode('term')}>
-              <Text style={[ui.modeText, tapMode === 'term' && ui.modeTextOn]}>
-                点谱＝认术语
-              </Text>
-            </TouchableOpacity>
+            {[
+              ['note', '写重点'],
+              ['divider', '加分段线'],
+              ['term', '认术语'],
+            ].map(([m, label]) => (
+              <TouchableOpacity
+                key={m}
+                style={[ui.modeBtn, tapMode === m && ui.modeBtnOn]}
+                onPress={() => {
+                  modeChosen.current = true;
+                  setTapMode(m);
+                }}>
+                <Text style={[ui.modeText, tapMode === m && ui.modeTextOn]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
           <Text style={ui.help}>
             {tapMode === 'term'
               ? '哪个术语没认出来，就用手指点在那串字上。认出来会直接标在谱上，并记进术语库——以后别的曲子出现同一个词，不用再点。'
-              : '要补识别术语，先切到「点谱＝认术语」，再点谱上那串没认出来的字。'}
+              : tapMode === 'note'
+                ? '点谱上有颜色的一段，就能写这一段的重点。学生点「第几段」就能看到，陪练也会照着念。'
+                : '在一段的结尾点一下就是一条段尾线。点线可以删掉。分好以后点「按分段线生成重点框」。'}
           </Text>
           <Text style={ui.help}>
             要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
@@ -778,6 +861,8 @@ export default function ScoreEditorScreen({navigation, route}) {
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {marks.length ? <SectionNoteList sections={marks} editable onPick={openSection} /> : null}
 
         {loading || busy ? (
           <View style={{marginTop: 24, alignItems: 'center'}}>
@@ -1099,8 +1184,10 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
           <Text style={styles.zoomHint}>
             {tapMode === 'term'
-              ? '放大后可以拖动查看 · 未放大时点谱面认术语'
-              : '放大后可以拖动查看 · 未放大时点谱面加分段线'}
+              ? '放大后可以拖动查看 · 点谱面认术语'
+              : tapMode === 'note'
+                ? '放大后可以拖动查看 · 点有颜色的一段写重点'
+                : '放大后可以拖动查看 · 点谱面加分段线'}
           </Text>
           {zoomPage ? (() => {
             const win = Dimensions.get('window');
@@ -1163,12 +1250,12 @@ export default function ScoreEditorScreen({navigation, route}) {
                       const lx = e?.nativeEvent?.locationX;
                       const ly = e?.nativeEvent?.locationY;
                       if (!(lx >= 0) || !(ly >= 0)) return;
-                      onPageTap(zoomPage.index, zh, {
-                        nativeEvent: {
-                          locationX: lx / scale,
-                          locationY: ly / scale,
-                        },
-                      });
+                      onPageTap(
+                        zoomPage.index,
+                        zh,
+                        {nativeEvent: {locationX: lx / scale, locationY: ly / scale}},
+                        zw,
+                      );
                     }}
                     style={{
                       position: 'absolute',
@@ -1183,10 +1270,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                     page={zoomPage.index}
                     pageW={zw * scale}
                     pageH={zh * scale}
-                    onOpen={sec => {
-                      setZoomPage(null);
-                      openSection(sec);
-                    }}
+                    onOpen={openSection}
                   />
                   {pageDivs.map(d => (
                     <SimpleDivider
@@ -1245,6 +1329,13 @@ export default function ScoreEditorScreen({navigation, route}) {
           </View>
         </SafeAreaView>
       </Modal>
+      <SectionNoteSheet
+        section={editSec}
+        editable
+        onClose={() => setEditSec(null)}
+        onSave={saveSectionNote}
+        onDelete={deleteSection}
+      />
     </SafeAreaView>
   );
 }

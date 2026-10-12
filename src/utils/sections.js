@@ -8,6 +8,35 @@ export function cnNum(n) {
   return CN_DIGITS[Math.floor(n / 10)] + '十' + (n % 10 ? CN_DIGITS[n % 10] : '');
 }
 
+// 每一段一个颜色，谱面、重点列表、陪练里都一样。相邻两段颜色差得开。
+export const SECTION_COLORS = ['#E08A1E', '#1F9E8F', '#7A5AD6', '#E0604A', '#2F80D1', '#5E9E3A'];
+
+export function sectionColor(n) {
+  const i = Math.max(0, (Number(n) || 1) - 1) % SECTION_COLORS.length;
+  return SECTION_COLORS[i];
+}
+
+export function tint(hex, alpha) {
+  const h = String(hex || '#E08A1E').replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// 第N段在谱上的位置：「第1页 · 3行」「第1页 → 第2页」，学生对着谱好找。
+export function sectionSpan(sec) {
+  const rects = (sec && sec.rects) || [];
+  if (!rects.length) return '';
+  const a = rects[0];
+  const b = rects[rects.length - 1];
+  const pa = (a.page || 0) + 1;
+  const pb = (b.page || 0) + 1;
+  if (rects.length === 1) return `第${pa}页`;
+  if (pa === pb) return `第${pa}页 · ${rects.length}行`;
+  return `第${pa}页 → 第${pb}页`;
+}
+
 function firstLine(text) {
   const t = String(text || '').trim();
   if (!t) return '';
@@ -33,7 +62,7 @@ export function sectionLine(box) {
 }
 
 // 一段可能跨好几行、好几页（好几个框）。返回按阅读顺序编号的段落：
-// {n, head, line, end, rects}。段落只有编号，没有标题。
+// {n, head, line, note, end, rects}。段落只有编号，没有标题；note 是老师给这一段写的重点。
 export function readingSections(annotations) {
   const all = (annotations || []).filter(Boolean).slice().sort(readingCompare);
   const groups = new Map();
@@ -45,7 +74,8 @@ export function readingSections(annotations) {
   const out = [];
   groups.forEach(rects => {
     const head = rects.find(r => !r.cont) || rects[0];
-    out.push({head, line: sectionLine(head), end: rects[rects.length - 1], rects});
+    const note = String(head.note || (rects.find(r => r.note) || {}).note || '').trim();
+    out.push({head, line: sectionLine(head), note, end: rects[rects.length - 1], rects});
   });
   out.sort((a, b) => readingCompare(a.head, b.head));
   return out.map((s, i) => ({...s, n: i + 1}));

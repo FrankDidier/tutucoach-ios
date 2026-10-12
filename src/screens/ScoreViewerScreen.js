@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Modal,
   Dimensions,
+  Pressable,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -21,7 +22,8 @@ import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {peekCompanionTarot} from '../services/companionTarot';
 import SectionMarks from '../components/SectionMarks';
-import {cnNum, readingSections} from '../utils/sections';
+import {SectionNoteList, SectionNoteSheet} from '../components/SectionNotes';
+import {readingSections} from '../utils/sections';
 
 const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
 
@@ -75,10 +77,49 @@ export default function ScoreViewerScreen({navigation, route}) {
     () => readingSections(manifest?.confirmed_annotations || manifest?.annotations || []),
     [manifest],
   );
-  // 段落只有编号，不写标题
-  const showSection = sec => {
-    Alert.alert(`第${cnNum(sec.n)}段`, '陪练会按这个编号带你一段一段练。');
+  // 点「第几段」看老师给这一段写的重点；点重点列表跳到谱上那一段，并闪一下。
+  const [openSec, setOpenSec] = useState(null);
+  const [focusN, setFocusN] = useState(0);
+  const scrollRef = useRef(null);
+  const pageTops = useRef({});
+  const focusTimer = useRef(null);
+  const showSection = sec => setOpenSec(sec);
+  // 点谱上有颜色的地方（不只是「第几段」小标签）就看这一段的重点；框外一点点也算，手指粗。
+  const tapPage = (pageIdx, frameW, frameH, evt) => {
+    const lx = evt?.nativeEvent?.locationX;
+    const ly = evt?.nativeEvent?.locationY;
+    if (!(lx >= 0) || !(ly >= 0) || !frameW || !frameH) return;
+    const x = lx / frameW;
+    const y = ly / frameH;
+    const pad = 0.012;
+    const sec = marks.find(s =>
+      (s.rects || []).some(
+        r =>
+          (r.page || 0) === pageIdx &&
+          x >= (r.x || 0) - pad &&
+          x <= (r.x || 0) + (r.w || 0) + pad &&
+          y >= (r.y || 0) - pad &&
+          y <= (r.y || 0) + (r.h || 0) + pad,
+      ),
+    );
+    if (sec) showSection(sec);
   };
+  const locate = sec => {
+    setOpenSec(null);
+    if (!sec) return;
+    const head = sec.head || (sec.rects || [])[0] || {};
+    const pg = (manifest?.pages || []).find(p => p.index === (head.page || 0));
+    const key = pg ? pg.name || String(pg.index) : '';
+    const top = pageTops.current[head.page || 0];
+    if (pg && top != null && scrollRef.current) {
+      const pageH = pageFrameHeight(pageW, pg, naturalSizes[key]);
+      scrollRef.current.scrollTo({y: Math.max(0, top + (head.y || 0) * pageH - 90), animated: true});
+    }
+    setFocusN(sec.n);
+    if (focusTimer.current) clearTimeout(focusTimer.current);
+    focusTimer.current = setTimeout(() => setFocusN(0), 2200);
+  };
+  useEffect(() => () => focusTimer.current && clearTimeout(focusTimer.current), []);
 
   const load = async () => {
     setLoading(true);
@@ -246,7 +287,7 @@ export default function ScoreViewerScreen({navigation, route}) {
     <SafeAreaView style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱重点" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={ui.scroll}>
+      <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
         <Text style={ui.hint}>
           补拍的乐谱页会立刻加进来并翻译术语；要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
@@ -263,12 +304,22 @@ export default function ScoreViewerScreen({navigation, route}) {
         {!loading && !manifest?.pages?.length ? (
           <Text style={ui.empty}>这首曲目还没有乐谱。拍照上传后马上就能看到翻译好的术语。</Text>
         ) : null}
+        {marks.length ? <SectionNoteList sections={marks} onPick={locate} /> : null}
+        {marks.length && !marks.some(s => s.note) ? (
+          <Text style={ui.hint}>谱上同一种颜色是同一段。陪练会按「第一段、第二段」带你练。</Text>
+        ) : null}
         {(manifest?.pages || []).map(page => {
           const key = page.name || String(page.index);
           const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
           const pageTerms = (manifest.term_overlays || []).filter(t => (t.page || 0) === page.index);
           return (
-            <View key={key} style={ui.pageCard}>
+            <View
+              key={key}
+              style={ui.pageCard}
+              onLayout={e => {
+                // 卡片顶部 + 页头一行，就是谱面图的顶部
+                pageTops.current[page.index] = e.nativeEvent.layout.y + 30;
+              }}>
               <View style={ui.pageHead}>
                 <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
                 <View style={{flexDirection: 'row', gap: 14}}>
@@ -322,12 +373,19 @@ export default function ScoreViewerScreen({navigation, route}) {
                     <Text style={{color: '#FFFFFF', fontSize: 12}}>{tarot.line}</Text>
                   </View>
                 ) : null}
+                {marks.length ? (
+                  <Pressable
+                    onPress={e => tapPage(page.index, pageW, pageH, e)}
+                    style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
+                  />
+                ) : null}
                 <SectionMarks
                   sections={marks}
                   page={page.index}
                   pageW={pageW}
                   pageH={pageH}
                   onOpen={showSection}
+                  focusN={focusN}
                 />
                 {pageTerms.map(ov => {
                   const label = String(ov.short || ov.translation || ov.term || '');
@@ -429,6 +487,12 @@ export default function ScoreViewerScreen({navigation, route}) {
                       onError={() => retryPage(zoomKey)}
                     />
                   ) : null}
+                  {marks.length ? (
+                    <Pressable
+                      onPress={e => tapPage(zoomPage.index, zw * scale, zh * scale, e)}
+                      style={{position: 'absolute', left: 0, top: 0, width: zw * scale, height: zh * scale}}
+                    />
+                  ) : null}
                   <SectionMarks
                     sections={marks}
                     page={zoomPage.index}
@@ -461,6 +525,9 @@ export default function ScoreViewerScreen({navigation, route}) {
               </ScrollView>
             );
           })() : null}
+          {zoomPage && openSec ? (
+            <SectionNoteSheet section={openSec} onClose={() => setOpenSec(null)} />
+          ) : null}
           <View
             style={{
               flexDirection: 'row',
@@ -481,6 +548,13 @@ export default function ScoreViewerScreen({navigation, route}) {
           </View>
         </SafeAreaView>
       </Modal>
+      {!zoomPage && openSec ? (
+        <SectionNoteSheet
+          section={openSec}
+          onClose={() => setOpenSec(null)}
+          onLocate={() => locate(openSec)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
