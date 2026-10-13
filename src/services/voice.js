@@ -85,7 +85,7 @@ export function detectSpeakLang(text) {
 // voiceId: 旧版百度声音复刻音色 ID（仅兼容老逻辑；有 coachId 时优先走 coachId）。
 export function speak(
   text,
-  {rate = 1.0, pitch = 1.0, voiceId = 0, coachId = '', lang = 'auto', flush = true} = {},
+  {rate = 1.0, pitch = 1.0, voiceId = 0, coachId = '', lang = 'auto', flush = true, speed = 1.0} = {},
 ) {
   if (!text) return;
   // 逐句语种优先：文字里已经能确定语种时以文字为准；否则退回调用方传入的 lang（角色配置）。
@@ -107,6 +107,7 @@ export function speak(
           pitch || 1.0,
           BASE_URL,
           effLang || 'auto',
+          Number(speed) || 1.0,
         );
         return;
       }

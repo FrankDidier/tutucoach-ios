@@ -229,8 +229,12 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
                   rate:(double)rate
                   pitch:(double)pitch
                   baseUrl:(NSString *)baseUrl
-                  lang:(NSString *)lang) {
+                  lang:(NSString *)lang
+                  speed:(double)speed) {
   if (text.length == 0) return;
+  // 陪练着急时说快一点、担心时慢一点。服务端只认 0.8~1.3。
+  double pace = (speed > 0.5 && speed < 2.0) ? speed : 1.0;
+  if (fabs(pace - 1.0) > 0.01) rate = rate * pace;
   self.speakSeq += 1;
   NSInteger seq = self.speakSeq;
   self.fetchUntil = [NSDate date].timeIntervalSince1970 + 12.0;
@@ -241,8 +245,9 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
     return;
   }
   NSString *lg = (lang.length ? lang : @"auto");
+  NSString *paceTag = fabs(pace - 1.0) > 0.01 ? [NSString stringWithFormat:@":s%.2f", pace] : @"";
   NSString *cacheKey = [self sha1ForString:
-      [NSString stringWithFormat:@"mm:%@:%@:%@", coachId, lg, text]];
+      [NSString stringWithFormat:@"mm:%@:%@:%@%@", coachId, lg, text, paceTag]];
   NSString *cacheDir = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tutu_tts"];
   [[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
                             withIntermediateDirectories:YES attributes:nil error:nil];
@@ -274,6 +279,7 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
   NSString *encLang = [lg stringByAddingPercentEncodingWithAllowedCharacters:allowed];
   NSString *urlStr = [NSString stringWithFormat:
       @"%@/api/coach/tts?coachId=%@&lang=%@&text=%@", baseUrl, encCoach, encLang, encText];
+  if (paceTag.length) urlStr = [urlStr stringByAppendingFormat:@"&speed=%.2f", pace];
   NSURL *url = [NSURL URLWithString:urlStr];
   if (url == nil) { fallback(); return; }
   // 切回来的第一句经常没拉到角色声音，就掉进系统音色。先再要一次，两次都不成才用系统声音。

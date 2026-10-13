@@ -4,10 +4,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-// 琴离手机远一点、弹得轻一点也要算上；安静房间的底噪大约 0.003。
-#define LOUD_RAW 0.006f
 #define FMIN 70.0f
 #define FMAX 4200.0f
+// 峰至少要有最响那个峰的 3%，轻轻的琴声混在说话里也要留得下来。
+#define PEAK_REL 0.03f
+// 安静房间的底噪大约 0.003；门限是底噪的两倍，但不低于这个数。
+#define GATE_MIN 0.0012f
+#define GATE_X 2.0f
+// 底噪每帧最多往上爬一点点，一直有声音时不会把琴声当成底噪。
+#define FLOOR_RISE 1.0005f
+#define SLOTS (TUTU_TONE_LAG2 + 1)
 
 static void fft(float *re, float *im, int n) {
   for (int i = 1, j = 0; i < n; i++) {
@@ -45,11 +51,21 @@ void tutu_tone_reset(TutuPianoTone *t) {
   }
 }
 
+// 琴弦的泛音隔 0.1 秒还在原地，差不到千分之二点五。
+static float tol_for(float f) { return fmaxf(1.2f, 0.0025f * f); }
+
+static int near_any(float f, const float *freqs, int n) {
+  float tol = tol_for(f);
+  for (int j = 0; j < n; j++) if (fabsf(f - freqs[j]) <= tol) return 1;
+  return 0;
+}
+
 static void analyze(TutuPianoTone *t) {
   float *re = t->re, *im = t->im, *mag = t->mag;
   double acc = 0;
   for (int i = TUTU_TONE_N - TUTU_TONE_HOP; i < TUTU_TONE_N; i++) acc += (double)t->window[i] * t->window[i];
   float rms = (float)sqrt(acc / TUTU_TONE_HOP);
+  t->floor = (t->frames == 0 || rms < t->floor) ? rms : t->floor * FLOOR_RISE;
   for (int i = 0; i < TUTU_TONE_N; i++) {
     re[i] = t->window[i] * t->hann[i];
     im[i] = 0.f;
@@ -62,12 +78,13 @@ static void analyze(TutuPianoTone *t) {
   float top = 0.f;
   for (int k = lo - 1; k < hi + 2; k++) if (mag[k] > top) top = mag[k];
 
-  float freq[TUTU_TONE_PEAKS], amp[TUTU_TONE_PEAKS];
+  int slot = t->peakAt;
+  float *freq = t->peakFreq[slot], *amp = t->peakAmp[slot];
   int count = 0;
   if (top > 0.f) {
     for (int k = lo; k < hi; k++) {
       float a = mag[k - 1], b = mag[k], c = mag[k + 1];
-      if (!(b > a && b >= c && b >= 0.08f * top)) continue;
+      if (!(b > a && b >= c && b >= PEAK_REL * top)) continue;
       double la = log(a + 1e-12), lb = log(b + 1e-12), lc = log(c + 1e-12);
       double d = la - 2 * lb + lc;
       double off = d < 0 ? 0.5 * (la - lc) / d : 0.0;
@@ -85,32 +102,55 @@ static void analyze(TutuPianoTone *t) {
     }
   }
 
-  float steady = 0.f;
-  int slot = t->peakAt;
+  float tight = 0.f, fall = 0.f, rise = 0.f;
+  int pers = 0;
   if (t->frames >= TUTU_TONE_LAG && count > 0) {
-    int old = (slot + 1) % (TUTU_TONE_LAG + 1);
+    int old = (slot - TUTU_TONE_LAG + SLOTS) % SLOTS;
+    const float *of = t->peakFreq[old], *oa = t->peakAmp[old];
+    int on = t->peakCount[old];
     float tot = 0.f, hit = 0.f;
     for (int i = 0; i < count; i++) {
       tot += amp[i];
-      float tol = fmaxf(2.0f, 0.006f * freq[i]);
-      for (int j = 0; j < t->peakCount[old]; j++) {
-        if (fabsf(freq[i] - t->peakFreq[old][j]) <= tol) {
-          hit += amp[i];
-          break;
-        }
+      float bd = tol_for(freq[i]);
+      int best = -1;
+      for (int j = 0; j < on; j++) {
+        float d = fabsf(freq[i] - of[j]);
+        if (d <= bd) { bd = d; best = j; }
+      }
+      if (best < 0) continue;
+      hit += amp[i];
+      if (amp[i] < 0.97f * oa[best]) fall += amp[i];
+      else if (amp[i] > 1.03f * oa[best]) rise += amp[i];
+    }
+    tight = tot > 0.f ? hit / tot : 0.f;
+    if (t->frames >= TUTU_TONE_LAG2) {
+      int old2 = (slot - TUTU_TONE_LAG2 + SLOTS) % SLOTS;
+      for (int i = 0; i < count; i++) {
+        if (near_any(freq[i], of, on) && near_any(freq[i], t->peakFreq[old2], t->peakCount[old2])) pers++;
       }
     }
-    steady = tot > 0.f ? hit / tot : 0.f;
   }
-  memcpy(t->peakFreq[slot], freq, sizeof(float) * count);
   t->peakCount[slot] = count;
-  t->peakAt = (slot + 1) % (TUTU_TONE_LAG + 1);
+  t->peakAt = (slot + 1) % SLOTS;
   t->frames++;
 
-  t->rms[t->ringAt] = rms;
-  t->steady[t->ringAt] = steady;
-  t->ringAt = (t->ringAt + 1) % TUTU_TONE_FRAMES;
+  int r = t->ringAt;
+  t->rms[r] = rms;
+  t->gate[r] = fmaxf(GATE_MIN, GATE_X * t->floor);
+  t->tight[r] = tight;
+  t->fall[r] = fall;
+  t->rise[r] = rise;
+  t->pers[r] = pers;
+  t->ringAt = (r + 1) % TUTU_TONE_FRAMES;
   if (t->ringCount < TUTU_TONE_FRAMES) t->ringCount++;
+  if (t->frames >= TUTU_TONE_FRAMES && t->frames % TUTU_TONE_CHECK == 0) {
+    TutuToneLevel lv = tutu_tone_level(t);
+    if (tutu_tone_is_piano(lv)) {
+      t->hitPrev = t->hitLast;
+      t->hitLast = t->frames;
+      t->hit = lv;
+    }
+  }
 }
 
 void tutu_tone_push(TutuPianoTone *t, const float *samples, int count) {
@@ -135,22 +175,37 @@ static int cmp_float(const void *a, const void *b) {
   return x < y ? -1 : (x > y ? 1 : 0);
 }
 
+static float median(float *v, int n) {
+  qsort(v, n, sizeof(float), cmp_float);
+  return n % 2 ? v[n / 2] : 0.5f * (v[n / 2 - 1] + v[n / 2]);
+}
+
 TutuToneLevel tutu_tone_level(const TutuPianoTone *t) {
-  TutuToneLevel lv = {0.f, 0.f, 0.f};
+  TutuToneLevel lv = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
   int n = t->ringCount;
   if (n == 0) return lv;
-  float st[TUTU_TONE_FRAMES], rs[TUTU_TONE_FRAMES], all[TUTU_TONE_FRAMES];
-  int loud = 0, recent = 0;
+  float tg[TUTU_TONE_FRAMES], rs[TUTU_TONE_FRAMES], all[TUTU_TONE_FRAMES];
+  int loud = 0, recent = 0, locked = 0, held = 0;
+  double fa = 0, ri = 0;
   for (int i = 0; i < n; i++) {
     int at = (t->ringAt - 1 - i + TUTU_TONE_FRAMES) % TUTU_TONE_FRAMES;
     all[i] = t->rms[at];
-    if (t->rms[at] >= LOUD_RAW) st[loud++] = t->steady[at];
     if (i < TUTU_TONE_FRAMES / 2) rs[recent++] = t->rms[at];
+    if (t->rms[at] < t->gate[at]) continue;
+    tg[loud++] = t->tight[at];
+    if (t->pers[at] >= 3) held++;
+    if (t->tight[at] >= 0.2f) {
+      locked++;
+      fa += t->fall[at];
+      ri += t->rise[at];
+    }
   }
   lv.loud = (float)loud / TUTU_TONE_FRAMES;
   if (loud > 0) {
-    qsort(st, loud, sizeof(float), cmp_float);
-    lv.piano = loud % 2 ? st[loud / 2] : 0.5f * (st[loud / 2 - 1] + st[loud / 2]);
+    lv.tframes = (float)locked / loud;
+    lv.p3 = (float)held / loud;
+    lv.fall = locked > 0 ? (float)(fa / fmax(fa + ri, 1e-9)) : 0.f;
+    lv.piano = median(tg, loud);
   }
   // 琴键一下一下按、按完慢慢变弱，响度一直在起落；冰箱、风扇的嗡嗡声几乎不变。
   qsort(all, n, sizeof(float), cmp_float);
@@ -163,5 +218,15 @@ TutuToneLevel tutu_tone_level(const TutuPianoTone *t) {
 }
 
 int tutu_tone_is_piano(TutuToneLevel lv) {
-  return lv.loud >= 0.3f && lv.piano >= 0.25f && lv.swing >= 1.4f;
+  if (lv.loud < 0.3f || lv.swing < 1.2f) return 0;
+  return (lv.tframes >= 0.4f && lv.fall >= 0.55f) || lv.p3 >= 0.6f;
+}
+
+int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out) {
+  if (t->hitPrev > 0 && t->frames - t->hitPrev <= TUTU_TONE_RECENT) {
+    *out = t->hit;
+    return 1;
+  }
+  *out = tutu_tone_level(t);
+  return 0;
 }

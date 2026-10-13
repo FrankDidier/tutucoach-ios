@@ -14,6 +14,7 @@ const PROFILE_FIELDS = {
   age: /岁|多大|年纪|年龄/,
   likes: /喜欢|爱|玩|兴趣|干|做/,
   mode: /分段[\s\S]*整首|整首[\s\S]*分段/,
+  section_pick: /段/,
 };
 
 // 这些是角色自己发挥的话（打招呼、哄回来、开场、道别），可以多说一点。
@@ -54,7 +55,9 @@ function fitLine(plan, text) {
     const first = whole.match(/^[^。！？!?]*[。！？!?]/);
     if (q && q.length) t = ((first && !/[？?]$/.test(first[0]) ? first[0] : '') + q[q.length - 1]).trim();
   }
-  if (t.length > (free || plan.intent === 'ask' ? 80 : 56)) return '';
+  // 着急哄人时一口气说两三个短句，比平时长一点。
+  const cap = (plan.pace || 1) > 1 ? 96 : free || plan.intent === 'ask' ? 80 : 56;
+  if (t.length > cap) return '';
   if (/按你的年纪|好好记住你|我记下了/.test(t)) return '';
   // 时间还没到，改写时不能顺嘴说了再见。
   if (plan.intent === 'stay' && /明天见|下次再|再见|拜拜|今天就到这|明天再/.test(t)) return '';
@@ -167,6 +170,25 @@ export function createCompanionSession(host) {
     if (t) recentSpoken = recentSpoken.concat(t).slice(-4);
   };
 
+  // 问「先练哪一段」「分段还是整首」时，在输入框上面给几个能直接点的答案。
+  let choicesFor = '';
+  const showChoices = plan => {
+    if (!host.onChoices) return;
+    const list = plan && plan.wait && plan.field && Array.isArray(plan.choices) ? plan.choices.filter(Boolean) : [];
+    if (list.length) {
+      choicesFor = plan.field;
+      host.onChoices(list.slice(0, 12));
+    } else if (choicesFor && awaitingField !== choicesFor) {
+      choicesFor = '';
+      host.onChoices(null);
+    }
+  };
+  const hideChoices = () => {
+    if (!choicesFor || !host.onChoices) return;
+    choicesFor = '';
+    host.onChoices(null);
+  };
+
   const say = async plan => {
     if (stopped || !plan || !plan.intent || plan.intent === 'none' || !plan.say) return;
     if (plan.tarot && tarotOn) {
@@ -198,10 +220,12 @@ export function createCompanionSession(host) {
     else if (plan.profile && typeof plan.profile.pending_field === 'string') {
       awaitingField = plan.profile.pending_field;
     }
+    showChoices(plan);
+    const pace = Number(plan.pace) || 1;
     if (plan.verbatim || !plan.instruction) {
       lastSpokenText = plan.say;
       rememberSpeak(plan.say);
-      host.speak(plan.say, true);
+      host.speak(plan.say, true, pace);
       return;
     }
     let spoken = '';
@@ -229,7 +253,7 @@ export function createCompanionSession(host) {
     const line = fitLine(plan, spoken) || plan.say;
     lastSpokenText = line;
     rememberSpeak(line);
-    host.speak(line, true);
+    host.speak(line, true, pace);
     if (host.pushAssistant) host.pushAssistant(line);
   };
 
@@ -258,9 +282,9 @@ export function createCompanionSession(host) {
 
   const sample = async () => {
     if (!Ear || !Ear.readLevel || earHeld()) return;
-    // 刚说完话，或者学生刚开口，麦里是人声，不是琴。
+    // 角色自己正在说话，麦里是它的声音，不是琴。
     // 有人在说话就说明人还在，这段时间不算「没动静」，不然会说「一声不吭就走了」。
-    if (Date.now() < speakingUntil || Date.now() < voiceUntil || (await isSpeaking())) {
+    if (Date.now() < speakingUntil || (await isSpeaking())) {
       levels = levels.concat(0).slice(-6);
       return;
     }
@@ -269,6 +293,14 @@ export function createCompanionSession(host) {
       const raw = Number(lv && lv.rms) || 0;
       // 原生层分辨了是不是琴声：说话、电视、角色自己的声音再响也不算在弹。
       const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
+      // 刚说完「我再弹一遍」就弹起来了：马上算在弹，不再当成还在说话。
+      if (piano) {
+        voiceUntil = 0;
+        talkingUntil = 0;
+      } else if (Date.now() < voiceUntil) {
+        levels = levels.concat(0).slice(-6);
+        return;
+      }
       const rms = piano ? Math.max(raw, 0.08) : 0;
       if (!piano && raw >= 0.08) talkingUntil = Date.now() + 10000;
       levels = levels.concat(rms).slice(-6);
@@ -324,6 +356,7 @@ export function createCompanionSession(host) {
       if (event === 'tick' && plan && plan.profile && plan.profile.pending_field === ''
           && !plan.wait && awaitingField) {
         awaitingField = '';
+        hideChoices();
       }
       await say(plan || null);
       const follow = plan;
@@ -432,6 +465,7 @@ export function createCompanionSession(host) {
   const noteAnswer = async (text, extra) => {
     const field = awaitingField;
     awaitingField = '';
+    hideChoices();
     busyCount += 1;
     try {
       return await planAnswer(text, field, extra);
@@ -498,6 +532,7 @@ export function createCompanionSession(host) {
     ended = true;
     stopped = true;
     awaitingField = '';
+    hideChoices();
     if (timer) clearInterval(timer);
     timer = null;
     try {
@@ -566,6 +601,7 @@ export function createCompanionSession(host) {
       piece: piece || host.pieceName(),
       event: 'said',
       text,
+      sections: boxed ? sections.map(s => s.line) : [],
       typed: true,
       last_said: lastSpokenText,
       timer_left_sec: timerLeft(),
@@ -636,6 +672,7 @@ export function createCompanionSession(host) {
     // 换了角色：新角色有自己的记忆，重新开场（认识他、问练法），不接着上一个角色的话说。
     reopen() {
       awaitingField = '';
+      hideChoices();
       recentSpoken = [];
       lastSpokenText = '';
       needOpen = true;

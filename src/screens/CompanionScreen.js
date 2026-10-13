@@ -18,6 +18,8 @@ import {
   Platform,
   AppState,
   NativeModules,
+  Animated,
+  Easing,
   useWindowDimensions,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -140,6 +142,10 @@ export default function CompanionScreen({navigation}) {
   const [leftSec, setLeftSec] = useState(0);
   const [timeUp, setTimeUp] = useState(false);
   const [restWord, setRestWord] = useState('时间到');
+  // 角色问了「先练哪一段」这类有几个固定答案的问题：输入框上面给一排能直接点的答案。
+  const [choices, setChoices] = useState(null);
+  const [picked, setPicked] = useState('');
+  const choicesIn = useRef(new Animated.Value(0)).current;
   const talkRef = useRef(null);
   const hintTimer = useRef(null);
   const leftRef = useRef(0);
@@ -366,8 +372,13 @@ export default function CompanionScreen({navigation}) {
           setRestWord('休息啦');
           setTimeUp(true);
         },
-        speak: text => {
-          if (text) addAiBubble(text, true);
+        speak: (text, _speakIt, pace) => {
+          if (text) addAiBubble(text, true, undefined, pace);
+        },
+        onChoices: list => {
+          if (!aliveRef.current) return;
+          setPicked('');
+          setChoices(list && list.length ? list : null);
         },
         pushAssistant: text => pushHistory('assistant', text),
         onHeard: (text, opts) => {
@@ -552,7 +563,7 @@ export default function CompanionScreen({navigation}) {
 
   // 逐字显示一条 AI 气泡；speakIt=true 时同时朗读。
   // spokenOverride：朗读用的文本（如对话回复要去掉括号内心描写），不传则朗读 full。
-  const addAiBubble = (full, speakIt, spokenOverride) => {
+  const addAiBubble = (full, speakIt, spokenOverride, pace) => {
     const key = 'a' + bubbleKey++;
     setMessages(prev => [...prev, {key, role: 'ai', shown: '', done: false}]);
     if (speakIt && !mutedRef.current) {
@@ -566,6 +577,7 @@ export default function CompanionScreen({navigation}) {
         try {
           speak(toSpeak, {
             rate: p.speechRate || 1.0,
+            speed: Number(pace) || 1.0,
             pitch: p.pitch || 1.0,
             coachId: coachIdRef.current || p.id,
             voiceId: p.voiceId || 0,
@@ -643,13 +655,13 @@ export default function CompanionScreen({navigation}) {
 
   // ============ 学生打字 ============
   // 「我不叫杨同」「叫我小桐」「忘了我吧」这类话先交给陪练规则，认出来就不再走闲聊。
-  const FIX_WORDS = /我叫|叫我|名字|叫错|记错|忘了我|忘掉我|忘记我|把我忘|重新认识|记忆|我是(?:男|女)|岁/;
+  const FIX_WORDS = /我叫|叫我|名字|叫错|记错|忘了我|忘掉我|忘记我|把我忘|重新认识|记忆|岁|我是(?:个|一个)?(?:小?男|小?女|母的|公的|小公主|小仙女|男子汉|小伙子|丫头|小子)/;
   const SECTION_WORDS = /(?:练|弹)得?(?:差不多|好|会)了|差不多了|(?:这段|这一段).{0,4}(?:可以了|行了|好了)|下一段|还没(?:练|弹)好|再练(?:一会|会儿|练)/;
 
   // 「要注意什么」「重点是什么」：照老师的原话按编号说，不让角色自己编。
   const POINT_WORDS = /重点|注意(?:些|点)?什么|要注意|老师(?:说|讲|交代)了?什么/;
   // 「先分段练」「老师让整首弹」：问题放下以后才说，也按他说的改练法，不当闲聊。
-  const MODE_WORDS = /分段|整首|一段一段|从头到尾|[分奋粉份][段锻断]/;
+  const MODE_WORDS = /分段|整首|一段一段|从头到尾|[分奋粉份][段锻断]|(?:练|弹|换到?|去|从|先|跳到)第[\d一二两三四五六七八九十]+段|换(?:一|个|别的|另一)?个?段|练(?:哪|别的|其他的?|另一)一?段/;
   // 「不练了」「明天再练」：定了时间就哄他坚持，没定时间就道别并停下。和服务端的规则一致。
   const END_WORDS = /不(?:想|要)?再?(?:练|弹)琴?了|不(?:想|要)再?(?:练|弹)琴?(?:[啦呀啊嘛吧呢]|(?=[，。！？!?,.~～]|$))|(?:就)?(?:练|弹)到这|(?:明天|下次|改天|晚点|待会儿?)再(?:练|弹|来)|(?:结束|停止)(?:练琴|练习|陪练|吧|了)|^结束$|我(?:要|先)?走了|拜拜|再见/;
 
@@ -713,6 +725,30 @@ export default function CompanionScreen({navigation}) {
     }
     showUser(text);
     sendChat(text);
+  };
+
+  useEffect(() => {
+    if (!choices) {
+      choicesIn.setValue(0);
+      return;
+    }
+    Animated.timing(choicesIn, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [choices, choicesIn]);
+
+  const pickChoice = c => {
+    if (picked) return;
+    setPicked(c);
+    // 先让点中的那颗亮一下，再当成他说的话送出去。
+    setTimeout(() => {
+      setChoices(null);
+      setPicked('');
+      onSendText(c);
+    }, 160);
   };
 
   const sendChat = () => {
@@ -1124,6 +1160,37 @@ export default function CompanionScreen({navigation}) {
         {/* 大号节拍器 */}
         <MetronomeCard style={styles.metro} />
 
+        {/* 角色在等一个有固定答案的回答：点一下就当他说了这句 */}
+        {choices ? (
+          <Animated.View
+            style={[
+              styles.choiceWrap,
+              {
+                opacity: choicesIn,
+                transform: [{translateY: choicesIn.interpolate({inputRange: [0, 1], outputRange: [10, 0]})}],
+              },
+            ]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.choiceRow}>
+              {choices.map(c => (
+                <TouchableOpacity
+                  key={c}
+                  activeOpacity={0.75}
+                  disabled={!!picked}
+                  onPress={() => pickChoice(c)}
+                  accessibilityRole="button"
+                  accessibilityLabel={c}
+                  style={[styles.choiceChip, picked === c && styles.choiceChipOn]}>
+                  <Text style={[styles.choiceText, picked === c && styles.choiceTextOn]}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        ) : null}
+
         {/* 输入区：左边切换按住说话 / 打字，像微信 */}
         {talkHint ? (
           <View style={styles.hintWrap} pointerEvents="none">
@@ -1353,5 +1420,22 @@ const makeStyles = colors =>
     justifyContent: 'center',
   },
   sendBtnDisabled: {opacity: 0.4},
+  choiceWrap: {marginBottom: 2},
+  choiceRow: {paddingHorizontal: 15, paddingVertical: 4, alignItems: 'center'},
+  choiceChip: {
+    height: 36,
+    minWidth: 64,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: 'rgba(255,255,255,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceChipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
+  choiceText: {color: '#fff', fontSize: 14, fontWeight: '700', letterSpacing: 0.5},
+  choiceTextOn: {color: '#fff'},
   sendIcon: {width: 28, height: 28},
   });

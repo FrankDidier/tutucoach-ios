@@ -68,11 +68,12 @@
 - (NSDictionary *)level {
   os_unfair_lock_lock(&_lock);
   BOOL stale = [NSDate date].timeIntervalSince1970 - _fedAt > 1.0;
-  TutuToneLevel lv = tutu_tone_level(_tone);
+  TutuToneLevel lv;
+  int heard = tutu_tone_heard(_tone, &lv);
   os_unfair_lock_unlock(&_lock);
   if (stale) return @{@"rms": @0, @"piano": @0, @"loud": @0, @"swing": @0, @"tone": @0};
   return @{@"rms": @(lv.rms), @"piano": @(lv.piano), @"loud": @(lv.loud), @"swing": @(lv.swing),
-           @"tone": @(tutu_tone_is_piano(lv) ? 1 : 0)};
+           @"tone": @(heard)};
 }
 @end
 
