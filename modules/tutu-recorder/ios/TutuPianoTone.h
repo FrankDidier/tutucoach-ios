@@ -12,9 +12,10 @@
 #define TUTU_TONE_LAG2 6
 #define TUTU_TONE_PEAKS 24
 #define TUTU_TONE_FRAMES 62
-// 每隔 16 帧（约半秒）看一次是不是琴声，最近 4 秒里有两次是就算在弹。
+// 每隔 16 帧（约半秒）看一次是不是琴声，最近约 2 秒里有两次是就算在弹。
+// 停下来后不要拖太久还当成在弹，不然会一直念重点。
 #define TUTU_TONE_CHECK 16
-#define TUTU_TONE_RECENT 125
+#define TUTU_TONE_RECENT 62
 
 typedef struct {
   float rms;      // 最近一秒的响度，0~1（原始振幅 / 0.20，和以前的刻度一样）

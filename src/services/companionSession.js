@@ -360,9 +360,12 @@ export function createCompanionSession(host) {
       }
       await say(plan || null);
       const follow = plan;
-      if (follow && follow.wait) {
+      // 正在弹琴就先别开说话识别，麦让给听琴；安静几秒再听回答。
+      const pianoLately = levels.some(x => Number(x) >= 0.08);
+      if (follow && follow.wait && !pianoLately && silentSec >= 6) {
         listenLoop(follow);
-      } else if (event === 'tick' && awaitingField && !listening) {
+      } else if (event === 'tick' && awaitingField && !listening
+          && !pianoLately && silentSec >= 6) {
         listenLoop({wait: true});
       }
     } finally {
@@ -408,24 +411,25 @@ export function createCompanionSession(host) {
   };
 
   const markVoice = () => {
-    voiceUntil = Date.now() + 20000;
+    // 几秒就够：太长会把马上接着弹的琴声当成还在说话。
+    voiceUntil = Date.now() + 5000;
     levels = [];
     silentSec = 0;
   };
 
   const takeHeard = async text => {
-    markVoice();
     const ownLine = heardOwn(text);
     const profile = !!awaitingField;
     const keepListening = () => {
       if (listening) listenAgainPlan = {wait: true};
       else listenLoop({wait: true});
     };
-    // 麦里又听到了刚问的那句，或者琴声被认成了一句废话。问题留着，继续听。
+    // 自己的回声不能当成学生说话，不然会把角色刚说的话又接一遍。
     if (ownLine) {
       if (profile) keepListening();
       return;
     }
+    markVoice();
     // 正听着的时候问题被放下了（等太久、他开始弹了）：麦是因为问他才开的，这句话是冲着角色说的，照样接话。
     if (!profile) {
       if (host.onHeard && text.replace(/[\s，。！？、,.!?]/g, '').length >= 2) {

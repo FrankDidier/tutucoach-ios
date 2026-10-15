@@ -14,10 +14,11 @@ import {
   Modal,
   Dimensions,
   Pressable,
+  TextInput,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
-import {fetchScore, uploadScore, deleteScore} from '../services/score';
+import {fetchScore, uploadScore, deleteScore, recognizeTermAt} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {peekCompanionTarot} from '../services/companionTarot';
@@ -69,6 +70,8 @@ export default function ScoreViewerScreen({navigation, route}) {
   const [loading, setLoading] = useState(true);
   const [tarot, setTarot] = useState(peekCompanionTarot());
   const [busy, setBusy] = useState(false);
+  const [askTerm, setAskTerm] = useState(null);
+  const [askText, setAskText] = useState('');
   const [manifest, setManifest] = useState(null);
   const [naturalSizes, setNaturalSizes] = useState({});
   const [zoomPage, setZoomPage] = useState(null);
@@ -120,6 +123,121 @@ export default function ScoreViewerScreen({navigation, route}) {
     focusTimer.current = setTimeout(() => setFocusN(0), 2200);
   };
   useEffect(() => () => focusTimer.current && clearTimeout(focusTimer.current), []);
+
+  // 学生也能像老师一样：点蓝条改错词，长按谱面空白处认没标出来的术语并记进术语库。
+  const recognizeAtTap = async (pageIdx, x, y, typed = '', replaceId = '') => {
+    setBusy(true);
+    try {
+      const r = await recognizeTermAt('', sid, pieceName, pageIdx, x, y, {
+        term: typed,
+        replaceId,
+      });
+      if (r?.ok) {
+        setManifest(prev => {
+          if (!prev) return prev;
+          const next = {...prev};
+          if (Array.isArray(r.term_overlays)) next.term_overlays = r.term_overlays;
+          if (Array.isArray(r.term_translations)) next.term_translations = r.term_translations;
+          return next;
+        });
+        if (r.needs_confirm && !typed) {
+          Alert.alert(
+            '认出来了，对吗？',
+            `${r.term}：${r.translation}\n不对的话点「我来改」，改过的会记进术语库。`,
+            [
+              {
+                text: '就是它',
+                onPress: () => confirmTerm(pageIdx, x, y, r.term),
+              },
+              {
+                text: '我来改',
+                onPress: () => {
+                  setAskText(r.term || '');
+                  setAskTerm({
+                    page: pageIdx,
+                    x,
+                    y,
+                    ocr: r.ocr || '',
+                    replaceId: '',
+                  });
+                },
+              },
+            ],
+          );
+        } else {
+          Alert.alert('已识别', `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`);
+        }
+      } else if (r?.error === 'not_recognized') {
+        setAskText('');
+        setAskTerm({page: pageIdx, x, y, ocr: r.ocr || '', replaceId: ''});
+      } else {
+        Alert.alert('识别失败', '请稍后重试，或换个位置点在术语正中间。');
+      }
+    } catch (e) {
+      Alert.alert('识别失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmTerm = async (pageIdx, x, y, term, replaceId = '') => {
+    if (!term) return;
+    setBusy(true);
+    try {
+      const r = await recognizeTermAt('', sid, pieceName, pageIdx, x, y, {
+        term,
+        replaceId,
+      });
+      if (r?.ok) {
+        setManifest(prev => {
+          if (!prev) return prev;
+          const next = {...prev};
+          if (Array.isArray(r.term_overlays)) next.term_overlays = r.term_overlays;
+          if (Array.isArray(r.term_translations)) next.term_translations = r.term_translations;
+          return next;
+        });
+        Alert.alert('已记住', `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`);
+      } else {
+        Alert.alert('保存失败', '请稍后重试。');
+      }
+    } catch (e) {
+      Alert.alert('保存失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const askFixOverlay = ov => {
+    const cx = (ov.x || 0) + (ov.w || 0) / 2;
+    const cy = (ov.y || 0) + (ov.h || 0) / 2;
+    Alert.alert('改成正确的术语', '改过的会记进术语库，以后别的曲子也按这个来。', [
+      {
+        text: '重新识别',
+        onPress: () => recognizeAtTap(ov.page || 0, cx, cy, '', ''),
+      },
+      {
+        text: '我来改',
+        onPress: () => {
+          setAskText(ov.term || '');
+          setAskTerm({
+            page: ov.page || 0,
+            x: cx,
+            y: cy,
+            ocr: '',
+            replaceId: ov.id || '',
+          });
+        },
+      },
+      {text: '取消', style: 'cancel'},
+    ]);
+  };
+
+  const onPageLongPress = (pageIdx, frameW, frameH, evt) => {
+    const lx = evt?.nativeEvent?.locationX;
+    const ly = evt?.nativeEvent?.locationY;
+    if (!(lx >= 0) || !(ly >= 0) || !frameW || !frameH) return;
+    recognizeAtTap(pageIdx, lx / frameW, ly / frameH, '', '');
+  };
 
   const load = async () => {
     setLoading(true);
@@ -290,7 +408,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
         <Text style={ui.hint}>
-          补拍的乐谱页会立刻加进来并翻译术语；要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
+          补拍的乐谱页会立刻加进来并翻译术语。点蓝条可改错词；长按谱面空白处可认没标出来的术语。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
         </Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
           <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图上传乐谱'}</Text>
@@ -373,12 +491,12 @@ export default function ScoreViewerScreen({navigation, route}) {
                     <Text style={{color: '#FFFFFF', fontSize: 12}}>{tarot.line}</Text>
                   </View>
                 ) : null}
-                {marks.length ? (
-                  <Pressable
-                    onPress={e => tapPage(page.index, pageW, pageH, e)}
-                    style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
-                  />
-                ) : null}
+                <Pressable
+                  onPress={e => (marks.length ? tapPage(page.index, pageW, pageH, e) : null)}
+                  onLongPress={e => onPageLongPress(page.index, pageW, pageH, e)}
+                  delayLongPress={420}
+                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
+                />
                 <SectionMarks
                   sections={marks}
                   page={page.index}
@@ -392,9 +510,9 @@ export default function ScoreViewerScreen({navigation, route}) {
                   const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
                   const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
                   return (
-                    <View
+                    <Pressable
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                      pointerEvents="none"
+                      onPress={() => askFixOverlay(ov)}
                       style={[
                         ui.termOv,
                         {
@@ -413,7 +531,7 @@ export default function ScoreViewerScreen({navigation, route}) {
                         allowFontScaling={false}>
                         {label}
                       </Text>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -423,7 +541,7 @@ export default function ScoreViewerScreen({navigation, route}) {
         {(manifest?.term_translations || []).length ? (
           <View style={ui.termCard}>
             <Text style={ui.termTitle}>音乐术语（已标在谱面）</Text>
-            <Text style={ui.hint}>蓝色小条覆盖在原文位置；下方为完整列表。</Text>
+            <Text style={ui.hint}>蓝色小条覆盖在原文位置；点蓝条可改错词，长按谱面可补认没标出来的。下方为完整列表。</Text>
             {(manifest.term_translations || []).map((term, idx) => (
               <Text key={`${term.term}_${idx}`} style={ui.termLine}>
                 {term.term}：{term.translation}
@@ -487,12 +605,14 @@ export default function ScoreViewerScreen({navigation, route}) {
                       onError={() => retryPage(zoomKey)}
                     />
                   ) : null}
-                  {marks.length ? (
-                    <Pressable
-                      onPress={e => tapPage(zoomPage.index, zw * scale, zh * scale, e)}
-                      style={{position: 'absolute', left: 0, top: 0, width: zw * scale, height: zh * scale}}
-                    />
-                  ) : null}
+                  <Pressable
+                    onPress={e =>
+                      marks.length ? tapPage(zoomPage.index, zw * scale, zh * scale, e) : null
+                    }
+                    onLongPress={e => onPageLongPress(zoomPage.index, zw * scale, zh * scale, e)}
+                    delayLongPress={420}
+                    style={{position: 'absolute', left: 0, top: 0, width: zw * scale, height: zh * scale}}
+                  />
                   <SectionMarks
                     sections={marks}
                     page={zoomPage.index}
@@ -503,9 +623,9 @@ export default function ScoreViewerScreen({navigation, route}) {
                   {pageTerms.map(ov => {
                     const label = String(ov.short || ov.translation || ov.term || '');
                     return (
-                      <View
+                      <Pressable
                         key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                        pointerEvents="none"
+                        onPress={() => askFixOverlay(ov)}
                         style={[
                           ui.termOv,
                           {
@@ -518,7 +638,7 @@ export default function ScoreViewerScreen({navigation, route}) {
                         <Text style={ui.termOvText} numberOfLines={1}>
                           {label}
                         </Text>
-                      </View>
+                      </Pressable>
                     );
                   })}
                 </View>
@@ -547,6 +667,49 @@ export default function ScoreViewerScreen({navigation, route}) {
             </TouchableOpacity>
           </View>
         </SafeAreaView>
+      </Modal>
+      <Modal
+        visible={!!askTerm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAskTerm(null)}>
+        <View style={ui.modalMask}>
+          <View style={ui.modalCard}>
+            <Text style={ui.modalTitle}>这串是什么术语？</Text>
+            <Text style={ui.hint}>
+              {askTerm?.ocr
+                ? `谱上读到的是「${askTerm.ocr}」。填对的拼写（如 dimin.），以后每首曲子都能自动认出来。`
+                : '填这串术语的拼写（如 dimin.），以后每首曲子都能自动认出来。'}
+            </Text>
+            <TextInput
+              style={ui.input}
+              value={askText}
+              onChangeText={setAskText}
+              autoCapitalize="none"
+              placeholder="术语原文，例如 dimin."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={ui.modalRow}>
+              <TouchableOpacity
+                style={[ui.modalBtn, ui.modalBtnGhost]}
+                onPress={() => setAskTerm(null)}>
+                <Text style={ui.modalBtnGhostText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={ui.modalBtn}
+                onPress={() => {
+                  const pack = askTerm;
+                  const txt = askText.trim();
+                  setAskTerm(null);
+                  if (pack && txt) {
+                    confirmTerm(pack.page, pack.x, pack.y, txt, pack.replaceId || '');
+                  }
+                }}>
+                <Text style={ui.modalBtnText}>记进术语库</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
       {!zoomPage && openSec ? (
         <SectionNoteSheet
@@ -630,4 +793,36 @@ const makeStyles = colors =>
     termCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 6},
     termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 6},
     termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},
+    modalMask: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    modalCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 18,
+    },
+    modalTitle: {fontSize: 16, fontWeight: '800', color: colors.textPrimary, marginBottom: 8},
+    input: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: colors.border || '#DDD',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.textPrimary,
+      fontSize: 15,
+    },
+    modalRow: {flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16},
+    modalBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    modalBtnText: {color: '#fff', fontWeight: '700'},
+    modalBtnGhost: {backgroundColor: 'transparent'},
+    modalBtnGhostText: {color: colors.textSecondary, fontWeight: '600'},
   });

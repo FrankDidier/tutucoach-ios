@@ -11,7 +11,7 @@ P12="$SIGN_DIR/dist.p12"
 P12_PASS="tutucoach"
 PROFILE_SRC="$SIGN_DIR/TutuCoach_AppStore.mobileprovision"
 PROFILE_NAME="TutuCoach AppStore"
-PROFILE_UUID="65ea3531-9a9b-48b9-b24d-40d69f72fa0b"
+PROFILE_UUID="539351b4-4381-4fbd-831c-42fe08d2e7be"
 
 WORKSPACE="TutuCoachRN.xcworkspace"
 SCHEME="TutuCoachRN"
