@@ -58,7 +58,18 @@ jobs:
         working-directory: ios
         run: |
           gem install cocoapods --no-document
-          pod install --repo-update
+          # MediaPipe frameworks are large; CDN occasionally times out on runners.
+          for i in 1 2 3 4; do
+            echo "pod install attempt $i"
+            if pod install --repo-update; then
+              exit 0
+            fi
+            echo "pod install failed; retrying in 20s…"
+            sleep 20
+            pod cache clean --all || true
+          done
+          echo "pod install failed after retries"
+          exit 1
 
       - name: Import signing certificate & profile
         env:
