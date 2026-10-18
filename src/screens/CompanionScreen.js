@@ -110,6 +110,15 @@ let bubbleKey = 1;
 
 const Ear = NativeModules.TutuRecorder || null;
 const PRACTICE_MIN_KEY = 'companion_practice_min';
+const TIP_FREQ_KEY = 'companion_tip_freq_mode'; // quiet | normal | busy
+
+/** 学生端可调重点播报疏密：在老师设定基础上缩放。 */
+function applyTipFreq(teacherSec, mode) {
+  const base = Math.max(10, teacherSec || 45);
+  if (mode === 'quiet') return Math.max(90, Math.round(base * 2.2));
+  if (mode === 'busy') return Math.max(15, Math.round(base * 0.5));
+  return base;
+}
 const PRACTICE_CHOICES = [10, 15, 20, 30, 45, 60];
 
 function clock(sec) {
@@ -160,6 +169,8 @@ export default function CompanionScreen({navigation}) {
   const piecesRef = useRef([]);
   const pieceIdxRef = useRef(-1);
   const freqRef = useRef(45);
+  const teacherFreqRef = useRef(45);
+  const tipFreqModeRef = useRef('normal');
   const busyRef = useRef(false);
   const pausedRef = useRef(false);
   const typingRef = useRef(false);
@@ -338,8 +349,11 @@ export default function CompanionScreen({navigation}) {
 
       // 拉取老师为该生设置的重点（含按曲目分组）。
       try {
+        const tipMode = (await getItem(TIP_FREQ_KEY)) || 'normal';
+        tipFreqModeRef.current = tipMode;
         const r = await fetchReminders(studentIdRef.current, null);
-        freqRef.current = Math.max(10, r.freqSec || 45);
+        teacherFreqRef.current = Math.max(10, r.freqSec || 45);
+        freqRef.current = applyTipFreq(teacherFreqRef.current, tipFreqModeRef.current);
         piecesRef.current = r.pieces || [];
         if (piecesRef.current.length) {
           pieceIdxRef.current = 0;
@@ -425,7 +439,8 @@ export default function CompanionScreen({navigation}) {
         const sid = studentIdRef.current || getDeviceId();
         const r = await fetchReminders(sid, null);
         if (!aliveRef.current) return;
-        freqRef.current = Math.max(10, r.freqSec || 45);
+        teacherFreqRef.current = Math.max(10, r.freqSec || 45);
+        freqRef.current = applyTipFreq(teacherFreqRef.current, tipFreqModeRef.current);
         const next = r.pieces || [];
         piecesRef.current = next;
         if (next.length) {
@@ -930,10 +945,54 @@ export default function CompanionScreen({navigation}) {
     }
   };
 
+  const pickTipFreq = () => {
+    const cur = tipFreqModeRef.current || 'normal';
+    const label = {quiet: '少说重点', normal: '正常', busy: '多提醒'}[cur] || '正常';
+    Alert.alert(
+      '重点播报频率',
+      `专业学生可调疏密（当前：${label}）。在老师设定基础上调整，不会改老师端设置。`,
+      [
+        {
+          text: '少说重点',
+          onPress: () => {
+            tipFreqModeRef.current = 'quiet';
+            setItem(TIP_FREQ_KEY, 'quiet');
+            freqRef.current = applyTipFreq(teacherFreqRef.current, 'quiet');
+          },
+        },
+        {
+          text: '正常',
+          onPress: () => {
+            tipFreqModeRef.current = 'normal';
+            setItem(TIP_FREQ_KEY, 'normal');
+            freqRef.current = applyTipFreq(teacherFreqRef.current, 'normal');
+          },
+        },
+        {
+          text: '多提醒',
+          onPress: () => {
+            tipFreqModeRef.current = 'busy';
+            setItem(TIP_FREQ_KEY, 'busy');
+            freqRef.current = applyTipFreq(teacherFreqRef.current, 'busy');
+          },
+        },
+        {text: '取消', style: 'cancel'},
+      ],
+    );
+  };
+
   const showMyCode = () => {
     const code = studentIdRef.current || '';
-    Clipboard.setString(code);
-    Alert.alert('我的学生码', code + '\n\n已复制，发给老师即可为你设置陪练重点。');
+    Alert.alert('陪练设置', code ? `学生码：${code}` : '学生码加载中', [
+      {
+        text: '复制学生码',
+        onPress: () => {
+          Clipboard.setString(code);
+        },
+      },
+      {text: '重点播报频率', onPress: pickTipFreq},
+      {text: '取消', style: 'cancel'},
+    ]);
   };
 
   const changeBackground = () => {
