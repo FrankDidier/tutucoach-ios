@@ -55,8 +55,16 @@ function fitLine(plan, text) {
     const first = whole.match(/^[^。！？!?]*[。！？!?]/);
     if (q && q.length) t = ((first && !/[？?]$/.test(first[0]) ? first[0] : '') + q[q.length - 1]).trim();
   }
-  // 着急哄人时一口气说两三个短句，比平时长一点。
-  const cap = (plan.pace || 1) > 1 ? 96 : free || plan.intent === 'ask' ? 80 : 56;
+  // 故事/复习可以更长；着急哄人时一口气两三个短句；普通问句保持短。
+  let cap = 56;
+  if (plan.intent === 'review') cap = 320;
+  else if ((plan.pace || 1) > 1) cap = 110;
+  else if (free || plan.intent === 'ask') cap = 96;
+  // 故事允许多句
+  if (plan.intent === 'review') {
+    const long = whole.match(/^(?:[^。！？!?]*[。！？!?]){1,8}/);
+    if (long) t = long[0].trim();
+  }
   if (t.length > cap) return '';
   if (/按你的年纪|好好记住你|我记下了/.test(t)) return '';
   // 时间还没到，改写时不能顺嘴说了再见。
@@ -671,7 +679,11 @@ export function createCompanionSession(host) {
       start();
     },
     async setPiece(name) {
+      awaitingField = '';
+      hideChoices();
       await loadPiece(name);
+      // 换曲后让服务端按新曲重出段落选项（分段练时）。
+      return tick('piece_change');
     },
     // 换了角色：新角色有自己的记忆，重新开场（认识他、问练法），不接着上一个角色的话说。
     reopen() {

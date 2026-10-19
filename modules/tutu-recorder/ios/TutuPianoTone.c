@@ -218,8 +218,9 @@ TutuToneLevel tutu_tone_level(const TutuPianoTone *t) {
 }
 
 int tutu_tone_is_piano(TutuToneLevel lv) {
-  if (lv.loud < 0.3f || lv.swing < 1.2f) return 0;
-  return (lv.tframes >= 0.4f && lv.fall >= 0.55f) || lv.p3 >= 0.6f;
+  /* 再放宽一点：远琴、弱奏、踏板残响时也别轻易判成「没弹」。 */
+  if (lv.loud < 0.18f || lv.swing < 1.04f) return 0;
+  return (lv.tframes >= 0.28f && lv.fall >= 0.40f) || lv.p3 >= 0.42f;
 }
 
 int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out) {

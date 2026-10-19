@@ -280,8 +280,39 @@ export default function ScoreViewerScreen({navigation, route}) {
         text: '从相册多选',
         onPress: () => doStudentUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0})),
       },
+      {
+        text: '上传 PDF',
+        onPress: () => doStudentPdf(),
+      },
       {text: '取消', style: 'cancel'},
     ]);
+  };
+
+  const doStudentPdf = async () => {
+    const {pickPdf} = require('../services/documentPicker');
+    const file = await pickPdf();
+    if (!file || file.cancelled) return;
+    if (file.error || !file.uri) {
+      Alert.alert('上传失败', file.error === 'no_module' ? '当前版本暂不支持选 PDF，请更新 App。' : '未能读取 PDF。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await uploadScore('', sid, pieceName, file, {
+        mode: 'append',
+        uploader: 'student',
+      });
+      if (r?.ok) {
+        await load();
+        Alert.alert('已上传', 'PDF 已加进乐谱，翻译好的术语马上就能看。');
+      } else {
+        Alert.alert('上传失败', '请稍后重试。');
+      }
+    } catch (e) {
+      Alert.alert('上传失败', '网络异常，请稍后重试。');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const doStudentCamera = async hasPagesAlready => {
@@ -411,7 +442,7 @@ export default function ScoreViewerScreen({navigation, route}) {
           补拍的乐谱页会立刻加进来并翻译术语。点蓝条可改错词；长按谱面空白处可认没标出来的术语。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
         </Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
-          <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图上传乐谱'}</Text>
+          <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图/PDF 上传乐谱'}</Text>
         </TouchableOpacity>
         {(manifest?.pages || []).length ? (
           <TouchableOpacity style={ui.dangerBtn} onPress={deleteAll} disabled={busy}>

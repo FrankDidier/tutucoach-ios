@@ -93,7 +93,7 @@ export default function LessonCaptureScreen({navigation}) {
       <ScreenHeader title="上课录音" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.hint}>
-          开始后会先说一句：请老师在换曲子时说「现在开始下一首」。确认之后，这些句子写进该学生的曲目重点。
+          上课时打开本页开始录音：系统会自动把老师说的话整理成曲目重点。换曲子时请说「现在开始下一首」，确认后挂到学生曲目，下次陪练会直接用到。
         </Text>
         <TextInput
           style={styles.input}

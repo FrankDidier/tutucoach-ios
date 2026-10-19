@@ -425,9 +425,11 @@ export default function LessonPlanScreen({navigation}) {
             })}
           </View>
           <TouchableOpacity
-            style={[styles.modeTab, {marginBottom: 12}]}
+            style={[styles.modeTab, styles.modeTabOn, {marginBottom: 12}]}
             onPress={() => navigation.navigate('LessonCapture')}>
-            <Text style={styles.modeTabText}>上课录音</Text>
+            <Text style={[styles.modeTabText, styles.modeTabTextOn]}>
+              上课录音 · 自动生成重点
+            </Text>
           </TouchableOpacity>
 
           {mode === 'plan' ? (
