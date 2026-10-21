@@ -81,6 +81,7 @@ function emptyDraft() {
     name: '',
     systemPrompt: '',
     greeting: '',
+    rentPrice: '80',
     voiceId: 0,
     mmVoice: '',
     avatarUrl: '',
@@ -101,6 +102,9 @@ function coachToDraft(c) {
     name: pick('name', 'name', ''),
     systemPrompt: pick('system_prompt', 'systemPrompt', ''),
     greeting: pick('greeting', 'greeting', ''),
+    rentPrice: String(
+      pick('rent_price', 'rentPrice', 80) == null ? 80 : pick('rent_price', 'rentPrice', 80),
+    ),
     voiceId: pick('voice_id', 'voiceId', 0),
     mmVoice: pick('mm_voice', 'mmVoice', ''),
     avatarUrl: pick('avatar_url', 'avatarUrl', ''),
@@ -171,7 +175,8 @@ const AISettingsScreen = ({navigation, route}) => {
       const payload = {
         name,
         systemPrompt: draft.systemPrompt.trim(),
-        greeting: draft.greeting.trim(),
+        greeting: draft.greeting.trim() || '你好，准备好练琴了吗？',
+        rentPrice: parseInt(String(draft.rentPrice || '80').replace(/[^\d]/g, ''), 10) || 80,
         visibility: draft.visibility || 'private',
         voiceId: draft.voiceId || 0,
       };
@@ -493,16 +498,19 @@ const AISettingsScreen = ({navigation, route}) => {
               </View>
             </TouchableOpacity>
 
-            {/* 6. 开场问候语 */}
+            {/* 6. 光币租用价格（原开场问候语位置） */}
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>开场问候语</Text>
+              <Text style={styles.fieldLabel}>光币租用价格</Text>
+              <Text style={styles.hintMuted}>
+                学生用光币解锁一次使用权；你的学生消费的光币会进你的账户，可申请兑成现金。
+              </Text>
               <TextInput
-                style={styles.multiline}
-                value={draft.greeting}
-                onChangeText={t => set('greeting', t)}
-                placeholder="请输入问候语"
+                style={styles.input}
+                value={String(draft.rentPrice ?? '')}
+                onChangeText={t => set('rentPrice', t.replace(/[^\d]/g, ''))}
+                placeholder="例如 80"
                 placeholderTextColor={colors.textMuted}
-                multiline
+                keyboardType="number-pad"
               />
             </View>
 
@@ -700,6 +708,15 @@ const makeStyles = colors =>
     },
     langChipTextOn: {color: '#fff'},
     fillExample: {fontSize: 14, color: colors.accent, fontWeight: '600'},
+    input: {
+      marginTop: 10,
+      minHeight: 44,
+      borderRadius: 10,
+      backgroundColor: colors.inputBg,
+      paddingHorizontal: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
     multiline: {
       marginTop: 10,
       minHeight: 90,

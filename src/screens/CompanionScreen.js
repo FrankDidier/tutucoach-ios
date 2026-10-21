@@ -29,7 +29,8 @@ import {getDeviceId} from '../services/device';
 import {getItem, setItem} from '../services/storage';
 import {syncPractice} from '../services/account';
 import {chat, fetchReminders, refineTarot, saveCompanionProfile} from '../services/companionChat';
-import {createCompanionSession} from '../services/companionSession';
+import {createCompanionSession, fixPianoAsr} from '../services/companionSession';
+import {loadChecks, toggleCheck} from '../services/practiceChecklist';
 import {clearCompanionTarot, setCompanionTarot} from '../services/companionTarot';
 import {pickFromGallery} from '../services/imagePicker';
 import {
@@ -154,6 +155,8 @@ export default function CompanionScreen({navigation}) {
   // 角色问了「先练哪一段」这类有几个固定答案的问题：输入框上面给一排能直接点的答案。
   const [choices, setChoices] = useState(null);
   const [picked, setPicked] = useState('');
+  const [showChecks, setShowChecks] = useState(false);
+  const [checks, setChecks] = useState({});
   const choicesIn = useRef(new Animated.Value(0)).current;
   const talkRef = useRef(null);
   const hintTimer = useRef(null);
@@ -703,6 +706,7 @@ export default function CompanionScreen({navigation}) {
   // heard：麦自己听来的。打字和按住说的都不是，服务端不用当回声去挡。
   const onSendText = (text, notAnswer, heard) => {
     typedRef.current = !heard;
+    text = fixPianoAsr(text);
     if (!text) return;
     const round = roundRef.current;
     if (round && round.ended && round.ended()) {
@@ -1035,6 +1039,38 @@ export default function CompanionScreen({navigation}) {
   const pieceName =
     pieceIdx >= 0 && pieceIdx < pieces.length ? pieces[pieceIdx].name : '全部';
 
+  useEffect(() => {
+    let alive = true;
+    const sid = studentIdRef.current || '';
+    loadChecks(sid, pieceName).then(o => {
+      if (alive) setChecks(o || {});
+    });
+    return () => {
+      alive = false;
+    };
+  }, [pieceName]);
+
+  const checkTasks = useMemo(() => {
+    const lines = (remindersRef.current || []).map(s => String(s || '').trim()).filter(Boolean);
+    const out = [];
+    lines.forEach((line, i) => out.push({id: 'r' + i, label: line}));
+    ['热身完成', '练好这一段', '完整过一遍'].forEach((label, i) => {
+      out.push({id: 't' + i, label});
+    });
+    const seen = new Set();
+    return out.filter(t => {
+      if (seen.has(t.label)) return false;
+      seen.add(t.label);
+      return true;
+    });
+  }, [pieceName, pieces, pieceIdx, showChecks]);
+
+  const onToggleCheck = async id => {
+    const sid = studentIdRef.current || '';
+    const next = await toggleCheck(sid, pieceName, id);
+    setChecks(next || {});
+  };
+
   const remoteSource = uri => {
     if (!uri) return null;
     if (String(uri).startsWith('http')) return {uri, cache: 'force-cache'};
@@ -1196,8 +1232,42 @@ export default function CompanionScreen({navigation}) {
                 <Text style={styles.pieceViewBtn}>看乐谱</Text>
               </TouchableOpacity>
             ) : null}
+            <TouchableOpacity onPress={() => setShowChecks(v => !v)}>
+              <Text style={styles.pieceViewBtn}>{showChecks ? '收起勾选' : '勾选'}</Text>
+            </TouchableOpacity>
           </View>
         )}
+        {pieces.length === 0 ? (
+          <View style={styles.pieceBar}>
+            <View style={{flex: 1}} />
+            <TouchableOpacity onPress={() => setShowChecks(v => !v)}>
+              <Text style={styles.pieceViewBtn}>{showChecks ? '收起勾选' : '勾选'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {showChecks ? (
+          <View style={styles.checkPanel}>
+            <Text style={styles.checkTitle}>练完自己打个勾</Text>
+            {checkTasks.map(t => {
+              const on = !!checks[t.id];
+              return (
+                <TouchableOpacity
+                  key={t.id}
+                  style={styles.checkRow}
+                  onPress={() => onToggleCheck(t.id)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{checked: on}}>
+                  <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+                    {on ? <Text style={styles.checkMark}>✓</Text> : null}
+                  </View>
+                  <Text style={[styles.checkLabel, on && styles.checkLabelOn]} numberOfLines={2}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
 
         {/* 对话区 */}
         <ScrollView
@@ -1399,6 +1469,30 @@ const makeStyles = colors =>
   },
   pieceText: {color: '#fff', fontSize: 13},
   pieceViewBtn: {color: '#FFE3A1', fontSize: 12.5, fontWeight: '700', marginLeft: 10},
+  checkPanel: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  checkTitle: {color: '#FFE3A1', fontSize: 13, fontWeight: '700', marginBottom: 8},
+  checkRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 6},
+  checkBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBoxOn: {backgroundColor: colors.primary, borderColor: colors.primary},
+  checkMark: {color: '#fff', fontSize: 14, fontWeight: '800'},
+  checkLabel: {flex: 1, color: '#fff', fontSize: 13, lineHeight: 18},
+  checkLabelOn: {textDecorationLine: 'line-through', color: 'rgba(255,255,255,0.62)'},
   forgetIcon: {color: '#fff', fontSize: 18, fontWeight: '700', marginTop: -1},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},

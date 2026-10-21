@@ -9,11 +9,14 @@ import {
   ScrollView,
   StatusBar,
   Dimensions,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId, setCachedCoachAvatarUri} from '../services/coachPrefs';
+import {getDeviceId} from '../services/device';
+import {fetchWallet, unlockCoach} from '../services/guangbi';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {useTheme} from '../theme/ThemeContext';
@@ -52,6 +55,8 @@ const AISelectScreen = ({navigation, route}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [selected, setSelected] = useState('coach_pro');
   const [remoteCoaches, setRemoteCoaches] = useState(null);
+  const [wallet, setWallet] = useState({balance: 0, unlocked: []});
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +71,15 @@ const AISelectScreen = ({navigation, route}) => {
       } catch (e) {
         // 离线时回退到内置角色
       }
+      try {
+        const w = await fetchWallet(getDeviceId());
+        if (alive && w && w.ok) {
+          setWallet({
+            balance: Number(w.balance) || 0,
+            unlocked: Array.isArray(w.unlocked) ? w.unlocked : [],
+          });
+        }
+      } catch (e) {}
     })();
     return () => {
       alive = false;
@@ -73,6 +87,53 @@ const AISelectScreen = ({navigation, route}) => {
   }, []);
 
   const onConfirm = async () => {
+    const picked = (remoteCoaches || []).find(x => x.id === selected);
+    const price = picked ? Number(picked.rentPrice) || 0 : 0;
+    const already =
+      price <= 0 ||
+      (picked && picked.unlocked) ||
+      (wallet.unlocked || []).includes(selected);
+    if (picked && !already) {
+      if (unlocking) return;
+      if ((Number(wallet.balance) || 0) < price) {
+        Alert.alert(
+          '光币不够',
+          `解锁「${picked.name}」需要 ${price} 光币，当前 ${wallet.balance || 0} 光币。订阅可获得光币。`,
+        );
+        return;
+      }
+      const go = await new Promise(resolve => {
+        Alert.alert(
+          '解锁角色',
+          `用 ${price} 光币解锁「${picked.name}」一次使用权？`,
+          [
+            {text: '取消', style: 'cancel', onPress: () => resolve(false)},
+            {text: '解锁', onPress: () => resolve(true)},
+          ],
+        );
+      });
+      if (!go) return;
+      setUnlocking(true);
+      try {
+        const r = await unlockCoach(selected, getDeviceId());
+        if (!r || !r.ok) {
+          Alert.alert(
+            '解锁失败',
+            r && r.error === 'insufficient' ? '光币不够，请先订阅获取光币。' : '请稍后重试',
+          );
+          return;
+        }
+        setWallet(prev => ({
+          balance: Number(r.balance) || prev.balance,
+          unlocked: Array.from(new Set([...(prev.unlocked || []), selected])),
+        }));
+      } catch (e) {
+        Alert.alert('解锁失败', '网络异常，请稍后重试');
+        return;
+      } finally {
+        setUnlocking(false);
+      }
+    }
     await setSelectedCoachId(selected);
     // 预缓存分身头像 URL，进陪练时可瞬时铺背景（修「点进陪伴要等一下才出图」）
     try {
@@ -105,19 +166,25 @@ const AISelectScreen = ({navigation, route}) => {
             name: c.name,
             style: c.style,
             avatarUrl: c.avatarUrl,
+            rentPrice: Number(c.rentPrice) || 0,
+            unlocked: !!c.unlocked,
           }))
         : builtInProfiles.map(p => ({
             id: p.id,
             name: p.displayName,
             style: p.style,
+            rentPrice: p.id === 'coach_pro' ? 0 : 80,
+            unlocked: p.id === 'coach_pro',
           }));
     return source.map(c => ({
       id: c.id,
       name: c.name,
       styleText: styleLabel(c.style),
       avatar: avatarSource(c),
+      rentPrice: c.rentPrice || 0,
+      unlocked: !!c.unlocked || (wallet.unlocked || []).includes(c.id) || (c.rentPrice || 0) <= 0,
     }));
-  }, [remoteCoaches]);
+  }, [remoteCoaches, wallet.unlocked]);
 
   return (
     <View style={styles.container}>
@@ -135,7 +202,7 @@ const AISelectScreen = ({navigation, route}) => {
             <Text style={styles.backChevron}>‹</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>AI选择</Text>
-          <View style={styles.backHit} />
+          <Text style={styles.walletHint}>{wallet.balance || 0} 光币</Text>
         </View>
       </SafeAreaView>
 
@@ -165,7 +232,11 @@ const AISelectScreen = ({navigation, route}) => {
                     {item.name}
                   </Text>
                   <Text style={styles.cellSubtitle} numberOfLines={1}>
-                    {item.styleText}
+                    {item.unlocked
+                      ? item.styleText
+                      : item.rentPrice > 0
+                        ? `${item.rentPrice} 光币解锁`
+                        : item.styleText}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -209,6 +280,7 @@ const makeStyles = (colors, dark) =>
     backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
     backChevron: {fontSize: 30, color: colors.textPrimary, marginTop: -4},
     headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
+    walletHint: {width: 72, textAlign: 'right', fontSize: 12, color: colors.textMuted, paddingRight: 8},
     // 蓝湖卡片区从 y≈98；顶栏后 padTop 约 10
     scroll: {paddingHorizontal: px(15), paddingTop: px(10), paddingBottom: 100},
     grid: {

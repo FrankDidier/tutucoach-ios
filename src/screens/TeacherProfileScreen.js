@@ -10,6 +10,7 @@ import {
   StatusBar,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
@@ -19,6 +20,8 @@ import {
 } from '../services/profilePrefs';
 import {ensureTeacherUnlocked} from '../services/teacherAuth';
 import {useTheme} from '../theme/ThemeContext';
+import {getDeviceId} from '../services/device';
+import {fetchTeacherGuangbi, requestCashout} from '../services/guangbi';
 
 const TeacherProfileScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
@@ -27,6 +30,8 @@ const TeacherProfileScreen = ({navigation}) => {
 
   const [avatarUri, setAvatar] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
+  const [gb, setGb] = useState(0);
+  const [cashAmt, setCashAmt] = useState('');
 
   const MenuRow = ({icon, label, onPress, divider}) => (
     <TouchableOpacity
@@ -52,6 +57,11 @@ const TeacherProfileScreen = ({navigation}) => {
       }
       setUnlocked(true);
       getTeacherAvatarUri().then(u => alive && setAvatar(u));
+      fetchTeacherGuangbi(getDeviceId())
+        .then(r => {
+          if (alive && r && r.ok) setGb(Number(r.balance) || 0);
+        })
+        .catch(() => {});
     })();
     return () => {
       alive = false;
@@ -149,6 +159,55 @@ const TeacherProfileScreen = ({navigation}) => {
             onPress={() => navigation.navigate('ClassManage')}
           />
         </View>
+
+        <View style={styles.cardGroup}>
+          <View style={styles.cashBlock}>
+            <Text style={styles.cashTitle}>学生消费光币</Text>
+            <Text style={styles.cashBal}>{gb}</Text>
+            <Text style={styles.cashHint}>可申请兑现成现金（100 光币起，我们会线下打款）</Text>
+            <View style={styles.cashRow}>
+              <TextInput
+                style={styles.cashInput}
+                value={cashAmt}
+                onChangeText={t => setCashAmt(t.replace(/[^\d]/g, ''))}
+                placeholder="兑现数量"
+                placeholderTextColor="#979797"
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity
+                style={styles.cashBtn}
+                onPress={async () => {
+                  const n = parseInt(cashAmt, 10) || 0;
+                  if (n < 100) {
+                    Alert.alert('数量太少', '至少 100 光币才能申请兑现。');
+                    return;
+                  }
+                  let r = null;
+                  try {
+                    r = await requestCashout(n, getDeviceId());
+                  } catch (e) {
+                    r = null;
+                  }
+                  if (r && r.ok) {
+                    setGb(Number(r.balance) || 0);
+                    setCashAmt('');
+                    Alert.alert('已提交', '兑现申请已记下，我们会把对应现金打给你。');
+                  } else {
+                    Alert.alert(
+                      '无法兑现',
+                      r && r.error === 'insufficient'
+                        ? '光币不够。'
+                        : r && r.error === 'too_small'
+                          ? '至少 100 光币。'
+                          : '请稍后重试',
+                    );
+                  }
+                }}>
+                <Text style={styles.cashBtnText}>申请兑现</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
       {/* 蓝湖「我的教师端」含底栏；跳回 MainTabs 对应 Tab */}
@@ -235,6 +294,29 @@ const makeStyles = (colors, dark) =>
       height: StyleSheet.hairlineWidth,
       backgroundColor: colors.divider,
     },
+    cashBlock: {paddingHorizontal: 15, paddingVertical: 14},
+    cashTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    cashBal: {fontSize: 28, fontWeight: '700', color: colors.textPrimary, marginTop: 6},
+    cashHint: {fontSize: 12, color: '#979797', marginTop: 4, marginBottom: 10},
+    cashRow: {flexDirection: 'row', alignItems: 'center'},
+    cashInput: {
+      flex: 1,
+      height: 40,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      backgroundColor: colors.inputBg || colors.cardAlt,
+      color: colors.textPrimary,
+      marginRight: 10,
+    },
+    cashBtn: {
+      height: 40,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cashBtnText: {color: '#fff', fontSize: 13, fontWeight: '700'},
     tabBar: {
       flexDirection: 'row',
       borderTopWidth: StyleSheet.hairlineWidth,

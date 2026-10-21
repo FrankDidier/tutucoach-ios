@@ -232,7 +232,11 @@ const SubscriptionScreen = ({navigation}) => {
             <Text style={styles.vipBadgeText}>{isVip ? '已开通' : '未开通'}</Text>
           </View>
           <Text style={styles.vipDate}>
-            {isVip ? `会员有效期至${vip.expire_text}` : '开通后解锁全部 AI 训练功能'}
+            {isVip
+              ? vip.guangbi != null
+                ? `当前光币 ${vip.guangbi}`
+                : `订阅有效至${vip.expire_text}`
+              : '开通后获得光币，用于解锁 AI 角色'}
           </Text>
         </View>
 
@@ -244,8 +248,8 @@ const SubscriptionScreen = ({navigation}) => {
         <View style={styles.benefitCard}>
           <Image source={dark ? Images.subAiDark : Images.subAiLight} style={styles.benefitIcon} resizeMode="contain" />
           <View style={styles.benefitTextCol}>
-            <Text style={styles.benefitTitle}>解锁智能AI训练</Text>
-            <Text style={styles.benefitSub}>多种AI模型选择</Text>
+            <Text style={styles.benefitTitle}>订阅获得光币</Text>
+            <Text style={styles.benefitSub}>用光币解锁各 AI 角色一次使用权</Text>
           </View>
         </View>
 

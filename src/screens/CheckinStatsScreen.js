@@ -66,7 +66,7 @@ const CheckinStatsScreen = ({navigation}) => {
           <StatCell value={stats.streak} label="连续天数" />
           <StatCell value={stats.totalDays} label="累计打卡" />
           <StatCell value={stats.totalMinutes} label="累计分钟" />
-          <StatCell value={stats.points} label="积分" />
+          <StatCell value={stats.points} label="光币" />
         </View>
 
         <View style={styles.calendarCard}>

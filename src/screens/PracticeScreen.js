@@ -158,7 +158,7 @@ const PracticeScreen = ({navigation}) => {
                 resizeMode={dark ? 'contain' : 'stretch'}
               />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
-              <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
+              <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 光币解锁角色</Text>
             </TouchableOpacity>
           </View>
         </View>

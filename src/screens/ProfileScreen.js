@@ -25,6 +25,7 @@ import {
   setAvatarUri,
 } from '../services/profilePrefs';
 import {getPoints} from '../services/companion';
+import {fetchWallet, syncPracticeGuangbi} from '../services/guangbi';
 import {getDeviceId} from '../services/device';
 import {registerAccount, getMembership} from '../services/account';
 import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
@@ -82,7 +83,24 @@ const ProfileScreen = ({navigation}) => {
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-      getPoints().then(p => alive && setPoints(p));
+      (async () => {
+        const p = await getPoints();
+        try {
+          const w = await syncPracticeGuangbi(getDeviceId(), p);
+          if (alive && w && w.ok && w.balance != null) {
+            setPoints(w.balance);
+            return;
+          }
+        } catch (e) {}
+        try {
+          const w = await fetchWallet(getDeviceId());
+          if (alive && w && w.ok && w.balance != null) {
+            setPoints(Math.max(p, w.balance));
+            return;
+          }
+        } catch (e) {}
+        if (alive) setPoints(p);
+      })();
       return () => {
         alive = false;
       };
@@ -274,7 +292,7 @@ const ProfileScreen = ({navigation}) => {
           />
           <View style={styles.pointsCardInner}>
             <View style={styles.pointsLabelRow}>
-              <Text style={styles.pointsLabel}>总积分</Text>
+              <Text style={styles.pointsLabel}>总光币</Text>
               <Image source={Images.pfEye} style={styles.eyeIcon} resizeMode="contain" />
             </View>
             <Text style={styles.pointsValue}>{points}</Text>

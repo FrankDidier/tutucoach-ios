@@ -8,6 +8,17 @@ import {cnNum, readingSections} from '../utils/sections';
 
 const Ear = NativeModules.TutuRecorder || null;
 
+export function fixPianoAsr(text) {
+  let t = String(text || '');
+  if (!t) return t;
+  t = t
+    .replace(/谈琴/g, '弹琴')
+    .replace(/谈钢琴/g, '弹钢琴')
+    .replace(/再谈一遍/g, '再弹一遍')
+    .replace(/先谈/g, '先弹');
+  return t.replace(/谈(?=琴|钢琴|一段|一遍|完|给|吧|呀|啊|嘛|一曲|这首|那首|第|慢|快)/g, '弹');
+}
+
 const PROFILE_FIELDS = {
   name: /名|叫|称呼/,
   gender: /男[\s\S]*女|女[\s\S]*男/,
@@ -87,6 +98,7 @@ export function createCompanionSession(host) {
   let levels = [];
   let silentSec = 0;
   let quietAt = 0;
+  let lastPianoAt = Date.now();
   let hadPlaying = false;
   let sections = [];
   let globals = [];
@@ -123,7 +135,7 @@ export function createCompanionSession(host) {
     if (!t) return;
     closeEar();
     recentSpoken = recentSpoken.concat(t).slice(-4);
-    const ms = Math.max(2500, t.length * 220) + 1600;
+    const ms = Math.min(22000, Math.max(2500, t.length * 220) + 1600);
     speakingUntil = Math.max(speakingUntil, Date.now() + ms);
   };
   const heardOwn = heard => {
@@ -173,7 +185,7 @@ export function createCompanionSession(host) {
   const rememberSpeak = text => {
     closeEar();
     // 自己的声音还会在麦里留一会儿。这段时间记成安静，避免把刚说的话当成琴声。
-    speakingUntil = Date.now() + Math.max(2500, String(text || '').length * 220) + 1600;
+    speakingUntil = Date.now() + Math.min(22000, Math.max(2500, String(text || '').length * 220) + 1600);
     const t = String(text || '').trim();
     if (t) recentSpoken = recentSpoken.concat(t).slice(-4);
   };
@@ -319,6 +331,7 @@ export function createCompanionSession(host) {
       if (rms >= 0.08) {
         hadPlaying = true;
         silentSec = 0;
+        lastPianoAt = Date.now();
       } else {
         silentSec += gap;
       }
@@ -330,7 +343,8 @@ export function createCompanionSession(host) {
     if (event === 'tick' && needOpen) event = 'open';
     const urgent = event === 'background' || event === 'done' || event === 'timeup';
     // 上一句还没说完，不要再要下一句，也不要开麦。
-    if (!urgent && Date.now() < speakingUntil) return;
+    // 估的说话时间偶发卡住：超过 20 秒还没琴声就继续走，避免「开始弹」之后一直哑巴。
+    if (!urgent && Date.now() < speakingUntil && Date.now() - lastPianoAt < 20000) return;
     if (!urgent && busyCount > 0) return;
     if (host.isTyping && host.isTyping() && !urgent) return;
     if (!urgent && earHeld()) return;
@@ -353,6 +367,7 @@ export function createCompanionSession(host) {
         freq_sec: host.freqSec ? host.freqSec() : 45,
         had_playing: hadPlaying,
         silent_sec: Math.round(silentSec),
+        idle_sec: Math.max(0, Math.round((Date.now() - lastPianoAt) / 1000)),
         timer_left_sec: timerLeft(),
         talking: Date.now() < talkingUntil || Date.now() < voiceUntil,
         background: event === 'background',
@@ -426,6 +441,7 @@ export function createCompanionSession(host) {
   };
 
   const takeHeard = async text => {
+    text = fixPianoAsr(text);
     const ownLine = heardOwn(text);
     const profile = !!awaitingField;
     const keepListening = () => {
@@ -608,6 +624,7 @@ export function createCompanionSession(host) {
   // 聊天里顺口纠正：我不叫杨同 / 叫我小桐 / 忘了我吧。服务端认出来就由这一轮接话，不再走闲聊。
   const said = async text => {
     if (!host.studentId) return null;
+    text = fixPianoAsr(text);
     const plan = await planCompanionTick({
       student_id: host.studentId(),
       piece: piece || host.pieceName(),
@@ -626,6 +643,7 @@ export function createCompanionSession(host) {
   // 打字或按住说的回答：和听到的回答走同一条路。
   // 「这段怎么样」没答成好了/再练，多半是在跟角色说别的事，返回 {chat:true} 交给聊天接，问题留着。
   const answerTyped = async text => {
+    text = fixPianoAsr(text);
     const field = awaitingField;
     const plan = await noteAnswer(text, {typed: true});
     if (!plan) {
@@ -641,6 +659,7 @@ export function createCompanionSession(host) {
 
   // 没被问，自己说「这段差不多了」「还没练好」。服务端认不出就返回空，交给闲聊。
   const volunteerSection = async text => {
+    text = fixPianoAsr(text);
     if (!host.studentId || awaitingField) return null;
     awaitingField = 'section_ok';
     const plan = await noteAnswer(text, {volunteer: true});
@@ -702,16 +721,11 @@ export function createCompanionSession(host) {
       inBackground = false;
     },
     finish() {
+      // 提前退出不再向服务端要道别句：tick('done') 会在 stopSpeak 之后才回来，
+      // 用户就会听到一句莫名其妙的话。真正练完的道别走 wantsEnd / timeUp。
+      stopped = true;
       if (timer) clearInterval(timer);
       timer = null;
-      if (ended) {
-        stopped = true;
-        return;
-      }
-      stopped = false;
-      tick('done').finally(() => {
-        stopped = true;
-      });
     },
     noteAnswer,
     markVoice,
