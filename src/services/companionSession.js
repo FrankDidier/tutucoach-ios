@@ -726,6 +726,10 @@ export function createCompanionSession(host) {
       stopped = true;
       if (timer) clearInterval(timer);
       timer = null;
+      closeEar();
+      try {
+        if (Ear && Ear.stopMeter) Ear.stopMeter();
+      } catch (e) {}
     },
     noteAnswer,
     markVoice,

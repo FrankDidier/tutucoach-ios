@@ -15,6 +15,8 @@
 @property(nonatomic, strong) AVAudioPlayer *clonePlayer;
 // 播报序号：新的一句会自增；在途的克隆下载播放前会校验序号，丢弃过期请求（避免叠音/拖尾）。
 @property(nonatomic, assign) NSInteger speakSeq;
+// 提前退出：禁止在途下载/回退合成再开口。下一句 ttsSpeak* 会清掉。
+@property(nonatomic, assign) BOOL ttsHalted;
 // 角色声音要先从网上拉下来再播。这段时间麦里还没有声音，但马上就有，不能开麦。
 @property(nonatomic, assign) NSTimeInterval fetchUntil;
 // 期望的「不锁屏」状态。iOS 在 App 退到后台再回前台时会把 idleTimerDisabled 复位为 NO，
@@ -100,6 +102,7 @@ RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
 // rate：语速倍率（1.0 = 正常）；pitch：音高（1.0 = 正常）。
 RCT_EXPORT_METHOD(ttsSpeak:(NSString *)text rate:(double)rate pitch:(double)pitch) {
   if (text.length == 0) return;
+  self.ttsHalted = NO;
   self.speakSeq += 1;
   dispatch_async(dispatch_get_main_queue(), ^{
     [self speakWithSynth:text rate:rate pitch:pitch];
@@ -108,7 +111,7 @@ RCT_EXPORT_METHOD(ttsSpeak:(NSString *)text rate:(double)rate pitch:(double)pitc
 
 // 用系统合成器播一句（主线程调用）。声音复刻失败时也回退到这里，保证「总有声音」。
 - (void)speakWithSynth:(NSString *)text rate:(double)rate pitch:(double)pitch {
-  if (text.length == 0) return;
+  if (text.length == 0 || self.ttsHalted) return;
   // 懒加载并强引用持有合成器。关键：usesApplicationAudioSession = NO，
   // 让合成器「自己管理音频会话」——这是 AVSpeechSynthesizer 在真机上「调了 speak
   // 却不出声、连 didStart 都不触发」的标准修复（App 自己激活的会话会和它打架）。
@@ -158,6 +161,7 @@ RCT_EXPORT_METHOD(ttsSpeakCloned:(NSString *)text
                   pitch:(double)pitch
                   baseUrl:(NSString *)baseUrl) {
   if (text.length == 0) return;
+  self.ttsHalted = NO;
   self.speakSeq += 1;
   NSInteger seq = self.speakSeq;
   self.fetchUntil = [NSDate date].timeIntervalSince1970 + 12.0;
@@ -181,14 +185,14 @@ RCT_EXPORT_METHOD(ttsSpeakCloned:(NSString *)text
   void (^playFile)(NSString *) = ^(NSString *path) {
     dispatch_async(dispatch_get_main_queue(), ^{
       TutuDetectorModule *s = weakSelf;
-      if (s == nil || seq != s.speakSeq) return;  // 已被更新的一句取代 → 丢弃
+      if (s == nil || s.ttsHalted || seq != s.speakSeq) return;
       [s playClonedFile:path];
     });
   };
   void (^fallback)(void) = ^{
     dispatch_async(dispatch_get_main_queue(), ^{
       TutuDetectorModule *s = weakSelf;
-      if (s == nil || seq != s.speakSeq) return;
+      if (s == nil || s.ttsHalted || seq != s.speakSeq) return;
       [s speakWithSynth:text rate:rate pitch:pitch];
     });
   };
@@ -232,6 +236,7 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
                   lang:(NSString *)lang
                   speed:(double)speed) {
   if (text.length == 0) return;
+  self.ttsHalted = NO;
   // 陪练着急时说快一点、担心时慢一点。服务端只认 0.8~1.3。
   double pace = (speed > 0.5 && speed < 2.0) ? speed : 1.0;
   if (fabs(pace - 1.0) > 0.01) rate = rate * pace;
@@ -258,14 +263,14 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
   void (^playFile)(NSString *) = ^(NSString *path) {
     dispatch_async(dispatch_get_main_queue(), ^{
       TutuDetectorModule *s = weakSelf;
-      if (s == nil || seq != s.speakSeq) return;
+      if (s == nil || s.ttsHalted || seq != s.speakSeq) return;
       [s playClonedFile:path];
     });
   };
   void (^fallback)(void) = ^{
     dispatch_async(dispatch_get_main_queue(), ^{
       TutuDetectorModule *s = weakSelf;
-      if (s == nil || seq != s.speakSeq) return;
+      if (s == nil || s.ttsHalted || seq != s.speakSeq) return;
       [s speakWithSynth:text rate:rate pitch:pitch];
     });
   };
@@ -307,19 +312,26 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
 }
 
 - (void)playClonedFile:(NSString *)path {
+  if (self.ttsHalted) return;
   if (self.synth.isSpeaking) {
     [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
   }
-  if (self.clonePlayer.isPlaying) {
+  if (self.clonePlayer) {
     [self.clonePlayer stop];
+    self.clonePlayer = nil;
   }
   NSError *err = nil;
   AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]
                                                             error:&err];
   self.fetchUntil = 0;
-  if (p == nil) return;
+  if (p == nil || self.ttsHalted) return;
   self.clonePlayer = p;
   [p prepareToPlay];
+  if (self.ttsHalted) {
+    [p stop];
+    self.clonePlayer = nil;
+    return;
+  }
   [p play];
 }
 
@@ -333,14 +345,16 @@ RCT_EXPORT_METHOD(ttsSpeakCoach:(NSString *)text
 }
 
 RCT_EXPORT_METHOD(ttsStop) {
+  self.ttsHalted = YES;
   self.speakSeq += 1;  // 让在途的克隆下载播放被丢弃
   self.fetchUntil = 0;
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self.synth.isSpeaking) {
       [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
     }
-    if (self.clonePlayer.isPlaying) {
+    if (self.clonePlayer) {
       [self.clonePlayer stop];
+      self.clonePlayer = nil;
     }
   });
 }

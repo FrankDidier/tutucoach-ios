@@ -390,6 +390,7 @@ export default function CompanionScreen({navigation}) {
           setTimeUp(true);
         },
         speak: (text, _speakIt, pace) => {
+          if (!aliveRef.current || pausedRef.current) return;
           if (text) addAiBubble(text, true, undefined, pace);
         },
         onChoices: list => {
@@ -411,13 +412,16 @@ export default function CompanionScreen({navigation}) {
     })();
 
     return () => {
+      aliveRef.current = false;
+      pausedRef.current = true;
+      try {
+        stopSpeak();
+      } catch (e) {}
       if (roundRef.current) {
         const round = roundRef.current;
         roundRef.current = null;
         round.finish();
       }
-      aliveRef.current = false;
-      pausedRef.current = true;
       recordCompanionPractice();
       if (activeTimerRef.current) {
         activeTimerRef.current.dispose();
@@ -477,6 +481,18 @@ export default function CompanionScreen({navigation}) {
         stopSpeak();
       } catch (e) {}
     });
+    const unsubLeave = navigation.addListener('beforeRemove', () => {
+      aliveRef.current = false;
+      pausedRef.current = true;
+      try {
+        stopSpeak();
+      } catch (e) {}
+      if (roundRef.current) {
+        const round = roundRef.current;
+        roundRef.current = null;
+        round.finish();
+      }
+    });
     const appState = AppState.addEventListener('change', next => {
       if (!roundRef.current) return;
       if (next === 'background') roundRef.current.onBackground();
@@ -485,6 +501,7 @@ export default function CompanionScreen({navigation}) {
     return () => {
       unsubFocus();
       unsubBlur();
+      unsubLeave();
       appState.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -582,9 +599,10 @@ export default function CompanionScreen({navigation}) {
   // 逐字显示一条 AI 气泡；speakIt=true 时同时朗读。
   // spokenOverride：朗读用的文本（如对话回复要去掉括号内心描写），不传则朗读 full。
   const addAiBubble = (full, speakIt, spokenOverride, pace) => {
+    if (!aliveRef.current) return;
     const key = 'a' + bubbleKey++;
     setMessages(prev => [...prev, {key, role: 'ai', shown: '', done: false}]);
-    if (speakIt && !mutedRef.current) {
+    if (speakIt && !mutedRef.current && aliveRef.current) {
       const p = profileRef.current || {};
       const toSpeak =
         spokenOverride !== undefined ? spokenOverride : full;
