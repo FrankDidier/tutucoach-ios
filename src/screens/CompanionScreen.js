@@ -102,6 +102,7 @@ import {
   peekCompanionPhoto,
 } from '../services/coachPrefs';
 import {fetchCoaches} from '../services/coach';
+import {fetchWallet} from '../services/guangbi';
 import MetronomeCard from '../components/MetronomeCard';
 import {createActiveTimer} from '../utils/activeTimer';
 import {onPracticeEnd} from '../services/companion';
@@ -222,6 +223,23 @@ export default function CompanionScreen({navigation}) {
     const before = coachIdRef.current;
     coachIdRef.current = id;
     profileRef.current = base;
+    try {
+      const [w, list] = await Promise.all([fetchWallet(getDeviceId()), fetchCoaches()]);
+      const coach = ((list && list.coaches) || []).find(c => c.id === id);
+      const price = coach ? Number(coach.rentPrice) || 0 : 0;
+      const exp = w && w.unlockExpires && w.unlockExpires[id];
+      const expired = !!(exp && Number(exp) * 1000 <= Date.now());
+      const unlocked =
+        price <= 0 ||
+        id === 'coach_pro' ||
+        (!expired && !!(coach && coach.unlocked)) ||
+        (!expired && !!(w && (w.unlocked || []).includes(id)));
+      if (!unlocked && aliveRef.current) {
+        Alert.alert('角色已到期', '解锁已过一天，请再花光币解锁一整天。', [
+          {text: '去解锁', onPress: () => navigation.navigate('AISelect')},
+        ]);
+      }
+    } catch (e) {}
     // 每个角色各记各的：换了角色就清掉上一个角色的对话，由新角色重新开场。
     if (!blocking && before && before !== id && roundRef.current && roundRef.current.reopen) {
       try {
@@ -1231,6 +1249,7 @@ export default function CompanionScreen({navigation}) {
                       y: 0,
                       name: card.name,
                       line: card.line,
+                      image: card.image || '',
                     });
                     addAiBubble((card.name || '塔罗') + '：' + (card.line || ''), false);
                   });

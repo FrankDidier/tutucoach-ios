@@ -1,4 +1,5 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState, useCallback} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   View,
   Text,
@@ -26,6 +27,14 @@ const S = SCREEN_W / 375;
 const px = n => Math.round(n * S);
 
 // 蓝湖 AI选择 卡片副标题：AI分身 / 温柔亲和
+function stillUnlocked(id, wallet, coach) {
+  if ((coach && Number(coach.rentPrice) || 0) <= 0) return true;
+  const exp = wallet && wallet.unlockExpires && wallet.unlockExpires[id];
+  if (exp && Number(exp) * 1000 <= Date.now()) return false;
+  if (coach && coach.unlocked) return true;
+  return !!(wallet && (wallet.unlocked || []).includes(id));
+}
+
 function styleLabel(style) {
   if (style === 'ENCOURAGING' || style === 'PLAYFUL') return '温柔亲和';
   return 'AI分身';
@@ -55,44 +64,50 @@ const AISelectScreen = ({navigation, route}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [selected, setSelected] = useState('coach_pro');
   const [remoteCoaches, setRemoteCoaches] = useState(null);
-  const [wallet, setWallet] = useState({balance: 0, unlocked: []});
+  const [wallet, setWallet] = useState({balance: 0, unlocked: [], unlockExpires: {}});
   const [unlocking, setUnlocking] = useState(false);
+
+  const loadWalletAndCoaches = useCallback(async () => {
+    try {
+      const r = await fetchCoaches();
+      if (r && r.ok && Array.isArray(r.coaches)) {
+        setRemoteCoaches(r.coaches.filter(c => c.enabled !== false));
+      }
+    } catch (e) {}
+    try {
+      const w = await fetchWallet(getDeviceId());
+      if (w && w.ok) {
+        setWallet({
+          balance: Number(w.balance) || 0,
+          unlocked: Array.isArray(w.unlocked) ? w.unlocked : [],
+          unlockExpires: w.unlockExpires || {},
+        });
+      }
+    } catch (e) {}
+  }, []);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const saved = await getSelectedCoachId();
       if (alive && saved) setSelected(saved);
-      try {
-        const r = await fetchCoaches();
-        if (alive && r && r.ok && Array.isArray(r.coaches)) {
-          setRemoteCoaches(r.coaches.filter(c => c.enabled !== false));
-        }
-      } catch (e) {
-        // 离线时回退到内置角色
-      }
-      try {
-        const w = await fetchWallet(getDeviceId());
-        if (alive && w && w.ok) {
-          setWallet({
-            balance: Number(w.balance) || 0,
-            unlocked: Array.isArray(w.unlocked) ? w.unlocked : [],
-          });
-        }
-      } catch (e) {}
+      await loadWalletAndCoaches();
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [loadWalletAndCoaches]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadWalletAndCoaches();
+    }, [loadWalletAndCoaches]),
+  );
 
   const onConfirm = async () => {
     const picked = (remoteCoaches || []).find(x => x.id === selected);
     const price = picked ? Number(picked.rentPrice) || 0 : 0;
-    const already =
-      price <= 0 ||
-      (picked && picked.unlocked) ||
-      (wallet.unlocked || []).includes(selected);
+    const already = stillUnlocked(selected, wallet, picked);
     if (picked && !already) {
       if (unlocking) return;
       if ((Number(wallet.balance) || 0) < price) {
@@ -126,6 +141,10 @@ const AISelectScreen = ({navigation, route}) => {
         setWallet(prev => ({
           balance: Number(r.balance) || prev.balance,
           unlocked: Array.from(new Set([...(prev.unlocked || []), selected])),
+          unlockExpires: {
+            ...(prev.unlockExpires || {}),
+            [selected]: Number(r.expiresAt) || Math.floor(Date.now() / 1000) + 86400,
+          },
         }));
       } catch (e) {
         Alert.alert('解锁失败', '网络异常，请稍后重试');
@@ -182,9 +201,9 @@ const AISelectScreen = ({navigation, route}) => {
       styleText: styleLabel(c.style),
       avatar: avatarSource(c),
       rentPrice: c.rentPrice || 0,
-      unlocked: !!c.unlocked || (wallet.unlocked || []).includes(c.id) || (c.rentPrice || 0) <= 0,
+      unlocked: stillUnlocked(c.id, wallet, c),
     }));
-  }, [remoteCoaches, wallet.unlocked]);
+  }, [remoteCoaches, wallet]);
 
   return (
     <View style={styles.container}>
