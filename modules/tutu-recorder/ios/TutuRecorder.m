@@ -487,6 +487,34 @@ RCT_EXPORT_METHOD(cancelListen:(RCTPromiseResolveBlock)resolve
 // 听学生说一句。没有权限或听不到时返回空字符串，不报错。
 RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
+  [self listenUpTo:8 resolve:resolve];
+}
+
+// 上课录音用：一轮听得更久，老师一口气讲下去也不会每 8 秒断一次。系统识别一轮最长一分钟。
+RCT_EXPORT_METHOD(listenFor:(nonnull NSNumber *)seconds
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  int sec = MAX(3, MIN(55, seconds.intValue));
+  if ([self scriptAt:@"tutu_heard.txt" consume:NO] != nil) {
+    [self listenUpTo:sec resolve:resolve];
+    return;
+  }
+  [[AVAudioSession sharedInstance] requestRecordPermission:^(BOOL granted) {
+    if (!granted) {
+      resolve(@{@"text": @"", @"denied": @YES});
+      return;
+    }
+    [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
+      if (status != SFSpeechRecognizerAuthorizationStatusAuthorized) {
+        resolve(@{@"text": @"", @"denied": @YES});
+        return;
+      }
+      [self listenUpTo:sec resolve:resolve];
+    }];
+  }];
+}
+
+- (void)listenUpTo:(int)maxSec resolve:(RCTPromiseResolveBlock)resolve {
   NSString *scripted = [self scriptAt:@"tutu_heard.txt" consume:YES];
   if (scripted != nil) {
     resolve(@{@"text": scripted});
@@ -513,7 +541,7 @@ RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
       return;
     }
     dispatch_async(dispatch_get_main_queue(), ^{
-      BOOL on = [self hearFor:8 done:^(NSString *text) {
+      BOOL on = [self hearFor:maxSec done:^(NSString *text) {
         if (text != nil) {
           resolve(@{@"text": text});
           return;
@@ -528,12 +556,12 @@ RCT_EXPORT_METHOD(listenOnce:(RCTPromiseResolveBlock)resolve
         }];
       }];
       if (!on) {
-        resolve(@{@"text": @""});
+        resolve(@{@"text": @"", @"busy": @YES});
         return;
       }
       // 麦已经开着时，后放进来的话或口语音频也要认，不要等到这轮听完。
       void (^mine)(NSString *) = self.listenFinish;
-      for (int i = 1; i <= 7; i++) {
+      for (int i = 1; i < maxSec; i++) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
           void (^stop)(NSString *) = self.listenFinish;
           if (stop == nil || stop != mine) return;

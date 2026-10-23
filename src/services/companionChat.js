@@ -255,11 +255,12 @@ export async function saveCompanionProfile(studentId, fields) {
   }
 }
 
-export async function startLesson(teacherId, studentId) {
+export async function startLesson(teacherId, studentId, studentName = '') {
   try {
     const resp = await postJson('/api/lesson/start', {
       teacher_id: teacherId || '',
       student_id: studentId || '',
+      student_name: studentName || '',
     });
     return resp && resp.ok ? resp : null;
   } catch (e) {
@@ -267,12 +268,47 @@ export async function startLesson(teacherId, studentId) {
   }
 }
 
-export async function pushLessonChunk(sessionId, text) {
+/** seq 每段递增，网络重试同一段时服务端不会记两遍。next=true 表示这段之后开始下一首。 */
+export async function pushLessonChunk(sessionId, text, seq = null, next = false) {
   try {
-    const resp = await postJson('/api/lesson/chunk', {
-      session_id: sessionId || '',
-      text: text || '',
-    }, null, 25000);
+    const body = {session_id: sessionId || '', text: text || ''};
+    if (seq != null) body.seq = seq;
+    if (next) body.next = true;
+    const resp = await postJson('/api/lesson/chunk', body, null, 15000);
+    return resp && resp.ok ? resp : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 老师给哪些学生设过重点、班里有谁，连同各自已有的曲目。 */
+export async function fetchLessonStudents(teacherId) {
+  try {
+    const resp = await getJson('/api/lesson/students', {teacher_id: teacherId || ''});
+    return resp && resp.ok && Array.isArray(resp.students) ? resp.students : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function fetchLessonSession(sessionId) {
+  try {
+    const resp = await getJson('/api/lesson/session', {session_id: sessionId || ''});
+    return resp && resp.ok ? resp : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 整理成重点。上课中 final=false 只整理新说的；下课 final=true 全部整理完，一小时的课要几十秒。 */
+export async function summarizeLesson(sessionId, final = true) {
+  try {
+    const resp = await postJson(
+      '/api/lesson/summarize',
+      {session_id: sessionId || '', final: !!final},
+      null,
+      240000,
+    );
     return resp && resp.ok ? resp : null;
   } catch (e) {
     return null;
@@ -295,13 +331,15 @@ export async function markLessonRecap(id) {
   } catch (e) {}
 }
 
-export async function confirmLesson(sessionId, teacherId, studentId, segments) {
+export async function confirmLesson(sessionId, teacherId, studentId, segments, studentName = '') {
   try {
     const resp = await postJson('/api/lesson/confirm', {
       session_id: sessionId || '',
       teacher_id: teacherId || '',
       student_id: studentId || '',
+      student_name: studentName || '',
       segments: segments || [],
+      reviewed: true,
     });
     return resp && resp.ok ? resp : null;
   } catch (e) {
