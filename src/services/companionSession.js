@@ -219,6 +219,7 @@ export function createCompanionSession(host) {
         y: box ? box.y : 0,
         name: plan.tarot.name,
         line: plan.tarot.line,
+        image: plan.tarot.image || '',
       });
       if (host.onTarot) host.onTarot(plan.tarot);
       const label = box && !boxed ? box.line : '';
@@ -231,6 +232,7 @@ export function createCompanionSession(host) {
             y: box ? box.y : 0,
             name: card.name || plan.tarot.name,
             line: card.line || plan.tarot.line,
+            image: card.image || plan.tarot.image || '',
           });
         });
       }

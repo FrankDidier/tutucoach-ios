@@ -34,6 +34,7 @@ import {
   stopRecording,
   cancelRecording,
 } from '../services/recorder';
+import {getDeviceId} from '../services/device';
 
 // 人设「懒人框架」示例：一键填入，老师照着改即可。
 const PERSONA_EXAMPLE =
@@ -498,11 +499,12 @@ const AISettingsScreen = ({navigation, route}) => {
               </View>
             </TouchableOpacity>
 
-            {/* 6. 光币租用价格（原开场问候语位置） */}
+            {/* 6. 光币租用价格：只能改自己生成的角色 */}
+            {(!draft.id || (draft.ownerId && draft.ownerId === getDeviceId())) ? (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>光币租用价格</Text>
               <Text style={styles.hintMuted}>
-                学生用光币解锁一次使用权；你的学生消费的光币会进你的账户，可申请兑成现金。
+                只能改你自己生成的角色。学生用光币解锁后可用一整天；消费的光币进你的账户，100光币=7元。
               </Text>
               <TextInput
                 style={styles.input}
@@ -513,6 +515,12 @@ const AISettingsScreen = ({navigation, route}) => {
                 keyboardType="number-pad"
               />
             </View>
+            ) : (
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>光币租用价格</Text>
+              <Text style={styles.hintMuted}>这个角色不是你生成的，解锁价不能改。</Text>
+            </View>
+            )}
 
             {/* 6.5 陪伴语言 */}
             <View style={styles.card}>

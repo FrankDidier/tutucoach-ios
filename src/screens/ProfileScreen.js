@@ -32,6 +32,12 @@ import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
 import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
 import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
 import {useTheme} from '../theme/ThemeContext';
+import {
+  INSTRUMENTS,
+  currentInstrument,
+  loadInstrument,
+  setInstrument,
+} from '../services/instrument';
 
 let Clipboard = null;
 try {
@@ -51,6 +57,7 @@ const ProfileScreen = ({navigation}) => {
   const [displayName, setName] = useState('钢琴小达人');
   const [avatarUri, setAvatar] = useState(null);
   const [points, setPoints] = useState(0);
+  const [instrument, setInst] = useState(currentInstrument());
   // 没装微信就不显示微信登录；iOS 另给「通过 Apple 登录」
   const [hasWeChat, setHasWeChat] = useState(Platform.OS !== 'ios');
   const appleReady = isAppleSignInReady();
@@ -65,6 +72,7 @@ const ProfileScreen = ({navigation}) => {
       try {
         const id = getDeviceId();
         if (alive) setUserId(id);
+        loadInstrument().then(v => alive && setInst(v));
         await registerAccount(id);
         const m = await getMembership(id);
         if (alive && m && m.ok) setVip(m);
@@ -300,6 +308,38 @@ const ProfileScreen = ({navigation}) => {
         </View>
 
         <View style={styles.menuSection}>
+          <View style={{paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8}}>
+            <Text style={{color: colors.textPrimary, fontWeight: '700', marginBottom: 6}}>乐器模式</Text>
+            <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 8}}>
+              切换后，曲目推荐和教案会按这个乐器出曲目
+            </Text>
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+              {INSTRUMENTS.map(it => {
+                const on = instrument === it.id;
+                return (
+                  <TouchableOpacity
+                    key={it.id}
+                    onPress={() => {
+                      setInst(it.id);
+                      setInstrument(it.id);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 14,
+                      backgroundColor: on ? '#7F47FE' : 'transparent',
+                      borderWidth: 1,
+                      borderColor: on ? '#7F47FE' : '#ccc',
+                    }}>
+                    <Text style={{color: on ? '#fff' : colors.textPrimary, fontWeight: '600'}}>
+                      {it.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfSub}
             label="会员订阅"

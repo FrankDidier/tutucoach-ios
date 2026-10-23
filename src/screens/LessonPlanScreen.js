@@ -32,6 +32,12 @@ import {
 import {listStudents} from '../services/students';
 import {getDeviceId} from '../services/device';
 import {setKeepAwake} from '../services/voice';
+import {
+  INSTRUMENTS,
+  currentInstrument,
+  loadInstrument,
+  setInstrument,
+} from '../services/instrument';
 
 /** 服务端偶发只回 raw（```json ...```）；剥围栏再解析，避免整页原文。 */
 function normalizeRecommendResult(r) {
@@ -211,6 +217,11 @@ export default function LessonPlanScreen({navigation}) {
   const [recLoading, setRecLoading] = useState(false);
   const [recResult, setRecResult] = useState(null); // {technique,musicality,niche,raw}
   const [recAvoid, setRecAvoid] = useState([]); // 最近已推荐曲名，降低重复
+  const [instrument, setInst] = useState(currentInstrument());
+
+  useEffect(() => {
+    loadInstrument().then(id => setInst(id));
+  }, []);
 
   // 教案/推荐/板块详解生成较慢，期间禁止自动锁屏，避免黑屏待机打断请求。
   useEffect(() => {
@@ -242,7 +253,7 @@ export default function LessonPlanScreen({navigation}) {
     setLoading(true);
     setPlan('');
     try {
-      const r = await generateLessonPlan(p, composer.trim(), focus.trim(), category);
+      const r = await generateLessonPlan(p, composer.trim(), focus.trim(), category, instrument);
       if (r && r.ok && r.text) {
         setPlan(r.text);
         setTimeout(() => scrollRef.current?.scrollToEnd?.({animated: true}), 300);
@@ -275,6 +286,7 @@ export default function LessonPlanScreen({navigation}) {
         recYears.trim(),
         recCategory,
         recAvoid,
+        instrument,
       );
       if (r && r.ok) {
         const normalized = normalizeRecommendResult(r);
@@ -330,6 +342,7 @@ export default function LessonPlanScreen({navigation}) {
         section.title,
         (section.body || []).join('\n').trim(),
         category,
+        instrument,
       );
       if (r && r.ok && r.text) {
         setDetailText(r.text);
@@ -424,11 +437,31 @@ export default function LessonPlanScreen({navigation}) {
               );
             })}
           </View>
+          <View style={[styles.chipRow, {marginBottom: 10}]}>
+            {INSTRUMENTS.map(it => {
+              const on = instrument === it.id;
+              return (
+                <TouchableOpacity
+                  key={it.id}
+                  style={[styles.chip, on && styles.chipOn]}
+                  onPress={() => {
+                    setInst(it.id);
+                    setInstrument(it.id);
+                    setRecResult(null);
+                  }}>
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{it.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.fieldLabel}>
+            当前乐器：{INSTRUMENTS.find(x => x.id === instrument)?.name || '钢琴'}（曲目推荐和教案都按这个来）
+          </Text>
           <TouchableOpacity
             style={[styles.modeTab, styles.modeTabOn, {marginBottom: 12}]}
             onPress={() => navigation.navigate('LessonCapture')}>
             <Text style={[styles.modeTabText, styles.modeTabTextOn]}>
-              上课录音 · 自动生成重点
+              上课录音 · 自动整理重点
             </Text>
           </TouchableOpacity>
 

@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useMemo, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,9 @@ import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
+import {useFocusEffect} from '@react-navigation/native';
+import {getDeviceId} from '../services/device';
+import {fetchLessonRecap} from '../services/companionChat';
 
 // 蓝湖设计稿基准宽度 375pt；按屏宽等比缩放，保证与设计稿 1:1 的相对尺寸/间距。
 const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
@@ -29,6 +32,20 @@ const PracticeScreen = ({navigation}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   // 蓝湖 练琴_t1 矩形965：rgba(181,149,255,0.1)；t2 为浅紫→白渐变（见下方 LinearGradient）
   const companionRowBg = dark ? 'rgba(181,149,255,0.1)' : 'transparent';
+  const [recap, setRecap] = useState('');
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      fetchLessonRecap(getDeviceId())
+        .then(t => {
+          if (alive) setRecap(t || '');
+        })
+        .catch(() => {});
+      return () => {
+        alive = false;
+      };
+    }, []),
+  );
 
   return (
     <View style={styles.root}>
@@ -68,6 +85,25 @@ const PracticeScreen = ({navigation}) => {
       <SafeAreaView style={styles.safe}>
         {/* 导航标题 练琴：18/600，蓝湖 x=15 */}
         <Text style={styles.screenTitle}>练琴</Text>
+        {recap ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Companion')}
+            style={{
+              marginHorizontal: px(15),
+              marginTop: 8,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: dark ? 'rgba(181,149,255,0.18)' : 'rgba(255,95,131,0.12)',
+            }}>
+            <Text style={{color: colors.textPrimary, fontWeight: '700', marginBottom: 4}}>
+              老师刚下课，给你记下了重点
+            </Text>
+            <Text style={{color: colors.textSecondary, fontSize: 13}} numberOfLines={4}>
+              {recap}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* 顶部问候区：左文案 + 右上角兔子（216x217，压住卡片顶部缺口） */}
         <View style={styles.hero}>

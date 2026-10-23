@@ -90,11 +90,13 @@ export async function generateLessonPlan(
   composer,
   existingFocus = '',
   category = 'general',
+  instrument = '',
 ) {
   // 服务端生成 8 板块教案可能需 120~180s（含续写）；客户端给足 180s，失败自动重试一次。
   const body = {piece: piece || '', composer: composer || ''};
   if (existingFocus) body.existing_focus = existingFocus;
   if (category) body.category = category;
+  if (instrument) body.instrument = instrument;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const resp = await postJson('/api/coach/lesson_plan', body, null, 180000);
@@ -123,11 +125,13 @@ export async function generateLessonSection(
   section,
   sectionContent = '',
   category = 'general',
+  instrument = '',
 ) {
   try {
     const body = {piece: piece || '', composer: composer || '', section: section || ''};
     if (sectionContent) body.section_content = sectionContent;
     if (category) body.category = category;
+    if (instrument) body.instrument = instrument;
     const resp = await postJson('/api/coach/lesson_plan/section', body, null, 90000);
     return {ok: !!(resp && resp.ok && resp.text), text: (resp && resp.text) || ''};
   } catch (e) {
@@ -140,7 +144,14 @@ export async function generateLessonSection(
  * 分三个方向：偏重技术 / 偏重乐感 / 冷门。
  * @returns {Promise<{ok:boolean, technique:Array, musicality:Array, niche:Array, raw?:string}>}
  */
-export async function recommendPieces(level, age, years, category = 'general', avoid = []) {
+export async function recommendPieces(
+  level,
+  age,
+  years,
+  category = 'general',
+  avoid = [],
+  instrument = '',
+) {
   try {
     const body = {
       level: level || '',
@@ -149,6 +160,7 @@ export async function recommendPieces(level, age, years, category = 'general', a
       category: category || 'general',
       avoid: Array.isArray(avoid) ? avoid.filter(Boolean).slice(0, 40) : [],
     };
+    if (instrument) body.instrument = instrument;
     const resp = await postJson('/api/coach/recommend_pieces', body, null, 100000);
     if (!resp || !resp.ok) return {ok: false};
     const norm = a =>
@@ -265,6 +277,22 @@ export async function pushLessonChunk(sessionId, text) {
   } catch (e) {
     return null;
   }
+}
+
+export async function fetchLessonRecap(studentId) {
+  try {
+    const resp = await getJson('/api/lesson/recap', {student_id: studentId || ''});
+    if (!resp || !resp.ok) return '';
+    return (resp.text || resp.recap || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+export async function markLessonRecap(id) {
+  try {
+    await postJson('/api/lesson/recap/seen', {id});
+  } catch (e) {}
 }
 
 export async function confirmLesson(sessionId, teacherId, studentId, segments) {

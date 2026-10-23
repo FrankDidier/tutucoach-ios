@@ -516,6 +516,17 @@ export default function ScoreViewerScreen({navigation, route}) {
                       paddingVertical: 6,
                       zIndex: 20,
                     }}>
+                    {tarot.image ? (
+                      <Image
+                        source={{
+                          uri: tarot.image.startsWith('http')
+                            ? tarot.image
+                            : `https://tutujiaolian.com${tarot.image}`,
+                        }}
+                        style={{width: 72, height: 120, borderRadius: 6, marginBottom: 4}}
+                        resizeMode="cover"
+                      />
+                    ) : null}
                     <Text style={{color: '#F3D48A', fontSize: 12, fontWeight: '700'}}>
                       {tarot.name}
                     </Text>

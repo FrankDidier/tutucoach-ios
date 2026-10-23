@@ -31,9 +31,17 @@ const px = n => Math.round(n * S);
 // 默认展示价（服务端拉取失败时回退）；真实扣款仍以服务端为准。
 // 名称统一写成「连续包X」：这是自动续期订阅，审核要求页面上写清楚。
 const DEFAULT_PLANS = [
-  {id: 'yearly', name: '连续包年', price: '888', original: '¥1188.00'},
-  {id: 'quarterly', name: '连续包季', price: '228', original: '¥299.00'},
-  {id: 'monthly', name: '连续包月', price: '88', original: '¥128.00'},
+  {id: 'yearly', name: '连续包年', price: '998', original: '¥1176.00', guangbi: 12000},
+  {id: 'quarterly', name: '连续包季', price: '268', original: '¥294.00', guangbi: 3000},
+  {id: 'monthly', name: '连续包月', price: '98', original: '¥118.00', guangbi: 1000},
+];
+
+const DEFAULT_RECHARGE = [
+  {id: 'r30', name: '300 光币', price: '30', guangbi: 300},
+  {id: 'r100', name: '1000 光币', price: '100', guangbi: 1000},
+  {id: 'r200', name: '2200 光币', price: '200', guangbi: 2200},
+  {id: 'r300', name: '3300 光币', price: '300', guangbi: 3300},
+  {id: 'r500', name: '6000 光币', price: '500', guangbi: 6000},
 ];
 
 const PLAN_CN = {
@@ -53,7 +61,13 @@ function parsePlansFromApi(j) {
     if (p.id === 'yearly') original = `¥${Math.round(mAmt * 12)}.00`;
     else if (p.id === 'quarterly') original = `¥${Math.round(mAmt * 3)}.00`;
     else original = `¥${Math.round(mAmt * 1.2)}.00`;
-    return {id: p.id, name: PLAN_CN[p.id]?.name || p.name || p.id, price, original};
+    return {
+      id: p.id,
+      name: PLAN_CN[p.id]?.name || p.name || p.id,
+      price,
+      original,
+      guangbi: Number(p.guangbi) || 0,
+    };
   });
 }
 
@@ -65,6 +79,12 @@ const SubscriptionScreen = ({navigation}) => {
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const [packs, setPacks] = useState(DEFAULT_RECHARGE);
+  const [copy, setCopy] = useState({
+    subscribe: '连续订阅：月卡98元到账1000光币，季卡268元到账3000光币，年卡998元到账12000光币。',
+    recharge: '学生充值：30元=300光币，100元=1000光币，200元=2200光币，300元=3300光币，500元=6000光币。',
+    unlock: '用光币解锁后，该角色可用一整天。',
+  });
   // iOS：价格以 App Store 返回的为准（按 Apple ID 所在地区显示币种）
   const [storePrices, setStorePrices] = useState({});
   const [busy, setBusy] = useState(false);
@@ -77,6 +97,19 @@ const SubscriptionScreen = ({navigation}) => {
       });
       const parsed = parsePlansFromApi(j);
       if (parsed) setPlans(parsed);
+      if (j && Array.isArray(j.recharge) && j.recharge.length) {
+        setPacks(
+          j.recharge.map(p => ({
+            id: p.id,
+            name: p.name || `${p.guangbi} 光币`,
+            price: String(Math.round(parseFloat(p.amount || p.price || '0'))),
+            guangbi: Number(p.guangbi) || 0,
+          })),
+        );
+      }
+      if (j && j.copy) {
+        setCopy(prev => ({...prev, ...j.copy}));
+      }
     } catch (e) {}
   }, []);
 
@@ -249,10 +282,15 @@ const SubscriptionScreen = ({navigation}) => {
           <Image source={dark ? Images.subAiDark : Images.subAiLight} style={styles.benefitIcon} resizeMode="contain" />
           <View style={styles.benefitTextCol}>
             <Text style={styles.benefitTitle}>订阅获得光币</Text>
-            <Text style={styles.benefitSub}>用光币解锁各 AI 角色一次使用权</Text>
+            <Text style={styles.benefitSub}>用光币解锁各 AI 角色一整天</Text>
           </View>
         </View>
 
+        <Text style={[styles.renewText, {marginHorizontal: 16, marginBottom: 8}]}>
+          {copy.subscribe}
+          {'\n'}
+          {copy.unlock}
+        </Text>
         <Text style={[styles.sectionTitle, styles.plansTitle]}>
           选择套餐（连续订阅 · 自动续费）
         </Text>
@@ -284,11 +322,48 @@ const SubscriptionScreen = ({navigation}) => {
                   )}
                 </View>
                 <Text style={styles.planCycle}>
-                  {cn.cycle ? `${cn.cycle}自动续费` : '自动续费'}
+                  {plan.guangbi ? `到账 ${plan.guangbi} 光币` : cn.cycle ? `${cn.cycle}自动续费` : '自动续费'}
                 </Text>
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        <Text style={[styles.sectionTitle, styles.plansTitle]}>学生充值（一次到账）</Text>
+        <Text style={[styles.renewText, {marginHorizontal: 16, marginBottom: 8}]}>
+          {copy.recharge}
+        </Text>
+        <View style={[styles.plansRow, {flexWrap: 'wrap'}]}>
+          {packs.map(pack => (
+            <TouchableOpacity
+              key={pack.id}
+              style={[styles.planCard, {marginBottom: 8}]}
+              activeOpacity={0.88}
+              onPress={async () => {
+                if (!agreed) {
+                  Alert.alert('提示', '请先阅读并同意《会员购买协议》');
+                  return;
+                }
+                try {
+                  const r = await payWithWeChat(pack.id, getDeviceId());
+                  if (r && r.ok) {
+                    Alert.alert('充值成功', `已到账 ${pack.guangbi} 光币`);
+                    refreshVip();
+                  } else {
+                    Alert.alert('充值', (r && r.message) || '支付未完成，可改用连续订阅。');
+                  }
+                } catch (e) {
+                  Alert.alert('充值', '网络异常，请重试');
+                }
+              }}>
+              <Text style={styles.planName}>{pack.name}</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceCurrency}>¥</Text>
+                <Text style={styles.priceValue}>{pack.price}</Text>
+              </View>
+              <Text style={styles.planCycle}>{pack.guangbi} 光币</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* 审核要求：订阅页必须写清楚这是自动续期订阅、续费价格与取消方式 */}

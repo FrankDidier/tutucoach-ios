@@ -22,6 +22,12 @@ import {ensureTeacherUnlocked} from '../services/teacherAuth';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {fetchTeacherGuangbi, requestCashout} from '../services/guangbi';
+import {
+  INSTRUMENTS,
+  currentInstrument,
+  loadInstrument,
+  setInstrument,
+} from '../services/instrument';
 
 const TeacherProfileScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
@@ -32,6 +38,8 @@ const TeacherProfileScreen = ({navigation}) => {
   const [unlocked, setUnlocked] = useState(false);
   const [gb, setGb] = useState(0);
   const [cashAmt, setCashAmt] = useState('');
+  const [yuan, setYuan] = useState(0);
+  const [instrument, setInst] = useState(currentInstrument());
 
   const MenuRow = ({icon, label, onPress, divider}) => (
     <TouchableOpacity
@@ -57,9 +65,13 @@ const TeacherProfileScreen = ({navigation}) => {
       }
       setUnlocked(true);
       getTeacherAvatarUri().then(u => alive && setAvatar(u));
+      loadInstrument().then(id => alive && setInst(id));
       fetchTeacherGuangbi(getDeviceId())
         .then(r => {
-          if (alive && r && r.ok) setGb(Number(r.balance) || 0);
+          if (alive && r && r.ok) {
+            setGb(Number(r.balance) || 0);
+            setYuan(Number(r.yuan) || 0);
+          }
         })
         .catch(() => {});
     })();
@@ -162,9 +174,43 @@ const TeacherProfileScreen = ({navigation}) => {
 
         <View style={styles.cardGroup}>
           <View style={styles.cashBlock}>
+            <Text style={styles.cashTitle}>乐器模式</Text>
+            <Text style={styles.cashHint}>切换后，曲目推荐和教案会按这个乐器出曲目</Text>
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8}}>
+              {INSTRUMENTS.map(it => {
+                const on = instrument === it.id;
+                return (
+                  <TouchableOpacity
+                    key={it.id}
+                    onPress={() => {
+                      setInst(it.id);
+                      setInstrument(it.id);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 14,
+                      backgroundColor: on ? '#7F47FE' : 'transparent',
+                      borderWidth: 1,
+                      borderColor: on ? '#7F47FE' : '#ccc',
+                    }}>
+                    <Text style={{color: on ? '#fff' : colors.textPrimary, fontWeight: '600'}}>
+                      {it.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.cardGroup}>
+          <View style={styles.cashBlock}>
             <Text style={styles.cashTitle}>学生消费光币</Text>
             <Text style={styles.cashBal}>{gb}</Text>
-            <Text style={styles.cashHint}>可申请兑现成现金（100 光币起，我们会线下打款）</Text>
+            <Text style={styles.cashHint}>
+              兑现规则：100 光币 = 7 元人民币。当前约合 ¥{yuan}。100 光币起兑，我们会线下打款。
+            </Text>
             <View style={styles.cashRow}>
               <TextInput
                 style={styles.cashInput}

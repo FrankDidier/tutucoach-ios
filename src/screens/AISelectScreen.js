@@ -105,7 +105,7 @@ const AISelectScreen = ({navigation, route}) => {
       const go = await new Promise(resolve => {
         Alert.alert(
           '解锁角色',
-          `用 ${price} 光币解锁「${picked.name}」一次使用权？`,
+          `用 ${price} 光币解锁「${picked.name}」一整天？到期后需再花光币。`,
           [
             {text: '取消', style: 'cancel', onPress: () => resolve(false)},
             {text: '解锁', onPress: () => resolve(true)},
@@ -235,7 +235,7 @@ const AISelectScreen = ({navigation, route}) => {
                     {item.unlocked
                       ? item.styleText
                       : item.rentPrice > 0
-                        ? `${item.rentPrice} 光币解锁`
+                        ? `${item.rentPrice} 光币解锁一天`
                         : item.styleText}
                   </Text>
                 </View>
