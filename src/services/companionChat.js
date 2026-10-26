@@ -331,6 +331,33 @@ export async function markLessonRecap(id) {
   } catch (e) {}
 }
 
+/** 学生/家长：历次课堂重点。 */
+export async function fetchLessonHistory(studentId, limit = 30) {
+  try {
+    const resp = await getJson('/api/lesson/history', {
+      student_id: studentId || '',
+      limit: String(limit || 30),
+    });
+    return resp && resp.ok && Array.isArray(resp.lessons) ? resp.lessons : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/** 谱面分段编辑：本课整理过的句子，展示在快捷语下面。 */
+export async function fetchPieceLessonTips(teacherId, studentId, pieceName) {
+  try {
+    const resp = await getJson('/api/lesson/piece_tips', {
+      teacher_id: teacherId || '',
+      student_id: studentId || '',
+      piece_name: pieceName || '',
+    });
+    return resp && resp.ok && Array.isArray(resp.tips) ? resp.tips : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 export async function confirmLesson(sessionId, teacherId, studentId, segments, studentName = '') {
   try {
     const resp = await postJson('/api/lesson/confirm', {

@@ -29,6 +29,16 @@ export function setKeepAwake(on) {
   } catch (e) {}
 }
 
+/** 上课录音关屏省电：亮度几乎全黑，点一下再亮。真正锁屏会停掉语音识别。 */
+export function setScreenDim(on) {
+  if (Platform.OS !== 'ios') return;
+  try {
+    NativeModules.TutuDetector &&
+      NativeModules.TutuDetector.setScreenDim &&
+      NativeModules.TutuDetector.setScreenDim(!!on);
+  } catch (e) {}
+}
+
 function ensure() {
   if (inited) return available;
   inited = true;
@@ -186,4 +196,4 @@ export function isAvailable() {
   return ensure();
 }
 
-export default {speak, stop, prewarm, isAvailable, isSpeaking, setKeepAwake};
+export default {speak, stop, prewarm, isAvailable, isSpeaking, setKeepAwake, setScreenDim};

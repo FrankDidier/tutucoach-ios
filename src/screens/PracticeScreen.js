@@ -88,7 +88,7 @@ const PracticeScreen = ({navigation}) => {
         {recap ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('Companion')}
+            onPress={() => navigation.navigate('LessonHistory')}
             style={{
               marginHorizontal: px(15),
               marginTop: 8,
@@ -104,6 +104,21 @@ const PracticeScreen = ({navigation}) => {
             </Text>
           </TouchableOpacity>
         ) : null}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('LessonHistory')}
+          style={{
+            marginHorizontal: px(15),
+            marginTop: recap ? 6 : 8,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: dark ? 'rgba(181,149,255,0.1)' : 'rgba(255,95,131,0.08)',
+          }}>
+          <Text style={{color: colors.primary, fontWeight: '700', fontSize: 14}}>
+            课堂重点历史 ›
+          </Text>
+        </TouchableOpacity>
 
         {/* 顶部问候区：左文案 + 右上角兔子（216x217，压住卡片顶部缺口） */}
         <View style={styles.hero}>

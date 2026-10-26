@@ -70,7 +70,16 @@ export function SectionNoteList({sections, editable, onPick}) {
 }
 
 // 点「第几段」弹出来的卡片。学生端只读，字大好认；老师端可以写、可以删这一段。
-export function SectionNoteSheet({section, editable, onClose, onSave, onDelete, onLocate}) {
+// lessonTips：上课录音整理出的句子，展示在原有快捷语下面，点一下追加，不替换推荐内容。
+export function SectionNoteSheet({
+  section,
+  editable,
+  onClose,
+  onSave,
+  onDelete,
+  onLocate,
+  lessonTips = [],
+}) {
   const {colors} = useTheme();
   const [text, setText] = useState('');
   useEffect(() => {
@@ -78,6 +87,7 @@ export function SectionNoteSheet({section, editable, onClose, onSave, onDelete, 
   }, [section]);
   if (!section) return null;
   const color = sectionColor(section.n);
+  const tips = (lessonTips || []).map(t => String(t || '').trim()).filter(Boolean);
   const append = w => {
     setText(prev => {
       const t = String(prev || '').trim();
@@ -129,6 +139,21 @@ export function SectionNoteSheet({section, editable, onClose, onSave, onDelete, 
                   </TouchableOpacity>
                 ))}
               </View>
+              {tips.length ? (
+                <>
+                  <Text style={[styles.tipLabel, {color: colors.textSecondary}]}>本课建议</Text>
+                  <View style={styles.quickWrap}>
+                    {tips.map(w => (
+                      <TouchableOpacity
+                        key={`tip-${w}`}
+                        onPress={() => append(w)}
+                        style={[styles.quick, styles.tipChip, {borderColor: tint(color, 0.5)}]}>
+                        <Text style={[styles.quickText, {color}]}>+ {w}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : null}
               <View style={styles.actions}>
                 {onDelete ? (
                   <TouchableOpacity onPress={onDelete} style={styles.ghostBtn}>
@@ -222,6 +247,8 @@ const styles = StyleSheet.create({
   count: {alignSelf: 'flex-end', fontSize: 11.5, marginTop: 4},
   quickWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8},
   quick: {borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, height: 28, justifyContent: 'center'},
+  tipChip: {backgroundColor: 'rgba(128,128,128,0.08)'},
+  tipLabel: {fontSize: 12.5, fontWeight: '700', marginTop: 12},
   quickText: {fontSize: 12.5, fontWeight: '700'},
   actions: {flexDirection: 'row', alignItems: 'center', marginTop: 18, gap: 8},
   ghostBtn: {height: 40, paddingHorizontal: 10, justifyContent: 'center'},

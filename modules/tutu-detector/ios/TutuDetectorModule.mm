@@ -56,6 +56,24 @@ RCT_EXPORT_METHOD(reactivateAudioSession) {
 
 // 防止自动锁屏：进入「检测 / AI 陪练」模式时置 YES，退出时置 NO。
 // 平常在 App 里仍会正常按系统设置锁屏（离开这些页面会还原）。
+// 上课录音关屏省电：亮度降到几乎全黑，但 App 仍在前台、麦克风继续听。
+// 点一下屏幕再恢复亮度。不要真正锁屏——锁屏后 iOS 会挂起语音识别。
+RCT_EXPORT_METHOD(setScreenDim:(BOOL)on) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    static CGFloat savedBrightness = -1;
+    UIScreen *screen = [UIScreen mainScreen];
+    if (on) {
+      if (savedBrightness < 0) {
+        savedBrightness = screen.brightness;
+      }
+      screen.brightness = 0.01;
+    } else if (savedBrightness >= 0) {
+      screen.brightness = savedBrightness;
+      savedBrightness = -1;
+    }
+  });
+}
+
 RCT_EXPORT_METHOD(setKeepAwake:(BOOL)on) {
   self.wantKeepAwake = on;
   dispatch_async(dispatch_get_main_queue(), ^{

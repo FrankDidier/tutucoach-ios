@@ -19,9 +19,11 @@ import {
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
-import {speak, isSpeaking, setKeepAwake} from '../services/voice';
+import {speak, isSpeaking, setKeepAwake, setScreenDim} from '../services/voice';
 import {getJson, setJson} from '../services/storage';
 import {listStudents} from '../services/students';
+import {fetchScore} from '../services/score';
+import {readingSections} from '../utils/sections';
 import {
   startLesson,
   pushLessonChunk,
@@ -71,6 +73,11 @@ export default function LessonCaptureScreen({navigation}) {
   const [summaryFailed, setSummaryFailed] = useState(false);
   const [nextPending, setNextPending] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dimmed, setDimmed] = useState(false);
+  // targets: { `${segIdx}:${pointIdx}`: {target:'global'|'section', seg:n} }
+  const [targets, setTargets] = useState({});
+  // piece name -> [1,2,3...] 分段号
+  const [pieceSegs, setPieceSegs] = useState({});
 
   const mounted = useRef(true);
   const live = useRef(false);
@@ -89,6 +96,37 @@ export default function LessonCaptureScreen({navigation}) {
   useEffect(() => {
     pieceRef.current = pieceFor;
   }, [pieceFor]);
+
+  const undim = () => {
+    setDimmed(false);
+    setScreenDim(false);
+  };
+
+  const dimOn = () => {
+    setDimmed(true);
+    setScreenDim(true);
+  };
+
+  useEffect(() => {
+    return () => {
+      setScreenDim(false);
+      setKeepAwake(false);
+    };
+  }, []);
+
+  const loadPieceSections = async pieceName => {
+    const name = (pieceName || '').trim();
+    const sid = studentRef.current && studentRef.current.id;
+    if (!name || !sid || pieceSegs[name]) return;
+    try {
+      const r = await fetchScore(sid, name, getDeviceId(), 'teacher');
+      const marks = readingSections(r?.manifest?.annotations || r?.annotations || []);
+      const nums = marks.map(m => m.n).filter(n => n >= 1);
+      setPieceSegs(prev => ({...prev, [name]: nums}));
+    } catch (e) {
+      setPieceSegs(prev => ({...prev, [name]: []}));
+    }
+  };
 
   const persist = () => {
     if (!sessionRef.current) return;
@@ -346,6 +384,7 @@ export default function LessonCaptureScreen({navigation}) {
   const pause = () => {
     live.current = false;
     setListening(false);
+    undim();
     setKeepAwake(false);
     try {
       Ear && Ear.talkEnd && Ear.talkEnd();
@@ -388,13 +427,18 @@ export default function LessonCaptureScreen({navigation}) {
       return;
     }
     applySegments(resp.segments);
-    setEdits(prev => {
-      const out = {...prev};
-      (resp.segments || []).forEach(g => {
-        if (!out[g.idx]) out[g.idx] = (g.points || []).slice();
+    const nextEdits = {};
+    const nextTargets = {};
+    (resp.segments || []).forEach(g => {
+      const pts = (g.points || []).map(p => (typeof p === 'string' ? p : p?.text || '')).filter(Boolean);
+      nextEdits[g.idx] = pts;
+      pts.forEach((_, j) => {
+        nextTargets[`${g.idx}:${j}`] = {target: 'global', seg: 0};
       });
-      return out;
+      if (g.piece) loadPieceSections(g.piece);
     });
+    setEdits(prev => ({...nextEdits, ...prev}));
+    setTargets(prev => ({...nextTargets, ...prev}));
     setPieceFor(prev => {
       const out = {...prev};
       (resp.segments || []).forEach(g => {
@@ -444,24 +488,44 @@ export default function LessonCaptureScreen({navigation}) {
   };
 
   // ---------- 确认 ----------
-  const pickPiece = (idx, name) => setPieceFor(prev => ({...prev, [idx]: name}));
+  const pickPiece = (idx, name) => {
+    setPieceFor(prev => ({...prev, [idx]: name}));
+    loadPieceSections(name);
+  };
 
   const reviewSegs = segments.filter(
     g => (g.chars || 0) > 0 || (g.points || []).length || (edits[g.idx] || []).length,
   );
 
+  const setPointTarget = (segIdx, pointIdx, target, seg = 0) => {
+    setTargets(prev => ({
+      ...prev,
+      [`${segIdx}:${pointIdx}`]: {target, seg: target === 'section' ? seg : 0},
+    }));
+  };
+
   const confirm = async () => {
     const body = [];
     for (const g of reviewSegs) {
       if (skip[g.idx]) continue;
-      const pts = (edits[g.idx] || g.points || []).map(p => String(p || '').trim()).filter(Boolean);
-      if (!pts.length) continue;
+      const raw = (edits[g.idx] || g.points || []).map(p => String(p || '').trim());
+      const points = [];
+      raw.forEach((text, j) => {
+        if (!text) return;
+        const t = targets[`${g.idx}:${j}`] || {target: 'global', seg: 0};
+        points.push({
+          text,
+          target: t.target === 'section' ? 'section' : 'global',
+          seg: t.target === 'section' ? t.seg || 0 : 0,
+        });
+      });
+      if (!points.length) continue;
       const piece = (pieceFor[g.idx] || g.piece || '').trim();
       if (!piece) {
         Alert.alert('还没选曲目', `第 ${reviewSegs.indexOf(g) + 1} 首还没选是哪首曲子。`);
         return;
       }
-      body.push({idx: g.idx, piece, points: pts});
+      body.push({idx: g.idx, piece, points});
     }
     if (!body.length) {
       Alert.alert('没有可以挂的重点', '这节课没有整理出重点。可以手动加几条，或者直接离开。');
@@ -482,9 +546,12 @@ export default function LessonCaptureScreen({navigation}) {
     }
     clearOpen();
     const lines = (resp.pieces || []).map(p => `《${p.name}》${(p.lines || []).length} 条`).join('\n');
+    const secN = resp.section_writes || 0;
     Alert.alert(
       '已挂到曲目重点',
-      `${nameOf(studentRef.current)}：\n${lines}\n\n学生下次打开陪练会先听到这节课的重点。`,
+      `${nameOf(studentRef.current)}：\n${lines || '（本课只挂了分段重点）'}${
+        secN ? `\n另有 ${secN} 处写进了谱面分段重点。` : ''
+      }\n\n学生可在「练琴 → 课堂重点历史」里看到；通用重点也会进陪练。`,
       [{text: '好', onPress: () => navigation.goBack()}],
     );
   };
@@ -588,7 +655,7 @@ export default function LessonCaptureScreen({navigation}) {
         </View>
       ) : null}
       <Text style={styles.hint}>
-        上课时把手机放在琴边、停在本页（屏幕会保持常亮）。换曲子时说「现在开始下一首」，或者点「下一首」按钮。下课点「下课，整理重点」，看过再挂给学生。
+        上课时把手机放在琴边、停在本页。可点「关屏省电」几乎熄屏省电（识别不停），点屏幕即可亮回。换曲子时说「现在开始下一首」，或点「下一首」。下课点「下课，整理重点」，每条可选挂到通用重点或谱面分段重点。
       </Text>
     </>
   );
@@ -661,10 +728,20 @@ export default function LessonCaptureScreen({navigation}) {
             <Text style={styles.btnGhostText}>继续听</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[styles.btnGhost, styles.flex]}
+          onPress={() => (dimmed ? undim() : dimOn())}>
+          <Text style={styles.btnGhostText}>{dimmed ? '亮屏' : '关屏省电'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.flex]} disabled={starting} onPress={askFinish}>
           <Text style={styles.btnText}>下课，整理重点</Text>
         </TouchableOpacity>
       </View>
+      {dimmed ? (
+        <Text style={styles.warn}>已关屏省电（识别仍在跑）。点屏幕任意处，或点「亮屏」恢复亮度。</Text>
+      ) : (
+        <Text style={styles.hint}>可点「关屏省电」几乎熄屏省电，点屏幕即可亮回；识别不会停。</Text>
+      )}
 
       {segments.length > 1 ? (
         <View style={styles.card}>
@@ -699,11 +776,14 @@ export default function LessonCaptureScreen({navigation}) {
           </View>
         ) : null}
         <Text style={styles.title}>{nameOf(student)} · 这节课的重点</Text>
-        <Text style={styles.hint}>选好每一首是哪首曲子，删掉不要的，改好再挂给学生。</Text>
+        <Text style={styles.hint}>
+          选好曲目，每条重点选挂到「通用重点」或「第N段」谱面分段重点。分段建议会出现在谱面编辑里原有快捷语下面。
+        </Text>
         {reviewSegs.map((g, i) => {
           const chosen = pieceFor[g.idx] || g.piece || '';
           const pts = edits[g.idx] || g.points || [];
           const off = !!skip[g.idx];
+          const segs = pieceSegs[chosen] || [];
           return (
             <View key={g.idx} style={[styles.card, off && styles.cardOff]}>
               <View style={styles.rowBetween}>
@@ -724,39 +804,75 @@ export default function LessonCaptureScreen({navigation}) {
                     placeholder="或者写新曲目的名字"
                     placeholderTextColor={colors.textSecondary}
                   />
-                  {pts.map((p, j) => (
-                    <View key={j} style={styles.row}>
-                      <TextInput
-                        style={[styles.input, styles.flex]}
-                        value={p}
-                        multiline
-                        onChangeText={t =>
-                          setEdits(prev => {
-                            const arr = (prev[g.idx] || g.points || []).slice();
-                            arr[j] = t;
-                            return {...prev, [g.idx]: arr};
-                          })
-                        }
-                      />
-                      <TouchableOpacity
-                        style={styles.del}
-                        onPress={() =>
-                          setEdits(prev => {
-                            const arr = (prev[g.idx] || g.points || []).slice();
-                            arr.splice(j, 1);
-                            return {...prev, [g.idx]: arr};
-                          })
-                        }>
-                        <Text style={styles.delText}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                  {pts.map((p, j) => {
+                    const tg = targets[`${g.idx}:${j}`] || {target: 'global', seg: 0};
+                    return (
+                      <View key={j} style={{marginBottom: 10}}>
+                        <View style={styles.row}>
+                          <TextInput
+                            style={[styles.input, styles.flex]}
+                            value={p}
+                            multiline
+                            onChangeText={t =>
+                              setEdits(prev => {
+                                const arr = (prev[g.idx] || g.points || []).slice();
+                                arr[j] = t;
+                                return {...prev, [g.idx]: arr};
+                              })
+                            }
+                          />
+                          <TouchableOpacity
+                            style={styles.del}
+                            onPress={() =>
+                              setEdits(prev => {
+                                const arr = (prev[g.idx] || g.points || []).slice();
+                                arr.splice(j, 1);
+                                return {...prev, [g.idx]: arr};
+                              })
+                            }>
+                            <Text style={styles.delText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.chipWrap}>
+                          <TouchableOpacity
+                            style={[styles.chip, tg.target === 'global' && styles.chipOn]}
+                            onPress={() => setPointTarget(g.idx, j, 'global')}>
+                            <Text style={[styles.chipText, tg.target === 'global' && styles.chipTextOn]}>
+                              通用重点
+                            </Text>
+                          </TouchableOpacity>
+                          {segs.map(n => (
+                            <TouchableOpacity
+                              key={n}
+                              style={[
+                                styles.chip,
+                                tg.target === 'section' && tg.seg === n && styles.chipOn,
+                              ]}
+                              onPress={() => setPointTarget(g.idx, j, 'section', n)}>
+                              <Text
+                                style={[
+                                  styles.chipText,
+                                  tg.target === 'section' && tg.seg === n && styles.chipTextOn,
+                                ]}>
+                                第{n}段
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                          {!segs.length ? (
+                            <Text style={styles.hint}>该曲还没有分段；可先只挂通用，或去谱面编辑加段。</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
                   {!pts.length ? <Text style={styles.hint}>这首没整理出重点。</Text> : null}
                   <View style={styles.rowBetween}>
                     <TouchableOpacity
-                      onPress={() =>
-                        setEdits(prev => ({...prev, [g.idx]: [...(prev[g.idx] || g.points || []), '']}))
-                      }>
+                      onPress={() => {
+                        const arr = [...(edits[g.idx] || g.points || []), ''];
+                        setEdits(prev => ({...prev, [g.idx]: arr}));
+                        setPointTarget(g.idx, arr.length - 1, 'global');
+                      }}>
                       <Text style={styles.link}>＋ 加一条</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -776,7 +892,9 @@ export default function LessonCaptureScreen({navigation}) {
           );
         })}
         {!reviewSegs.length ? (
-          <Text style={styles.hint}>这节课没有记到老师说的话。下次上课请停在本页，不要锁屏。</Text>
+          <Text style={styles.hint}>
+            这节课没有记到老师说的话。下次请停在本页；可点「关屏省电」省电，不要真正锁屏。
+          </Text>
         ) : null}
         <TouchableOpacity style={[styles.btn, saving && styles.btnDim]} disabled={saving} onPress={confirm}>
           <Text style={styles.btnText}>{saving ? '正在挂…' : '确认并挂到曲目'}</Text>
@@ -795,6 +913,11 @@ export default function LessonCaptureScreen({navigation}) {
           {phase === 'pick' ? renderPick() : phase === 'live' ? renderLive() : renderReview()}
         </ScrollView>
       </KeyboardAvoidingView>
+      {dimmed && phase === 'live' ? (
+        <TouchableOpacity style={styles.dimMask} activeOpacity={1} onPress={undim}>
+          <Text style={styles.dimText}>点一下恢复亮度{"\n"}识别仍在继续</Text>
+        </TouchableOpacity>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -883,6 +1006,14 @@ function makeStyles(colors) {
       marginBottom: 8,
     },
     btnDim: {opacity: 0.6},
+    dimMask: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#000',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 50,
+    },
+    dimText: {color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center', lineHeight: 28, opacity: 0.85},
     btnText: {color: '#fff', fontWeight: '700', fontSize: 15},
     btnGhost: {
       borderWidth: 1,

@@ -23,6 +23,7 @@ import CompanionScreen from './src/screens/CompanionScreen';
 import StudentReminderScreen from './src/screens/StudentReminderScreen';
 import LessonPlanScreen from './src/screens/LessonPlanScreen';
 import LessonCaptureScreen from './src/screens/LessonCaptureScreen';
+import LessonHistoryScreen from './src/screens/LessonHistoryScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import ScoreEditorScreen from './src/screens/ScoreEditorScreen';
 import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
@@ -216,6 +217,7 @@ function AppInner(): React.JSX.Element {
           'Companion',
           'LessonPlan',
           'LessonCapture',
+          'LessonHistory',
           'Detection',
           'MainTabs',
           'StudentReminder',
@@ -285,6 +287,7 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="StudentReminder" component={StudentReminderScreen} />
         <Stack.Screen name="LessonPlan" component={LessonPlanGated} />
         <Stack.Screen name="LessonCapture" component={LessonCaptureGated} />
+        <Stack.Screen name="LessonHistory" component={LessonHistoryScreen} />
         <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />

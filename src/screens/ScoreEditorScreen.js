@@ -34,6 +34,7 @@ import {
   recognizeTermAt,
   deleteScore,
 } from '../services/score';
+import {fetchPieceLessonTips} from '../services/companionChat';
 
 const SCORE_IMG_OPTS = {
   // maxWidth 0：选图不在手机上重编码/转 base64，顺序预览马上出来。服务端再压图。
@@ -168,6 +169,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   // 点谱面时做什么：'note' 点一段写重点 / 'divider' 加分段线 / 'term' 认术语
   const [tapMode, setTapMode] = useState('divider');
   const [editSec, setEditSec] = useState(null);
+  const [lessonTips, setLessonTips] = useState([]);
   const modeChosen = useRef(false);
   // 认不出来时，让老师照着 OCR 读到的字补一个
   const [askTerm, setAskTerm] = useState(null);
@@ -250,8 +252,23 @@ export default function ScoreEditorScreen({navigation, route}) {
     await uploadFileList(files, forceReplace);
   };
 
+  const refreshTermsInBackground = async () => {
+    try {
+      // 上传已先出谱面；术语识别放到后台，不挡老师继续看谱。
+      const r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
+      if (r?.ok) {
+        if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
+        if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
+        if (r.manifest) {
+          setManifest(prev => ({...(prev || {}), ...r.manifest, terms_pending: false}));
+        }
+      }
+    } catch (e) {}
+  };
+
   const uploadFileList = async (files, forceReplace = false) => {
     setBusy(true);
+    let needTerms = false;
     try {
       const hadPages = !forceReplace && !!(manifest?.pages?.length);
       for (let i = 0; i < files.length; i++) {
@@ -262,9 +279,13 @@ export default function ScoreEditorScreen({navigation, route}) {
           uploader: 'teacher',
         });
         if (r?.ok && r?.manifest) {
+          // 第一页上来就立刻亮在画面上，后面的页继续传。
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
+          if (r.terms_pending || r.manifest.terms_pending) needTerms = true;
+          // 有页可看后就放下全屏忙转，多页续传不再挡视线
+          if (i === 0) setBusy(false);
         } else {
           Alert.alert('上传失败', `第 ${i + 1} 页未接受，请重试。`);
           break;
@@ -278,6 +299,10 @@ export default function ScoreEditorScreen({navigation, route}) {
       );
     } finally {
       setBusy(false);
+    }
+    if (needTerms) {
+      // 不 await：术语慢慢叠上来
+      refreshTermsInBackground();
     }
   };
 
@@ -639,12 +664,22 @@ export default function ScoreEditorScreen({navigation, route}) {
   // 点「第N段」或在「写重点」模式下点这一段：写这一段给学生的重点。段落本身只有编号，不写标题。
   // 全屏看谱时先关掉全屏，再弹出来：两个弹层叠在一起 iOS 会弹不出来。
   const openSection = sec => {
+    const show = async s => {
+      setLessonTips([]);
+      setEditSec(s);
+      try {
+        const tips = await fetchPieceLessonTips(getDeviceId(), studentId, pieceName);
+        setLessonTips(tips || []);
+      } catch (e) {
+        setLessonTips([]);
+      }
+    };
     if (zoomPage) {
       setZoomPage(null);
-      setTimeout(() => setEditSec(sec), 450);
+      setTimeout(() => show(sec), 450);
       return;
     }
-    setEditSec(sec);
+    show(sec);
   };
 
   const saveSectionNote = text => {
@@ -1332,7 +1367,11 @@ export default function ScoreEditorScreen({navigation, route}) {
       <SectionNoteSheet
         section={editSec}
         editable
-        onClose={() => setEditSec(null)}
+        lessonTips={lessonTips}
+        onClose={() => {
+          setEditSec(null);
+          setLessonTips([]);
+        }}
         onSave={saveSectionNote}
         onDelete={deleteSection}
       />
