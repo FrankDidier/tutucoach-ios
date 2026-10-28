@@ -1,3 +1,4 @@
+import {Platform} from 'react-native';
 import {getJson, postForm, postJson, SCORE_UPLOAD_TIMEOUT_MS} from './api';
 
 function fileB64Payload(file) {
@@ -22,24 +23,29 @@ export async function uploadScore(
   fd.append('piece_name', pieceName || '');
   fd.append('mode', mode || 'replace');
   fd.append('uploader', uploader || 'teacher');
+  // 上传只存图立刻返回；OCR/术语后台跑（像扫卷子先出结果）
+  fd.append('defer_terms', '1');
   const uri = file?.uri || '';
   const b64 = fileB64Payload(file);
   const mime = file?.type || 'image/jpeg';
   const name = file?.name || 'score.jpg';
   // iOS 相册偶发 ph:// / assets-library://：FormData 读文件会挂死直到超时。
-  // 有 base64 时改走 file_b64，绕开坏 uri。
+  // 有 base64 时优先走 file_b64，绕开坏 uri。
   const badUri =
     !uri ||
     uri.startsWith('ph://') ||
     uri.startsWith('assets-library://') ||
     uri.startsWith('phassets-library://');
-  if (b64 && (badUri || file?.preferB64)) {
+  if (b64 && (badUri || file?.preferB64 || Platform?.OS === 'ios')) {
     fd.append('file_b64', b64);
     fd.append('file_name', name);
     fd.append('file_mime', mime);
+    // 仍附可读 uri（file://）作双保险
+    if (uri && (uri.startsWith('file://') || uri.startsWith('content://'))) {
+      fd.append('file', {uri, type: mime, name});
+    }
   } else if (uri) {
     fd.append('file', {uri, type: mime, name});
-    // 双保险：uri 传失败时服务端也能用 b64（body 略大，但比超时强）
     if (b64 && b64.length < 6 * 1024 * 1024) {
       fd.append('file_b64', b64);
       fd.append('file_name', name);

@@ -23,11 +23,12 @@ import {
   setDisplayName,
   getAvatarUri,
   setAvatarUri,
+  DEFAULT_DISPLAY_NAME,
 } from '../services/profilePrefs';
 import {getPoints} from '../services/companion';
 import {fetchWallet, syncPracticeGuangbi} from '../services/guangbi';
-import {getDeviceId} from '../services/device';
-import {registerAccount, getMembership} from '../services/account';
+import {getDeviceId, resetLocalIdentity} from '../services/device';
+import {registerAccount, getMembership, deleteAccount} from '../services/account';
 import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
 import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
 import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
@@ -233,6 +234,53 @@ const ProfileScreen = ({navigation}) => {
     );
   };
 
+  const onDeleteAccount = () => {
+    Alert.alert(
+      '删除账号',
+      '将永久删除你的账号、练习记录、会员状态与登录绑定。此操作不可恢复，不是暂时停用。',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '继续',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('确认删除账号？', '删除后本机将生成新的访客身份，旧数据无法找回。', [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '永久删除',
+                style: 'destructive',
+                onPress: async () => {
+                  const id = getDeviceId();
+                  try {
+                    const r = await deleteAccount(id);
+                    if (!r?.ok) {
+                      Alert.alert('删除失败', '请检查网络后重试。');
+                      return;
+                    }
+                    await setDisplayName(DEFAULT_DISPLAY_NAME);
+                    await setAvatarUri('');
+                    const fresh = await resetLocalIdentity();
+                    try {
+                      await registerAccount(fresh);
+                    } catch (e) {}
+                    setUserId(fresh);
+                    setVip(null);
+                    setName(DEFAULT_DISPLAY_NAME);
+                    setAvatar(null);
+                    setPoints(0);
+                    Alert.alert('账号已删除', '已清除本机身份。如需继续使用，可重新登录或直接练习。');
+                  } catch (e) {
+                    Alert.alert('删除失败', '网络异常，请稍后重试。');
+                  }
+                },
+              },
+            ]);
+          },
+        },
+      ],
+    );
+  };
+
   // 蓝湖展示「ID:…」；列表只展示尾号，点复制仍复制完整 ID（老师入班必须用完整 ID）。
   const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
 
@@ -391,6 +439,12 @@ const ProfileScreen = ({navigation}) => {
             icon={Images.pfTheme}
             label="切换主题"
             onPress={toggle}
+          />
+          <View style={styles.menuDivider} />
+          <MenuRow
+            icon={Images.pfHelp}
+            label="删除账号"
+            onPress={onDeleteAccount}
             last
           />
         </View>

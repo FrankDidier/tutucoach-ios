@@ -57,4 +57,16 @@ RCT_EXPORT_METHOD(setPersistedId:(NSString *)key
   resolve(@(st == errSecSuccess || st == errSecDuplicateItem));
 }
 
+RCT_EXPORT_METHOD(clearPersistedId:(NSString *)key
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if (key.length == 0) {
+    resolve(@NO);
+    return;
+  }
+  NSMutableDictionary *q = query(key);
+  OSStatus st = SecItemDelete((__bridge CFDictionaryRef)q);
+  resolve(@(st == errSecSuccess || st == errSecItemNotFound));
+}
+
 @end

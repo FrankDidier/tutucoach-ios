@@ -91,6 +91,38 @@ export async function getPreviousUserId() {
   }
 }
 
+async function nativeClear(key) {
+  if (!NativeId || typeof NativeId.clearPersistedId !== 'function') return;
+  try {
+    await NativeId.clearPersistedId(key);
+  } catch (e) {}
+}
+
+/**
+ * 账号删除后：清掉本机身份（含 Keychain），生成全新访客 ID。
+ * 否则重装/重启会读回已删账号。
+ */
+export async function resetLocalIdentity() {
+  cachedId = null;
+  initPromise = null;
+  initDone = false;
+  try {
+    await setItem(K_DEVICE_ID, '');
+    await setItem(K_ACCOUNT_ID, '');
+    await setItem(K_PREV_ID, '');
+  } catch (e) {}
+  await nativeClear(K_DEVICE_ID);
+  await nativeClear(K_ACCOUNT_ID);
+  const fresh = uuidv4();
+  cachedId = fresh;
+  initDone = true;
+  try {
+    await setItem(K_DEVICE_ID, fresh);
+  } catch (e) {}
+  await nativeSet(K_DEVICE_ID, fresh);
+  return fresh;
+}
+
 /**
  * 启动时调用一次：
  * AsyncStorage → Keychain（跨卸载）→ 新生成。

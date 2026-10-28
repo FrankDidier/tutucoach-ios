@@ -49,3 +49,8 @@ export function wechatLogin(code, deviceId, preferUserId) {
   if (preferUserId) body.prefer_user_id = preferUserId;
   return postJson('/api/account/wechat_login', body);
 }
+
+/** App Store 5.1.1(v)：应用内永久删除账号与服务端个人数据。 */
+export function deleteAccount(userId) {
+  return postJson('/api/account/delete', {user_id: userId, device_id: userId}, null, 45000);
+}

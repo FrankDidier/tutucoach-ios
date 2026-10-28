@@ -37,10 +37,11 @@ import {
 import {fetchPieceLessonTips} from '../services/companionChat';
 
 const SCORE_IMG_OPTS = {
-  // maxWidth 0：选图不在手机上重编码/转 base64，顺序预览马上出来。服务端再压图。
-  maxWidth: 0,
-  quality: 1,
-  base64: false,
+  // 相册 ph:// 不带 base64 时 FormData 会挂死；压到 1600 + base64 保证立刻能传。
+  // 顺序预览仍优先用 file://（pendingPreviewUri），不靠大图 dataUri。
+  maxWidth: 1600,
+  quality: 0.92,
+  base64: true,
 };
 
 function scoreImageUri(page, retry) {
@@ -252,23 +253,58 @@ export default function ScoreEditorScreen({navigation, route}) {
     await uploadFileList(files, forceReplace);
   };
 
+  const applyTermsResult = r => {
+    if (!r?.ok) return false;
+    if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
+    if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
+    if (r.manifest) {
+      setManifest(prev => ({...(prev || {}), ...r.manifest, terms_pending: false}));
+    } else if (r.term_overlays || r.term_translations) {
+      setManifest(prev =>
+        prev
+          ? {
+              ...prev,
+              term_overlays: r.term_overlays || prev.term_overlays,
+              term_translations: r.term_translations || prev.term_translations,
+              terms_pending: false,
+            }
+          : prev,
+      );
+    }
+    return true;
+  };
+
   const refreshTermsInBackground = async () => {
     try {
-      // 上传已先出谱面；术语识别放到后台，不挡老师继续看谱。
-      const r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
-      if (r?.ok) {
-        if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
-        if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
-        if (r.manifest) {
-          setManifest(prev => ({...(prev || {}), ...r.manifest, terms_pending: false}));
-        }
+      // 先等服务端后台 OCR（扫一下就出谱 → 术语稍后叠上），再主动拉一次。
+      for (let i = 0; i < 8; i++) {
+        await new Promise(r => setTimeout(r, i === 0 ? 1200 : 2000));
+        try {
+          const f = await fetchScore(studentId, pieceName, getDeviceId(), 'teacher');
+          const m = f?.manifest;
+          if (
+            m &&
+            !m.terms_pending &&
+            ((m.term_overlays || []).length > 0 || (m.term_translations || []).length > 0)
+          ) {
+            setManifest(prev => ({...(prev || {}), ...m, terms_pending: false}));
+            setTerms(m.term_translations || []);
+            setTermOverlays(m.term_overlays || []);
+            return;
+          }
+        } catch (e) {}
       }
+      // 后台还没好：客户端触发 suggest（缺页 OCR）→ 全量 ocr
+      let r = await suggestScore(getDeviceId(), studentId, pieceName, lines);
+      if (applyTermsResult(r) && (r.term_overlays || []).length > 0) return;
+      r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
+      applyTermsResult(r);
     } catch (e) {}
   };
 
   const uploadFileList = async (files, forceReplace = false) => {
     setBusy(true);
-    let needTerms = false;
+    let needTerms = true;
     try {
       const hadPages = !forceReplace && !!(manifest?.pages?.length);
       for (let i = 0; i < files.length; i++) {
@@ -283,15 +319,17 @@ export default function ScoreEditorScreen({navigation, route}) {
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
-          if (r.terms_pending || r.manifest.terms_pending) needTerms = true;
+          if (!(r.terms_pending || r.manifest.terms_pending)) needTerms = false;
           // 有页可看后就放下全屏忙转，多页续传不再挡视线
           if (i === 0) setBusy(false);
         } else {
           Alert.alert('上传失败', `第 ${i + 1} 页未接受，请重试。`);
+          needTerms = false;
           break;
         }
       }
     } catch (e) {
+      needTerms = false;
       const msg = String(e?.message || e || '');
       Alert.alert(
         '上传失败',
@@ -330,21 +368,26 @@ export default function ScoreEditorScreen({navigation, route}) {
         text: '清空',
         style: 'destructive',
         onPress: async () => {
-          setBusy(true);
+          // 先清空本地，删除不挡整页（OCR 后台再也不会锁死删除）
+          const prev = manifest;
+          setManifest(null);
+          setTerms([]);
+          setTermOverlays([]);
           try {
             const r = await deleteScore(getDeviceId(), studentId, pieceName, null);
             if (r?.ok) {
-              setManifest(null);
-              setTerms([]);
-              setTermOverlays([]);
               Alert.alert('已清空', '可以重新拍照或从相册上传。');
             } else {
+              setManifest(prev);
+              setTerms(prev?.term_translations || []);
+              setTermOverlays(prev?.term_overlays || []);
               Alert.alert('删除失败', '请稍后重试。');
             }
           } catch (e) {
+            setManifest(prev);
+            setTerms(prev?.term_translations || []);
+            setTermOverlays(prev?.term_overlays || []);
             Alert.alert('删除失败', '网络异常，请稍后重试。');
-          } finally {
-            setBusy(false);
           }
         },
       },
@@ -358,7 +401,15 @@ export default function ScoreEditorScreen({navigation, route}) {
         text: '删除',
         style: 'destructive',
         onPress: async () => {
-          setBusy(true);
+          const prev = manifest;
+          const pages = (manifest?.pages || []).filter((_, i) => i !== pageIndex);
+          if (!pages.length) {
+            setManifest(null);
+            setTerms([]);
+            setTermOverlays([]);
+          } else {
+            setManifest({...manifest, pages, page_count: pages.length});
+          }
           try {
             const r = await deleteScore(getDeviceId(), studentId, pieceName, pageIndex);
             if (r?.ok) {
@@ -372,12 +423,12 @@ export default function ScoreEditorScreen({navigation, route}) {
                 setTermOverlays([]);
               }
             } else {
+              setManifest(prev);
               Alert.alert('删除失败', '请稍后重试。');
             }
           } catch (e) {
+            setManifest(prev);
             Alert.alert('删除失败', '网络异常，请稍后重试。');
-          } finally {
-            setBusy(false);
           }
         },
       },
@@ -388,11 +439,12 @@ export default function ScoreEditorScreen({navigation, route}) {
     const shoot = async hasPagesAlready => {
       const file = await captureFromCamera(SCORE_IMG_OPTS);
       if (!file || file.cancelled) return;
-      if (file.error || !file.uri) {
+      if (file.error || !(file.uri || file.base64 || file.dataUri)) {
         Alert.alert('上传失败', '未能读取照片。');
         return;
       }
       setBusy(true);
+      let pendingTerms = false;
       try {
         const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
           mode: hasPagesAlready ? 'append' : 'replace',
@@ -402,8 +454,15 @@ export default function ScoreEditorScreen({navigation, route}) {
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
+          pendingTerms = !!(r.terms_pending || r.manifest.terms_pending);
           Alert.alert('继续拍下一页？', '按拍照顺序依次添加乐谱页。', [
-            {text: '完成', style: 'cancel'},
+            {
+              text: '完成',
+              style: 'cancel',
+              onPress: () => {
+                if (pendingTerms) refreshTermsInBackground();
+              },
+            },
             {text: '继续拍', onPress: () => shoot(true)},
           ]);
         } else {

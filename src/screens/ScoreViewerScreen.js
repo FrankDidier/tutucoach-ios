@@ -26,7 +26,7 @@ import SectionMarks from '../components/SectionMarks';
 import {SectionNoteList, SectionNoteSheet} from '../components/SectionNotes';
 import {readingSections} from '../utils/sections';
 
-const SCORE_IMG_OPTS = {maxWidth: 0, quality: 1, base64: false};
+const SCORE_IMG_OPTS = {maxWidth: 1600, quality: 0.92, base64: true};
 
 function scoreImageUri(page, retry) {
   const u = page?.url;
@@ -315,10 +315,16 @@ export default function ScoreViewerScreen({navigation, route}) {
     }
   };
 
+  const refreshStudentTermsSoon = () => {
+    // 服务端后台认术语；几秒后再拉一次，谱面已先显示
+    const ticks = [1500, 4000, 9000];
+    ticks.forEach(ms => setTimeout(() => load(), ms));
+  };
+
   const doStudentCamera = async hasPagesAlready => {
     const file = await captureFromCamera(SCORE_IMG_OPTS);
     if (!file || file.cancelled) return;
-    if (file.error || !file.uri) {
+    if (file.error || !(file.uri || file.base64 || file.dataUri)) {
       Alert.alert('上传失败', file.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
       return;
     }
@@ -330,7 +336,8 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        Alert.alert('已上传', '这一页已加进乐谱，翻译好的术语马上就能看。继续拍下一页？', [
+        if (r.terms_pending || r.manifest?.terms_pending) refreshStudentTermsSoon();
+        Alert.alert('已上传', '这一页已加进乐谱，术语识别完成后会自动出现。继续拍下一页？', [
           {text: '完成', style: 'cancel'},
           {text: '继续拍', onPress: () => doStudentCamera(true)},
         ]);
@@ -351,12 +358,17 @@ export default function ScoreViewerScreen({navigation, route}) {
       Alert.alert('上传失败', picked.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
       return;
     }
-    const files = picked.files?.length ? picked.files : picked.uri ? [picked] : [];
+    const files = picked.files?.length
+      ? picked.files
+      : picked.uri || picked.base64 || picked.dataUri
+        ? [picked]
+        : [];
     if (!files.length) {
       Alert.alert('上传失败', '未能读取照片。');
       return;
     }
     setBusy(true);
+    let pending = false;
     try {
       for (let i = 0; i < files.length; i++) {
         const r = await uploadScore('', sid, pieceName, files[i], {
@@ -367,9 +379,21 @@ export default function ScoreViewerScreen({navigation, route}) {
           Alert.alert('上传失败', `第 ${i + 1} 页失败，请稍后重试。`);
           return;
         }
+        if (r.terms_pending || r.manifest?.terms_pending) pending = true;
+        // 第一页就亮出来
+        if (i === 0) {
+          setBusy(false);
+          await load();
+        }
       }
-      Alert.alert('已上传', `${files.length} 页已加进乐谱，翻译好的术语马上就能看。`);
-      load();
+      Alert.alert(
+        '已上传',
+        pending
+          ? `${files.length} 页已加进乐谱，术语正在识别，稍后自动出现。`
+          : `${files.length} 页已加进乐谱。`,
+      );
+      await load();
+      if (pending) refreshStudentTermsSoon();
     } catch (e) {
       Alert.alert('上传失败', '网络异常，请稍后重试。');
     } finally {
