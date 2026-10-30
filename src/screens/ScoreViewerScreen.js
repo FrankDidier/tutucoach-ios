@@ -18,7 +18,13 @@ import {
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
-import {fetchScore, uploadScore, deleteScore, recognizeTermAt} from '../services/score';
+import {
+  fetchScore,
+  uploadScore,
+  deleteScore,
+  recognizeTermAt,
+  recognizeScoreTerms,
+} from '../services/score';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {peekCompanionTarot} from '../services/companionTarot';
@@ -304,7 +310,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        Alert.alert('已上传', 'PDF 已加进乐谱，翻译好的术语马上就能看。');
+        Alert.alert('谱面已上传', 'PDF 已加进乐谱。需要中文术语时再点「翻译术语」。');
       } else {
         Alert.alert('上传失败', '请稍后重试。');
       }
@@ -315,10 +321,35 @@ export default function ScoreViewerScreen({navigation, route}) {
     }
   };
 
-  const refreshStudentTermsSoon = () => {
-    // 服务端后台认术语；几秒后再拉一次，谱面已先显示
-    const ticks = [1500, 4000, 9000];
-    ticks.forEach(ms => setTimeout(() => load(), ms));
+  const onTranslateTerms = async () => {
+    if (!manifest?.pages?.length) {
+      Alert.alert('提示', '请先上传乐谱。');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await recognizeScoreTerms(getDeviceId() || '', sid, pieceName);
+      if (r?.ok) {
+        await load();
+        const n = (r.term_overlays || r.term_translations || []).length;
+        Alert.alert(
+          '翻译完成',
+          n
+            ? `已标出 ${n} 处术语。蓝条可点开修改。`
+            : '这次没认出术语。可换更清晰的照片，或长按谱面手动补。',
+        );
+      } else {
+        Alert.alert('翻译失败', '请稍后重试。');
+      }
+    } catch (e) {
+      const msg = String(e?.message || e || '');
+      Alert.alert(
+        '翻译失败',
+        msg.includes('timeout') ? '翻译超时了，页数多时可先少传几页再试。' : '网络异常，请稍后重试。',
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const doStudentCamera = async hasPagesAlready => {
@@ -336,8 +367,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        if (r.terms_pending || r.manifest?.terms_pending) refreshStudentTermsSoon();
-        Alert.alert('已上传', '这一页已加进乐谱，术语识别完成后会自动出现。继续拍下一页？', [
+        Alert.alert('继续拍下一页？', '谱面已上传。术语请稍后点「翻译术语」。', [
           {text: '完成', style: 'cancel'},
           {text: '继续拍', onPress: () => doStudentCamera(true)},
         ]);
@@ -368,7 +398,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       return;
     }
     setBusy(true);
-    let pending = false;
+    let uploaded = 0;
     try {
       for (let i = 0; i < files.length; i++) {
         const r = await uploadScore('', sid, pieceName, files[i], {
@@ -379,21 +409,17 @@ export default function ScoreViewerScreen({navigation, route}) {
           Alert.alert('上传失败', `第 ${i + 1} 页失败，请稍后重试。`);
           return;
         }
-        if (r.terms_pending || r.manifest?.terms_pending) pending = true;
-        // 第一页就亮出来
+        uploaded += 1;
         if (i === 0) {
           setBusy(false);
           await load();
         }
       }
       Alert.alert(
-        '已上传',
-        pending
-          ? `${files.length} 页已加进乐谱，术语正在识别，稍后自动出现。`
-          : `${files.length} 页已加进乐谱。`,
+        '谱面已上传',
+        `${uploaded} 页已加进乐谱。需要中文术语时再点「翻译术语」。`,
       );
       await load();
-      if (pending) refreshStudentTermsSoon();
     } catch (e) {
       Alert.alert('上传失败', '网络异常，请稍后重试。');
     } finally {
@@ -463,11 +489,19 @@ export default function ScoreViewerScreen({navigation, route}) {
       <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
         <Text style={ui.hint}>
-          补拍的乐谱页会立刻加进来并翻译术语。点蓝条可改错词；长按谱面空白处可认没标出来的术语。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
+          先上传谱面，再点「翻译术语」出中文蓝条。点蓝条可改错词；长按谱面空白处可补漏掉的术语。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
         </Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
           <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图/PDF 上传乐谱'}</Text>
         </TouchableOpacity>
+        {(manifest?.pages || []).length ? (
+          <TouchableOpacity
+            style={[ui.uploadBtn, {marginTop: 8, backgroundColor: colors.card || '#2A2438'}]}
+            onPress={onTranslateTerms}
+            disabled={busy}>
+            <Text style={ui.uploadText}>{busy ? '翻译中…' : '翻译术语'}</Text>
+          </TouchableOpacity>
+        ) : null}
         {(manifest?.pages || []).length ? (
           <TouchableOpacity style={ui.dangerBtn} onPress={deleteAll} disabled={busy}>
             <Text style={ui.dangerText}>删除全部乐谱</Text>
@@ -475,7 +509,7 @@ export default function ScoreViewerScreen({navigation, route}) {
         ) : null}
         {loading ? <ActivityIndicator color={colors.primary} style={{marginTop: 24}} /> : null}
         {!loading && !manifest?.pages?.length ? (
-          <Text style={ui.empty}>这首曲目还没有乐谱。拍照上传后马上就能看到翻译好的术语。</Text>
+          <Text style={ui.empty}>这首曲目还没有乐谱。先上传谱面，再点「翻译术语」。</Text>
         ) : null}
         {marks.length ? <SectionNoteList sections={marks} onPick={locate} /> : null}
         {marks.length && !marks.some(s => s.note) ? (

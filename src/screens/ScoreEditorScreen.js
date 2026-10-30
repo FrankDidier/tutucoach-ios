@@ -274,37 +274,9 @@ export default function ScoreEditorScreen({navigation, route}) {
     return true;
   };
 
-  const refreshTermsInBackground = async () => {
-    try {
-      // 先等服务端后台 OCR（扫一下就出谱 → 术语稍后叠上），再主动拉一次。
-      for (let i = 0; i < 8; i++) {
-        await new Promise(r => setTimeout(r, i === 0 ? 1200 : 2000));
-        try {
-          const f = await fetchScore(studentId, pieceName, getDeviceId(), 'teacher');
-          const m = f?.manifest;
-          if (
-            m &&
-            !m.terms_pending &&
-            ((m.term_overlays || []).length > 0 || (m.term_translations || []).length > 0)
-          ) {
-            setManifest(prev => ({...(prev || {}), ...m, terms_pending: false}));
-            setTerms(m.term_translations || []);
-            setTermOverlays(m.term_overlays || []);
-            return;
-          }
-        } catch (e) {}
-      }
-      // 后台还没好：客户端触发 suggest（缺页 OCR）→ 全量 ocr
-      let r = await suggestScore(getDeviceId(), studentId, pieceName, lines);
-      if (applyTermsResult(r) && (r.term_overlays || []).length > 0) return;
-      r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
-      applyTermsResult(r);
-    } catch (e) {}
-  };
-
   const uploadFileList = async (files, forceReplace = false) => {
     setBusy(true);
-    let needTerms = true;
+    let uploaded = 0;
     try {
       const hadPages = !forceReplace && !!(manifest?.pages?.length);
       for (let i = 0; i < files.length; i++) {
@@ -315,21 +287,24 @@ export default function ScoreEditorScreen({navigation, route}) {
           uploader: 'teacher',
         });
         if (r?.ok && r?.manifest) {
-          // 第一页上来就立刻亮在画面上，后面的页继续传。
+          // 只出谱面；术语等老师点「翻译术语」
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
-          if (!(r.terms_pending || r.manifest.terms_pending)) needTerms = false;
-          // 有页可看后就放下全屏忙转，多页续传不再挡视线
+          uploaded += 1;
           if (i === 0) setBusy(false);
         } else {
           Alert.alert('上传失败', `第 ${i + 1} 页未接受，请重试。`);
-          needTerms = false;
           break;
         }
       }
+      if (uploaded > 0) {
+        Alert.alert(
+          '谱面已上传',
+          '乐谱已经可以看了。需要术语中文时，再点「翻译术语」。',
+        );
+      }
     } catch (e) {
-      needTerms = false;
       const msg = String(e?.message || e || '');
       Alert.alert(
         '上传失败',
@@ -337,10 +312,6 @@ export default function ScoreEditorScreen({navigation, route}) {
       );
     } finally {
       setBusy(false);
-    }
-    if (needTerms) {
-      // 不 await：术语慢慢叠上来
-      refreshTermsInBackground();
     }
   };
 
@@ -444,7 +415,6 @@ export default function ScoreEditorScreen({navigation, route}) {
         return;
       }
       setBusy(true);
-      let pendingTerms = false;
       try {
         const r = await uploadScore(getDeviceId(), studentId, pieceName, file, {
           mode: hasPagesAlready ? 'append' : 'replace',
@@ -454,15 +424,8 @@ export default function ScoreEditorScreen({navigation, route}) {
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
-          pendingTerms = !!(r.terms_pending || r.manifest.terms_pending);
-          Alert.alert('继续拍下一页？', '按拍照顺序依次添加乐谱页。', [
-            {
-              text: '完成',
-              style: 'cancel',
-              onPress: () => {
-                if (pendingTerms) refreshTermsInBackground();
-              },
-            },
+          Alert.alert('继续拍下一页？', '谱面已上传。术语请稍后点「翻译术语」。', [
+            {text: '完成', style: 'cancel'},
             {text: '继续拍', onPress: () => shoot(true)},
           ]);
         } else {
@@ -701,20 +664,25 @@ export default function ScoreEditorScreen({navigation, route}) {
     try {
       const r = await recognizeScoreTerms(getDeviceId(), studentId, pieceName);
       if (r?.ok) {
-        if (r.manifest) setManifest(r.manifest);
-        setTerms(Array.isArray(r.term_translations) ? r.term_translations : []);
-        setTermOverlays(Array.isArray(r.term_overlays) ? r.term_overlays : (r.manifest?.term_overlays || []));
+        applyTermsResult(r);
+        const n = (r.term_overlays || r.term_translations || []).length;
         Alert.alert(
-          '识别完成',
-          (r.term_translations || []).length
-            ? `已识别 ${(r.term_translations || []).length} 个术语，已直接标在谱面原文位置。`
-            : '未识别到术语，可手动添加。',
+          '翻译完成',
+          n
+            ? `已标出 ${n} 处术语。不对的蓝条可点开改；漏了的可长按谱面补。`
+            : '这次没认出术语。可换更清晰的照片，或长按谱面手动补。',
         );
       } else {
-        Alert.alert('识别失败', '请稍后重试，或手动添加术语。');
+        Alert.alert('翻译失败', '请稍后重试，或手动添加术语。');
       }
     } catch (e) {
-      Alert.alert('识别失败', '网络异常，请稍后重试。');
+      const msg = String(e?.message || e || '');
+      Alert.alert(
+        '翻译失败',
+        msg.includes('timeout')
+          ? '翻译超时了。页数多时可先只留一两页再试，或检查网络。'
+          : '网络异常，请稍后重试。',
+      );
     } finally {
       setBusy(false);
     }
@@ -922,12 +890,12 @@ export default function ScoreEditorScreen({navigation, route}) {
               <Text style={ui.btnText}>上传 PDF</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onRecognizeTerms}>
-              <Text style={ui.btnGhostText}>一键识别术语</Text>
+              <Text style={ui.btnGhostText}>翻译术语</Text>
             </TouchableOpacity>
           </View>
           <View style={ui.row}>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
-              <Text style={ui.btnGhostText}>刷新术语</Text>
+              <Text style={ui.btnGhostText}>再翻译一次</Text>
             </TouchableOpacity>
             <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
               <Text style={ui.btnText}>按分段线生成重点框</Text>
@@ -1098,7 +1066,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                 </TouchableOpacity>
               ))
             ) : (
-              <Text style={ui.help}>暂未自动识别到术语，可点「一键识别术语」或手动补充。</Text>
+              <Text style={ui.help}>还没有术语。上传谱面后点「翻译术语」；也可长按谱面手动补。</Text>
             )}
           </View>
         ) : null}

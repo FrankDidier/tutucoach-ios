@@ -144,6 +144,7 @@ export async function boxesFromDividers(
 }
 
 export async function recognizeScoreTerms(teacherId, studentId, pieceName) {
+  // 翻译可能多页，给足时间；服务端 translate 模式已压到约十几秒/页
   return postJson(
     '/api/coach/score/ocr',
     {
@@ -152,7 +153,7 @@ export async function recognizeScoreTerms(teacherId, studentId, pieceName) {
       piece_name: pieceName || '',
     },
     null,
-    90000,
+    180000,
   );
 }
 
