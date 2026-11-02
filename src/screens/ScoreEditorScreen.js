@@ -669,8 +669,8 @@ export default function ScoreEditorScreen({navigation, route}) {
         Alert.alert(
           '翻译完成',
           n
-            ? `已标出 ${n} 处术语。不对的蓝条可点开改；漏了的可长按谱面补。`
-            : '这次没认出术语。可换更清晰的照片，或长按谱面手动补。',
+            ? `已标出 ${n} 处术语。不对的蓝条可点开改；偶有漏标可长按补。`
+            : '这次没认出术语。可换更清晰的照片再点「翻译术语」；偶有漏标可长按补。',
         );
       } else {
         Alert.alert('翻译失败', '请稍后重试，或手动添加术语。');
@@ -1066,7 +1066,7 @@ export default function ScoreEditorScreen({navigation, route}) {
                 </TouchableOpacity>
               ))
             ) : (
-              <Text style={ui.help}>还没有术语。上传谱面后点「翻译术语」；也可长按谱面手动补。</Text>
+              <Text style={ui.help}>还没有术语。上传谱面后点「翻译术语」（含力度记号）；偶有漏标可长按补。</Text>
             )}
           </View>
         ) : null}

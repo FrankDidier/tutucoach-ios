@@ -336,7 +336,7 @@ export default function ScoreViewerScreen({navigation, route}) {
           '翻译完成',
           n
             ? `已标出 ${n} 处术语。蓝条可点开修改。`
-            : '这次没认出术语。可换更清晰的照片，或长按谱面手动补。',
+            : '这次没认出术语。可换更清晰的照片再点「翻译术语」；偶有漏标可长按补。',
         );
       } else {
         Alert.alert('翻译失败', '请稍后重试。');
@@ -489,7 +489,7 @@ export default function ScoreViewerScreen({navigation, route}) {
       <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
         <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
         <Text style={ui.hint}>
-          先上传谱面，再点「翻译术语」出中文蓝条。点蓝条可改错词；长按谱面空白处可补漏掉的术语。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
+          先上传谱面，再点「翻译术语」出中文蓝条（含力度 mp/mf 等）。点蓝条可改错词；偶有漏标可长按补。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
         </Text>
         <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
           <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图/PDF 上传乐谱'}</Text>
@@ -641,7 +641,7 @@ export default function ScoreViewerScreen({navigation, route}) {
         {(manifest?.term_translations || []).length ? (
           <View style={ui.termCard}>
             <Text style={ui.termTitle}>音乐术语（已标在谱面）</Text>
-            <Text style={ui.hint}>蓝色小条覆盖在原文位置；点蓝条可改错词，长按谱面可补认没标出来的。下方为完整列表。</Text>
+            <Text style={ui.hint}>蓝色小条覆盖在原文位置；点蓝条可改错词，偶有漏标可长按补。下方为完整列表。</Text>
             {(manifest.term_translations || []).map((term, idx) => (
               <Text key={`${term.term}_${idx}`} style={ui.termLine}>
                 {term.term}：{term.translation}

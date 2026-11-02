@@ -348,7 +348,8 @@ export default function LessonCaptureScreen({navigation}) {
     setKeepAwake(true);
     if (started.say) {
       try {
-        speak(started.say, {lang: 'zh'});
+        // 与首页兔子同一声线：后端 home_rabbit → 预置「卡通猪小琪」
+        speak(started.say, {lang: 'zh', coachId: 'home_rabbit'});
       } catch (e) {}
       // 念完再开麦，不然开场这句会被当成老师说的话记下来。
       await waitOpening(started.say);
