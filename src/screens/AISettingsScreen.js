@@ -27,6 +27,7 @@ import {
   uploadAvatar,
   cloneVoice,
   absAvatarUrl,
+  isAdminRole,
 } from '../services/coachAdmin';
 import {
   isRecorderAvailable,
@@ -34,7 +35,7 @@ import {
   stopRecording,
   cancelRecording,
 } from '../services/recorder';
-import {getDeviceId} from '../services/device';
+import {getDeviceId, getPreviousUserId} from '../services/device';
 
 // 人设「懒人框架」示例：一键填入，老师照着改即可。
 const PERSONA_EXAMPLE =
@@ -135,7 +136,35 @@ const AISettingsScreen = ({navigation, route}) => {
   const [saving, setSaving] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  // 管理员可改任意角色；老师仅能改自己名下（含微信合并前的旧设备号）。
+  const [canEditRent, setCanEditRent] = useState(!coachId);
   const recStartRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!draft.id) {
+        setCanEditRent(true);
+        return;
+      }
+      try {
+        if (await isAdminRole()) {
+          if (!cancelled) setCanEditRent(true);
+          return;
+        }
+        const owner = String(draft.ownerId || '').trim();
+        const me = String(getDeviceId() || '').trim();
+        const prev = String((await getPreviousUserId()) || '').trim();
+        const mine = !!owner && (owner === me || (!!prev && owner === prev));
+        if (!cancelled) setCanEditRent(mine);
+      } catch (e) {
+        if (!cancelled) setCanEditRent(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.id, draft.ownerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -499,12 +528,12 @@ const AISettingsScreen = ({navigation, route}) => {
               </View>
             </TouchableOpacity>
 
-            {/* 6. 光币租用价格：只能改自己生成的角色 */}
-            {(!draft.id || (draft.ownerId && draft.ownerId === getDeviceId())) ? (
+            {/* 6. 光币租用价格：管理员任意改；老师只改自己生成的（含合并前旧 ID） */}
+            {canEditRent ? (
             <View style={styles.card}>
               <Text style={styles.fieldLabel}>光币租用价格</Text>
               <Text style={styles.hintMuted}>
-                只能改你自己生成的角色。学生用光币解锁后可用一整天；消费的光币进你的账户，100光币=7元。
+                学生用光币解锁后可用一整天；消费的光币进你的账户，100光币=7元。
               </Text>
               <TextInput
                 style={styles.input}

@@ -23,7 +23,7 @@ import {
   absAvatarUrl,
   isAdminRole,
 } from '../services/coachAdmin';
-import {getDeviceId} from '../services/device';
+import {getDeviceId, getPreviousUserId} from '../services/device';
 
 const {width: SCREEN_W} = Dimensions.get('window');
 const S = SCREEN_W / 375;
@@ -44,10 +44,18 @@ const AIListScreen = ({navigation}) => {
     const admin = await isAdminRole();
     const r = await listAllCoaches();
     if (r && r.ok && Array.isArray(r.coaches)) {
-      const list = admin
-        ? r.coaches
-        : r.coaches.filter(c => c.ownerId && c.ownerId === getDeviceId());
-      setCoaches(list);
+      if (admin) {
+        setCoaches(r.coaches);
+      } else {
+        const me = String(getDeviceId() || '').trim();
+        const prev = String((await getPreviousUserId()) || '').trim();
+        setCoaches(
+          r.coaches.filter(c => {
+            const o = String(c.ownerId || '').trim();
+            return !!o && (o === me || (!!prev && o === prev));
+          }),
+        );
+      }
     } else {
       setCoaches([]);
     }
