@@ -8,6 +8,8 @@
 @interface TutuToneFeed : NSObject
 - (void)feed:(AVAudioPCMBuffer *)buf rate:(double)rate;
 - (NSDictionary *)level;
+- (void)setInstrument:(NSString *)instrumentId;
+- (NSString *)instrumentId;
 @end
 
 @implementation TutuToneFeed {
@@ -70,10 +72,36 @@
   BOOL stale = [NSDate date].timeIntervalSince1970 - _fedAt > 1.0;
   TutuToneLevel lv;
   int heard = tutu_tone_heard(_tone, &lv);
+  int inst = tutu_tone_instrument(_tone);
   os_unfair_lock_unlock(&_lock);
-  if (stale) return @{@"rms": @0, @"piano": @0, @"loud": @0, @"swing": @0, @"tone": @0};
+  NSString *instId = @"piano";
+  if (inst == TUTU_INST_VIOLIN) instId = @"violin";
+  else if (inst == TUTU_INST_GUZHENG) instId = @"guzheng";
+  else if (inst == TUTU_INST_ERHU) instId = @"erhu";
+  if (stale) return @{@"rms": @0, @"piano": @0, @"loud": @0, @"swing": @0, @"tone": @0,
+                      @"instrument": instId};
   return @{@"rms": @(lv.rms), @"piano": @(lv.piano), @"loud": @(lv.loud), @"swing": @(lv.swing),
-           @"tone": @(heard)};
+           @"tone": @(heard), @"instrument": instId};
+}
+
+- (void)setInstrument:(NSString *)instrumentId {
+  int code = TUTU_INST_PIANO;
+  if ([instrumentId isEqualToString:@"violin"]) code = TUTU_INST_VIOLIN;
+  else if ([instrumentId isEqualToString:@"guzheng"]) code = TUTU_INST_GUZHENG;
+  else if ([instrumentId isEqualToString:@"erhu"]) code = TUTU_INST_ERHU;
+  os_unfair_lock_lock(&_lock);
+  tutu_tone_set_instrument(_tone, code);
+  os_unfair_lock_unlock(&_lock);
+}
+
+- (NSString *)instrumentId {
+  os_unfair_lock_lock(&_lock);
+  int inst = tutu_tone_instrument(_tone);
+  os_unfair_lock_unlock(&_lock);
+  if (inst == TUTU_INST_VIOLIN) return @"violin";
+  if (inst == TUTU_INST_GUZHENG) return @"guzheng";
+  if (inst == TUTU_INST_ERHU) return @"erhu";
+  return @"piano";
 }
 @end
 
@@ -251,7 +279,18 @@ RCT_EXPORT_METHOD(cancel:(RCTPromiseResolveBlock)resolve
   return YES;
 }
 
-// 陪练听琴：rms 是 0~1 的响度；tone=1 表示这两秒像琴声（音高稳、一下一下按），说话、角色自己的声音是 0。
+// 切换乐器场景：钢琴 / 小提琴 / 古筝 / 二胡，听「在不在练」的算法跟着变。
+RCT_EXPORT_METHOD(setInstrument:(NSString *)instrumentId
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *id = instrumentId ?: @"piano";
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[self toneFeed] setInstrument:id];
+    resolve(@{@"ok": @YES, @"instrument": [[self toneFeed] instrumentId]});
+  });
+}
+
+// 陪练听琴：rms 是 0~1 的响度；tone=1 表示这两秒像当前乐器声，说话、角色自己的声音是 0。
 RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
   // 测试写「0.3」是琴声，「0.3 voice」是有人在说话。

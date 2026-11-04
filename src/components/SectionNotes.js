@@ -30,15 +30,23 @@ function Badge({n}) {
 }
 
 // 重点列表：学生端只列老师写了重点的段；老师端列出每一段，没写的点一下就能写。
-export function SectionNoteList({sections, editable, onPick}) {
+export function SectionNoteList({sections, editable, onPick, onReset}) {
   const {colors} = useTheme();
   const rows = (sections || []).filter(s => editable || s.note);
   if (!rows.length) return null;
+  const hasNotes = (sections || []).some(s => String(s.note || '').trim());
   return (
     <View style={[styles.card, {backgroundColor: colors.card}]}>
-      <Text style={[styles.cardTitle, {color: colors.textPrimary}]}>
-        {editable ? '每段的重点' : '老师写的重点'}
-      </Text>
+      <View style={styles.cardHead}>
+        <Text style={[styles.cardTitle, {color: colors.textPrimary, marginBottom: 0}]}>
+          {editable ? '每段的重点' : '老师写的重点'}
+        </Text>
+        {editable && onReset && hasNotes ? (
+          <TouchableOpacity onPress={onReset} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+            <Text style={[styles.resetBtn, {color: '#D14343'}]}>重置</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <Text style={[styles.cardHint, {color: colors.textSecondary}]}>
         {editable
           ? '点一段写给学生看的重点。学生在谱上点「第几段」就能看到，陪练也会照着念。'
@@ -201,7 +209,14 @@ export function SectionNoteSheet({
 
 const styles = StyleSheet.create({
   card: {borderRadius: 16, padding: 14, marginBottom: 14},
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   cardTitle: {fontSize: 15, fontWeight: '800', marginBottom: 4},
+  resetBtn: {fontSize: 14, fontWeight: '700'},
   cardHint: {fontSize: 12, lineHeight: 17, marginBottom: 10},
   row: {
     flexDirection: 'row',

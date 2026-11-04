@@ -27,6 +27,12 @@ typedef struct {
   float p3;       // 至少三个泛音连续 0.2 秒不动的帧占多少
 } TutuToneLevel;
 
+/* 0=piano 1=violin 2=guzheng 3=erhu —— 与安卓 InstrumentPrefs 对齐 */
+#define TUTU_INST_PIANO 0
+#define TUTU_INST_VIOLIN 1
+#define TUTU_INST_GUZHENG 2
+#define TUTU_INST_ERHU 3
+
 typedef struct {
   float window[TUTU_TONE_N];
   float hann[TUTU_TONE_N];
@@ -53,15 +59,20 @@ typedef struct {
   long hitLast;
   long hitPrev;
   TutuToneLevel hit;
+  int instrument; // TUTU_INST_*
 } TutuPianoTone;
 
 
 void tutu_tone_reset(TutuPianoTone *t);
+void tutu_tone_set_instrument(TutuPianoTone *t, int instrument);
+int tutu_tone_instrument(const TutuPianoTone *t);
 // 送进 16k 单声道样本，-1~1。
 void tutu_tone_push(TutuPianoTone *t, const float *samples, int count);
 TutuToneLevel tutu_tone_level(const TutuPianoTone *t);
 // 像琴声：两秒里至少三成时间有声音、响度在起落，并且泛音锁住还在变弱，或者好几个泛音一直不动。
 int tutu_tone_is_piano(TutuToneLevel lv);
+// 按乐器场景判断是否在练（钢琴衰减 / 小提琴持续 / 古筝拨弦）。
+int tutu_tone_is_playing(TutuToneLevel lv, int instrument);
 // 最近 4 秒里有没有两次听到琴声。听到了 out 是最近那次的情况，没听到是现在的情况。
 int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out);
 

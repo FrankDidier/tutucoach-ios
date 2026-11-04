@@ -340,6 +340,29 @@ export default function StudentReminderScreen({navigation}) {
     ]);
   };
 
+  /** 一键清空该曲通用重点（保留曲目名；分段重点在乐谱页另有重置）。 */
+  const resetPieceLines = idx => {
+    const name = pieces[idx]?.name || '该曲';
+    const n = (pieces[idx]?.lines || []).length;
+    if (!n) {
+      Alert.alert('提示', '当前没有通用重点可清空。');
+      return;
+    }
+    Alert.alert('重置通用重点？', `清空「${name}」里已写的 ${n} 条通用重点？清空后记得点「保存设置」。`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '重置',
+        style: 'destructive',
+        onPress: () =>
+          setPieces(prev => {
+            const next = [...prev];
+            next[idx] = {...next[idx], lines: []};
+            return next;
+          }),
+      },
+    ]);
+  };
+
   const onSave = async () => {
     if (!sel) {
       Alert.alert('提示', '请先选择一个学生');
@@ -552,6 +575,9 @@ export default function StudentReminderScreen({navigation}) {
                               }>
                               <Text style={styles.pieceEdit}>乐谱</Text>
                             </TouchableOpacity>
+                            <TouchableOpacity onPress={() => resetPieceLines(idx)}>
+                              <Text style={styles.pieceEdit}>重置</Text>
+                            </TouchableOpacity>
                             <TouchableOpacity onPress={() => deletePiece(idx)}>
                               <Text style={styles.pieceDelete}>删除</Text>
                             </TouchableOpacity>
@@ -607,7 +633,23 @@ export default function StudentReminderScreen({navigation}) {
               placeholder="如：小星星 / 拜厄第 5 条"
               placeholderTextColor={colors.textSecondary}
             />
-            <Text style={styles.modalFieldLabel}>重点内容（每行一条）</Text>
+            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+              <Text style={styles.modalFieldLabel}>重点内容（每行一条）</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!String(editLines || '').trim()) {
+                    Alert.alert('提示', '当前没有重点可清空。');
+                    return;
+                  }
+                  Alert.alert('重置通用重点？', '清空输入框里已写的重点内容？', [
+                    {text: '取消', style: 'cancel'},
+                    {text: '重置', style: 'destructive', onPress: () => setEditLines('')},
+                  ]);
+                }}
+                hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                <Text style={[styles.pieceEdit, {color: colors.danger || '#D14343'}]}>重置</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.modalMultiline}
               value={editLines}

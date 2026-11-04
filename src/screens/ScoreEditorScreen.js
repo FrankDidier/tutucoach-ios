@@ -680,7 +680,7 @@ export default function ScoreEditorScreen({navigation, route}) {
       Alert.alert(
         '翻译失败',
         msg.includes('timeout')
-          ? '翻译超时了。页数多时可先只留一两页再试，或检查网络。'
+          ? '翻译超时了。可再点一次「翻译术语」；页数特别多时可分批上传后再译。'
           : '网络异常，请稍后重试。',
       );
     } finally {
@@ -742,6 +742,31 @@ export default function ScoreEditorScreen({navigation, route}) {
         },
       },
     ]);
+  };
+
+  /** 一键清空所有分段重点文字（保留分段框/颜色）。 */
+  const resetAllSectionNotes = () => {
+    const n = (marks || []).filter(s => String(s.note || '').trim()).length;
+    if (!n) {
+      Alert.alert('提示', '当前没有分段重点可清空。');
+      return;
+    }
+    Alert.alert(
+      '重置分段重点？',
+      `清空全部 ${n} 段已写的重点文字？分段框和颜色还在，可重新填写。`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '重置',
+          style: 'destructive',
+          onPress: () => {
+            const nextAnn = (manifest?.annotations || []).map(b => ({...b, note: ''}));
+            setManifest(prev => ({...(prev || {}), annotations: nextAnn}));
+            saveAll(false, {quiet: true, annotations: nextAnn});
+          },
+        },
+      ],
+    );
   };
 
   const addBox = pageIdx => {
@@ -924,7 +949,14 @@ export default function ScoreEditorScreen({navigation, route}) {
           ) : null}
         </View>
 
-        {marks.length ? <SectionNoteList sections={marks} editable onPick={openSection} /> : null}
+        {marks.length ? (
+          <SectionNoteList
+            sections={marks}
+            editable
+            onPick={openSection}
+            onReset={resetAllSectionNotes}
+          />
+        ) : null}
 
         {loading || busy ? (
           <View style={{marginTop: 24, alignItems: 'center'}}>

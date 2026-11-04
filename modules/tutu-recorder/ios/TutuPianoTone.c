@@ -45,10 +45,24 @@ static void fft(float *re, float *im, int n) {
 }
 
 void tutu_tone_reset(TutuPianoTone *t) {
+  int keep = t ? t->instrument : TUTU_INST_PIANO;
   memset(t, 0, sizeof(*t));
+  t->instrument = keep;
   for (int i = 0; i < TUTU_TONE_N; i++) {
     t->hann[i] = 0.5f - 0.5f * (float)cos(2.0 * M_PI * i / (TUTU_TONE_N - 1));
   }
+}
+
+void tutu_tone_set_instrument(TutuPianoTone *t, int instrument) {
+  if (!t) return;
+  if (instrument < TUTU_INST_PIANO || instrument > TUTU_INST_ERHU) instrument = TUTU_INST_PIANO;
+  if (t->instrument == instrument) return;
+  tutu_tone_reset(t);
+  t->instrument = instrument;
+}
+
+int tutu_tone_instrument(const TutuPianoTone *t) {
+  return t ? t->instrument : TUTU_INST_PIANO;
 }
 
 // 琴弦的泛音隔 0.1 秒还在原地，差不到千分之二点五。
@@ -145,7 +159,7 @@ static void analyze(TutuPianoTone *t) {
   if (t->ringCount < TUTU_TONE_FRAMES) t->ringCount++;
   if (t->frames >= TUTU_TONE_FRAMES && t->frames % TUTU_TONE_CHECK == 0) {
     TutuToneLevel lv = tutu_tone_level(t);
-    if (tutu_tone_is_piano(lv)) {
+    if (tutu_tone_is_playing(lv, t->instrument)) {
       t->hitPrev = t->hitLast;
       t->hitLast = t->frames;
       t->hit = lv;
@@ -217,10 +231,25 @@ TutuToneLevel tutu_tone_level(const TutuPianoTone *t) {
   return lv;
 }
 
-int tutu_tone_is_piano(TutuToneLevel lv) {
-  /* 再放宽一点：远琴、弱奏、踏板残响时也别轻易判成「没弹」。 */
+int tutu_tone_is_playing(TutuToneLevel lv, int instrument) {
+  if (instrument == TUTU_INST_VIOLIN || instrument == TUTU_INST_ERHU) {
+    /* 弓弦：持续泛音锁住即可；不要求像钢琴那样明显衰减。 */
+    if (lv.loud < 0.14f) return 0;
+    return (lv.tframes >= 0.22f && lv.piano >= 0.26f)
+        || lv.p3 >= 0.30f
+        || (lv.tframes >= 0.32f && lv.loud >= 0.22f);
+  }
+  if (instrument == TUTU_INST_GUZHENG) {
+    if (lv.loud < 0.15f || lv.swing < 1.03f) return 0;
+    return (lv.tframes >= 0.24f && lv.fall >= 0.30f) || lv.p3 >= 0.34f;
+  }
+  /* piano */
   if (lv.loud < 0.18f || lv.swing < 1.04f) return 0;
   return (lv.tframes >= 0.28f && lv.fall >= 0.40f) || lv.p3 >= 0.42f;
+}
+
+int tutu_tone_is_piano(TutuToneLevel lv) {
+  return tutu_tone_is_playing(lv, TUTU_INST_PIANO);
 }
 
 int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out) {

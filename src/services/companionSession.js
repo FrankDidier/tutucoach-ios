@@ -4,6 +4,7 @@ import {chat, forgetCompanionProfile, planCompanion, refineTarot} from './compan
 import {fetchScore} from './score';
 import {setCompanionTarot} from './companionTarot';
 import {isSpeaking} from './voice';
+import {currentInstrument} from './instrument';
 import {cnNum, readingSections} from '../utils/sections';
 
 const Ear = NativeModules.TutuRecorder || null;
@@ -302,6 +303,13 @@ export function createCompanionSession(host) {
     }
   };
 
+  // 切换场景后陪练耳立刻跟当前乐器（钢琴 / 小提琴 / 古筝）走。
+  if (Ear && Ear.setInstrument) {
+    try {
+      Ear.setInstrument(currentInstrument());
+    } catch (e) {}
+  }
+
   const sample = async () => {
     if (!Ear || !Ear.readLevel || earHeld()) return;
     // 角色自己正在说话，麦里是它的声音，不是琴。
@@ -313,7 +321,7 @@ export function createCompanionSession(host) {
     try {
       const lv = await Ear.readLevel();
       const raw = Number(lv && lv.rms) || 0;
-      // 原生层分辨了是不是琴声：说话、电视、角色自己的声音再响也不算在弹。
+      // 原生层按当前乐器分辨是不是在练：说话、电视、角色自己的声音再响也不算。
       const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
       // 刚说完「我再弹一遍」就弹起来了：马上算在弹，不再当成还在说话。
       if (piano) {
