@@ -93,22 +93,24 @@ const ProfileScreen = ({navigation}) => {
     useCallback(() => {
       let alive = true;
       (async () => {
+        // 总光币必须以服务端钱包为准，绝不能用本机练琴积分冒充，
+        // 否则管理员清零后 App 仍会短暂/持续显示旧本地积分（如 7820）。
         const p = await getPoints();
         try {
           const w = await syncPracticeGuangbi(getDeviceId(), p);
           if (alive && w && w.ok && w.balance != null) {
-            setPoints(w.balance);
+            setPoints(Number(w.balance) || 0);
             return;
           }
         } catch (e) {}
         try {
           const w = await fetchWallet(getDeviceId());
           if (alive && w && w.ok && w.balance != null) {
-            setPoints(Math.max(p, w.balance));
+            setPoints(Number(w.balance) || 0);
             return;
           }
         } catch (e) {}
-        if (alive) setPoints(p);
+        // 网络失败时保持上次服务端值，不回落到本机练琴积分
       })();
       return () => {
         alive = false;

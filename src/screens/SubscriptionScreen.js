@@ -11,6 +11,7 @@ import {
   StatusBar,
   Dimensions,
   Platform,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {useFocusEffect} from '@react-navigation/native';
@@ -396,11 +397,23 @@ const SubscriptionScreen = ({navigation}) => {
               onPress={() => navigation?.navigate?.('Legal')}>
               《会员购买协议》
             </Text>
-            与
+            、
             <Text
               style={styles.agreementLink}
               onPress={() => navigation?.navigate?.('Legal')}>
               《隐私政策》
+            </Text>
+            与
+            <Text
+              style={styles.agreementLink}
+              onPress={() => {
+                try {
+                  Linking.openURL(
+                    'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
+                  );
+                } catch (e) {}
+              }}>
+              《Terms of Use (EULA)》
             </Text>
             ，并知悉本订阅为连续订阅、到期自动续费
           </Text>
