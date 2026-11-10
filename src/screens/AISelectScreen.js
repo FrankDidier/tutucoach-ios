@@ -17,7 +17,7 @@ import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId, setCachedCoachAvatarUri} from '../services/coachPrefs';
 import {getDeviceId} from '../services/device';
-import {fetchWallet, unlockCoach} from '../services/guangbi';
+import {fetchWallet, unlockCoach, freeUsesFromWallet} from '../services/guangbi';
 import {Images} from '../assets/images';
 import {BASE_URL} from '../services/config';
 import {useTheme} from '../theme/ThemeContext';
@@ -64,7 +64,12 @@ const AISelectScreen = ({navigation, route}) => {
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [selected, setSelected] = useState('coach_pro');
   const [remoteCoaches, setRemoteCoaches] = useState(null);
-  const [wallet, setWallet] = useState({balance: 0, unlocked: [], unlockExpires: {}});
+  const [wallet, setWallet] = useState({
+    balance: 0,
+    unlocked: [],
+    unlockExpires: {},
+    freeUses: null,
+  });
   const [unlocking, setUnlocking] = useState(false);
 
   const loadWalletAndCoaches = useCallback(async () => {
@@ -81,6 +86,7 @@ const AISelectScreen = ({navigation, route}) => {
           balance: Number(w.balance) || 0,
           unlocked: Array.isArray(w.unlocked) ? w.unlocked : [],
           unlockExpires: w.unlockExpires || {},
+          freeUses: freeUsesFromWallet(w),
         });
       }
     } catch (e) {}
@@ -117,10 +123,16 @@ const AISelectScreen = ({navigation, route}) => {
         );
         return;
       }
+      const freeLeft =
+        wallet.freeUses && Number(wallet.freeUses.remaining) > 0
+          ? Number(wallet.freeUses.remaining)
+          : 0;
+      const freeHint =
+        freeLeft > 0 ? `\n本月还可免费使用 ${freeLeft} 次。` : '';
       const go = await new Promise(resolve => {
         Alert.alert(
           '解锁角色',
-          `用 ${price} 光币解锁「${picked.name}」一整天？到期后需再花光币。`,
+          `用 ${price} 光币解锁「${picked.name}」一整天？到期后需再花光币。${freeHint}`,
           [
             {text: '取消', style: 'cancel', onPress: () => resolve(false)},
             {text: '解锁', onPress: () => resolve(true)},
@@ -145,6 +157,7 @@ const AISelectScreen = ({navigation, route}) => {
             ...(prev.unlockExpires || {}),
             [selected]: Number(r.expiresAt) || Math.floor(Date.now() / 1000) + 86400,
           },
+          freeUses: freeUsesFromWallet(r) || prev.freeUses,
         }));
       } catch (e) {
         Alert.alert('解锁失败', '网络异常，请稍后重试');

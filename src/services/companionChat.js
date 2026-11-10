@@ -255,13 +255,31 @@ export async function saveCompanionProfile(studentId, fields) {
   }
 }
 
-export async function startLesson(teacherId, studentId, studentName = '') {
+/**
+ * 开始上课。studentIdOrList 可为单个 id，或 [{id,name},...] 多人课。
+ * 多人时 body.students=列表，同时保留 student_id/student_name=首位（兼容旧服务端）。
+ */
+export async function startLesson(teacherId, studentIdOrList, studentName = '') {
   try {
-    const resp = await postJson('/api/lesson/start', {
-      teacher_id: teacherId || '',
-      student_id: studentId || '',
-      student_name: studentName || '',
-    });
+    const body = {teacher_id: teacherId || ''};
+    if (Array.isArray(studentIdOrList)) {
+      const list = studentIdOrList
+        .map(s => {
+          if (!s) return null;
+          if (typeof s === 'string') return {id: s, name: ''};
+          const id = String(s.id || s.student_id || '').trim();
+          if (!id) return null;
+          return {id, name: String(s.name || s.student_name || '').trim()};
+        })
+        .filter(Boolean);
+      body.students = list;
+      body.student_id = (list[0] && list[0].id) || '';
+      body.student_name = (list[0] && list[0].name) || studentName || '';
+    } else {
+      body.student_id = studentIdOrList || '';
+      body.student_name = studentName || '';
+    }
+    const resp = await postJson('/api/lesson/start', body);
     return resp && resp.ok ? resp : null;
   } catch (e) {
     return null;
@@ -358,16 +376,44 @@ export async function fetchPieceLessonTips(teacherId, studentId, pieceName) {
   }
 }
 
-export async function confirmLesson(sessionId, teacherId, studentId, segments, studentName = '') {
+/**
+ * 确认挂重点。students 可选：[{id,name},...] 多人课对每位学生各写一遍。
+ * 同时保留 student_id/student_name=首位（或入参）兼容旧调用。
+ */
+export async function confirmLesson(
+  sessionId,
+  teacherId,
+  studentId,
+  segments,
+  studentName = '',
+  students = null,
+) {
   try {
-    const resp = await postJson('/api/lesson/confirm', {
+    const body = {
       session_id: sessionId || '',
       teacher_id: teacherId || '',
       student_id: studentId || '',
       student_name: studentName || '',
       segments: segments || [],
       reviewed: true,
-    });
+    };
+    if (Array.isArray(students) && students.length) {
+      const list = students
+        .map(s => {
+          if (!s) return null;
+          if (typeof s === 'string') return {id: s, name: ''};
+          const id = String(s.id || s.student_id || '').trim();
+          if (!id) return null;
+          return {id, name: String(s.name || s.student_name || '').trim()};
+        })
+        .filter(Boolean);
+      if (list.length) {
+        body.students = list;
+        if (!body.student_id) body.student_id = list[0].id;
+        if (!body.student_name) body.student_name = list[0].name;
+      }
+    }
+    const resp = await postJson('/api/lesson/confirm', body);
     return resp && resp.ok ? resp : null;
   } catch (e) {
     return null;

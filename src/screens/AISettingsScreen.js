@@ -36,6 +36,7 @@ import {
   cancelRecording,
 } from '../services/recorder';
 import {getDeviceId, getPreviousUserId} from '../services/device';
+import {INSTRUMENTS, currentInstrument, instrumentName} from '../services/instrument';
 
 // 人设「懒人框架」示例：一键填入，老师照着改即可。
 const PERSONA_EXAMPLE =
@@ -87,8 +88,9 @@ function emptyDraft() {
     voiceId: 0,
     mmVoice: '',
     avatarUrl: '',
-    // 蓝湖新建态展示「未设置」；落库时再默认 private
-    visibility: '',
+    // 新建默认 class：仅班级学生可见
+    visibility: 'class',
+    instrument: currentInstrument() || 'piano',
     status: '',
     reviewNote: '',
     ownerId: '',
@@ -110,7 +112,8 @@ function coachToDraft(c) {
     voiceId: pick('voice_id', 'voiceId', 0),
     mmVoice: pick('mm_voice', 'mmVoice', ''),
     avatarUrl: pick('avatar_url', 'avatarUrl', ''),
-    visibility: pick('visibility', 'visibility', 'private') || 'private',
+    visibility: pick('visibility', 'visibility', 'class') || 'class',
+    instrument: pick('instrument', 'instrument', '') || '',
     status: c.status || 'approved',
     reviewNote: c.reviewNote || '',
     ownerId: c.ownerId || '',
@@ -119,7 +122,8 @@ function coachToDraft(c) {
 
 function visibilityLabel(v) {
   if (v === 'public') return '公开';
-  if (v === 'private') return '私有';
+  if (v === 'class') return '仅班级学生可见';
+  if (v === 'private') return '不公开（仅自己）';
   return '未设置';
 }
 
@@ -207,7 +211,8 @@ const AISettingsScreen = ({navigation, route}) => {
         systemPrompt: draft.systemPrompt.trim(),
         greeting: draft.greeting.trim() || '你好，准备好练琴了吗？',
         rentPrice: parseInt(String(draft.rentPrice || '80').replace(/[^\d]/g, ''), 10) || 80,
-        visibility: draft.visibility || 'private',
+        visibility: draft.visibility || 'class',
+        instrument: draft.instrument || '',
         voiceId: draft.voiceId || 0,
       };
       if (draft.id) payload.id = draft.id;
@@ -310,21 +315,49 @@ const AISettingsScreen = ({navigation, route}) => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['取消', '私有（仅我的学生）', '公开（所有人）'],
+          options: ['取消', '公开', '仅班级学生可见', '不公开（仅自己）'],
           cancelButtonIndex: 0,
           title: '这个分身的可见范围',
         },
         idx => {
-          if (idx === 1) apply('private');
-          if (idx === 2) apply('public');
+          if (idx === 1) apply('public');
+          if (idx === 2) apply('class');
+          if (idx === 3) apply('private');
         },
       );
     } else {
       Alert.alert('这个分身的可见范围', undefined, [
-        {text: '私有（仅我的学生）', onPress: () => apply('private')},
-        {text: '公开（所有人）', onPress: () => apply('public')},
+        {text: '公开', onPress: () => apply('public')},
+        {text: '仅班级学生可见', onPress: () => apply('class')},
+        {text: '不公开（仅自己）', onPress: () => apply('private')},
         {text: '取消', style: 'cancel'},
       ]);
+    }
+  };
+
+  const pickInstrument = () => {
+    const apply = key => set('instrument', key);
+    const labels = INSTRUMENTS.map(x => x.name);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['取消', ...labels],
+          cancelButtonIndex: 0,
+          title: '这个分身适用的乐器',
+        },
+        idx => {
+          if (idx >= 1 && idx <= INSTRUMENTS.length) apply(INSTRUMENTS[idx - 1].id);
+        },
+      );
+    } else {
+      Alert.alert(
+        '这个分身适用的乐器',
+        undefined,
+        [
+          ...INSTRUMENTS.map(x => ({text: x.name, onPress: () => apply(x.id)})),
+          {text: '取消', style: 'cancel'},
+        ],
+      );
     }
   };
 
@@ -522,6 +555,24 @@ const AISettingsScreen = ({navigation, route}) => {
                 <View style={styles.valueRow}>
                   <Text style={styles.valueMuted}>
                     {visibilityLabel(draft.visibility)}
+                  </Text>
+                  <Text style={styles.chevron}>›</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            {/* 5.5 适用乐器 */}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.85}
+              onPress={pickInstrument}>
+              <View style={styles.fieldRow}>
+                <Text style={styles.fieldLabel}>适用乐器</Text>
+                <View style={styles.valueRow}>
+                  <Text style={styles.valueMuted}>
+                    {draft.instrument
+                      ? instrumentName(draft.instrument)
+                      : '未设置（全乐器）'}
                   </Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>

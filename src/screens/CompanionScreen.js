@@ -103,6 +103,7 @@ import {
 } from '../services/coachPrefs';
 import {fetchCoaches} from '../services/coach';
 import {fetchWallet} from '../services/guangbi';
+import {currentInstrument} from '../services/instrument';
 import MetronomeCard from '../components/MetronomeCard';
 import {createActiveTimer} from '../utils/activeTimer';
 import {onPracticeEnd} from '../services/companion';
@@ -183,6 +184,7 @@ export default function CompanionScreen({navigation}) {
   const mutedRef = useRef(false);
   const aliveRef = useRef(true);
   const focusCountRef = useRef(0);
+  const instrumentRef = useRef(currentInstrument());
   /** Keep companion TTS running while viewing score. */
   const scoreViewerOpenRef = useRef(false);
   const sessionStartRef = useRef(0); // 本次陪练开始时间，退出时计入练琴时长
@@ -484,9 +486,13 @@ export default function CompanionScreen({navigation}) {
     const unsubFocus = navigation.addListener('focus', () => {
       focusCountRef.current += 1;
       scoreViewerOpenRef.current = false;
-      if (focusCountRef.current <= 1) return;
+      const inst = currentInstrument();
+      const instChanged = inst !== instrumentRef.current;
+      instrumentRef.current = inst;
+      if (focusCountRef.current <= 1 && !instChanged) return;
       aliveRef.current = true;
       pausedRef.current = false;
+      // 乐器切换或回到本页：按 currentInstrument 重新拉可见角色
       reloadCoach({blocking: false});
       reloadPieces();
     });

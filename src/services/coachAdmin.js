@@ -107,7 +107,8 @@ export async function listAllCoaches() {
 }
 
 /**
- * 新建/更新一个 AI 分身（#1 归属+审核）。coach: {id?, name, systemPrompt, greeting, visibility?, ...}。
+ * 新建/更新一个 AI 分身（#1 归属+审核）。
+ * coach: {id?, name, systemPrompt, greeting, visibility?, instrument?, ...}。
  * App 端一律带 ownerId=本设备id：新建/修改都会进入「待管理员审核」，审核通过后学生端才生效。
  */
 export async function saveCoach(coach) {
@@ -115,6 +116,8 @@ export async function saveCoach(coach) {
   // 老师：带 ownerId → 归属 + 待审核。
   const admin = await isAdminRole();
   const payload = admin ? {...coach} : {...coach, ownerId: getDeviceId()};
+  // 显式带上 instrument（可为空=全乐器），避免被调用方漏传时服务端无法更新。
+  if (!('instrument' in payload)) payload.instrument = '';
   return postJson('/api/coach/save', payload, await authHeader());
 }
 

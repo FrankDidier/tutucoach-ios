@@ -56,7 +56,9 @@ export default function LessonCaptureScreen({navigation}) {
   const [manualOpen, setManualOpen] = useState(false);
   const [manualId, setManualId] = useState('');
   const [resumable, setResumable] = useState(null);
-  const [student, setStudent] = useState(null);
+  const [selected, setSelected] = useState([]); // 挑学生阶段的多选
+  const [student, setStudent] = useState(null); // 上课中主学生（首位）
+  const [studentsInLesson, setStudentsInLesson] = useState([]); // 上课中全部学生
   const [listening, setListening] = useState(false);
   const [starting, setStarting] = useState(false);
   const [segments, setSegments] = useState([]);
@@ -88,6 +90,7 @@ export default function LessonCaptureScreen({navigation}) {
   const wantNext = useRef(false);
   const sessionRef = useRef('');
   const studentRef = useRef(null);
+  const studentsRef = useRef([]);
   const pieceRef = useRef({});
   const lastSummary = useRef(0);
   const midRunning = useRef(false);
@@ -133,6 +136,7 @@ export default function LessonCaptureScreen({navigation}) {
     setJson(OPEN_KEY, {
       sessionId: sessionRef.current,
       student: studentRef.current,
+      students: studentsRef.current || [],
       seq: seq.current,
       pieces: pieceRef.current,
       queue: queue.current,
@@ -194,6 +198,25 @@ export default function LessonCaptureScreen({navigation}) {
   }, [students, filter]);
 
   const nameOf = s => (s && (s.name || '').trim()) || (s ? '学生 ' + s.id.slice(-6) : '');
+
+  const namesOf = list => {
+    const arr = (list || []).filter(Boolean);
+    if (!arr.length) return '';
+    if (arr.length === 1) return nameOf(arr[0]);
+    if (arr.length === 2) return `${nameOf(arr[0])}、${nameOf(arr[1])}`;
+    return `${nameOf(arr[0])} 等 ${arr.length} 人`;
+  };
+
+  const toggleSelect = s => {
+    if (!s || !s.id || starting) return;
+    setSelected(prev => {
+      const has = prev.some(x => x.id === s.id);
+      if (has) return prev.filter(x => x.id !== s.id);
+      return [...prev, {id: s.id, name: s.name || '', pieces: s.pieces || []}];
+    });
+  };
+
+  const isSelected = id => selected.some(x => x.id === id);
 
   // ---------- 上课 ----------
   useEffect(() => {
@@ -323,23 +346,41 @@ export default function LessonCaptureScreen({navigation}) {
     }
   };
 
-  const begin = async stu => {
+  const begin = async list => {
     if (starting) return;
+    const picks = (Array.isArray(list) ? list : list ? [list] : []).filter(s => s && s.id);
+    if (!picks.length) {
+      Alert.alert('请先选学生', '点名字勾选至少一位，再点「开始上课」。');
+      return;
+    }
     setStarting(true);
-    const started = await startLesson(getDeviceId(), stu.id, stu.name || '');
+    const started = await startLesson(getDeviceId(), picks, picks[0].name || '');
     if (!started) {
       setStarting(false);
       Alert.alert('没能开始', '网络不好，过一会儿再试。');
       return;
     }
-    const pieces = Array.from(new Set([...(started.pieces || []), ...(stu.pieces || [])]));
-    const who = {id: stu.id, name: stu.name || '', pieces};
+    const unionPieces = Array.from(
+      new Set([
+        ...(started.pieces || []),
+        ...picks.flatMap(s => (Array.isArray(s.pieces) ? s.pieces : [])),
+      ]),
+    );
+    const whoList = picks.map(s => ({
+      id: s.id,
+      name: s.name || '',
+      pieces: Array.isArray(s.pieces) ? s.pieces : [],
+    }));
+    const who = {...whoList[0], pieces: unionPieces};
     studentRef.current = who;
+    studentsRef.current = whoList;
     sessionRef.current = started.session_id;
     seq.current = 0;
     queue.current = [];
     lastSummary.current = Date.now();
     setStudent(who);
+    setStudentsInLesson(whoList);
+    setSelected([]);
     setSegments([{idx: 0, piece: '', points: [], chars: 0, text: ''}]);
     setPieceFor({});
     setElapsed(0);
@@ -370,12 +411,20 @@ export default function LessonCaptureScreen({navigation}) {
       Alert.alert('这节课已经结束了');
       return;
     }
-    const who = saved.student || {id: s.student_id, name: s.student_name, pieces: []};
+    const whoList =
+      Array.isArray(saved.students) && saved.students.length
+        ? saved.students
+        : saved.student
+          ? [saved.student]
+          : [{id: s.student_id, name: s.student_name, pieces: []}];
+    const who = saved.student || whoList[0] || {id: s.student_id, name: s.student_name, pieces: []};
     studentRef.current = who;
+    studentsRef.current = whoList;
     sessionRef.current = saved.sessionId;
     seq.current = Math.max(Number(saved.seq) || 0, (Number(s.last_seq) || -1) + 1);
     queue.current = (saved.queue || []).filter(q => q.seq > (Number(s.last_seq) || -1));
     setStudent(who);
+    setStudentsInLesson(whoList);
     setSegments(s.segments || []);
     setPieceFor(saved.pieces || {});
     setPhase('live');
@@ -533,12 +582,19 @@ export default function LessonCaptureScreen({navigation}) {
       return;
     }
     setSaving(true);
+    const allStu =
+      (studentsRef.current && studentsRef.current.length
+        ? studentsRef.current
+        : studentRef.current
+          ? [studentRef.current]
+          : []) || [];
     const resp = await confirmLesson(
       sessionRef.current,
       getDeviceId(),
       studentRef.current.id,
       body,
       studentRef.current.name || '',
+      allStu,
     );
     setSaving(false);
     if (!resp) {
@@ -550,9 +606,9 @@ export default function LessonCaptureScreen({navigation}) {
     const secN = resp.section_writes || 0;
     Alert.alert(
       '已挂到曲目重点',
-      `${nameOf(studentRef.current)}：\n${lines || '（本课只挂了分段重点）'}${
+      `${namesOf(allStu)}：\n${lines || '（本课只挂了分段重点）'}${
         secN ? `\n另有 ${secN} 处写进了谱面分段重点。` : ''
-      }\n\n学生可在「练琴 → 课堂重点历史」里看到；通用重点也会进陪练。`,
+      }\n\n课堂反馈会同时出现在所选学生手里；通用重点也会进陪练。`,
       [{text: '好', onPress: () => navigation.goBack()}],
     );
   };
@@ -562,6 +618,7 @@ export default function LessonCaptureScreen({navigation}) {
   const curIdx = current ? current.idx : 0;
   const curPiece = pieceFor[curIdx] || (current && current.piece) || '';
   const pieces = (student && student.pieces) || [];
+  const lessonPeople = studentsInLesson.length ? studentsInLesson : student ? [student] : [];
 
   const pieceChips = (idx, chosen) => (
     <View style={styles.chipWrap}>
@@ -581,7 +638,14 @@ export default function LessonCaptureScreen({navigation}) {
       {resumable ? (
         <View style={[styles.card, styles.warnCard]}>
           <Text style={styles.cardTitle}>
-            {nameOf(resumable.student)} 的课还没确认
+            {namesOf(
+              Array.isArray(resumable.students) && resumable.students.length
+                ? resumable.students
+                : resumable.student
+                  ? [resumable.student]
+                  : [],
+            )}{' '}
+            的课还没确认
           </Text>
           <View style={styles.row}>
             <TouchableOpacity style={[styles.btn, styles.flex]} onPress={() => resume(resumable)}>
@@ -598,7 +662,10 @@ export default function LessonCaptureScreen({navigation}) {
           </View>
         </View>
       ) : null}
-      <Text style={styles.title}>这节课是谁？点名字就开始</Text>
+      <Text style={styles.title}>这节课是谁？可多选</Text>
+      <Text style={styles.hint}>
+        点名字勾选，再点「开始上课」。集体课的课堂反馈会同时出现在所选学生手里。
+      </Text>
       {students && students.length > 8 ? (
         <TextInput
           style={styles.input}
@@ -612,23 +679,41 @@ export default function LessonCaptureScreen({navigation}) {
         <ActivityIndicator color={colors.primary} style={styles.spin} />
       ) : (
         <View style={styles.chipWrap}>
-          {shownStudents.map(s => (
-            <TouchableOpacity
-              key={s.id}
-              style={styles.stuChip}
-              disabled={starting}
-              onPress={() => begin(s)}>
-              <Text style={styles.stuName}>{nameOf(s)}</Text>
-              <Text style={styles.stuSub}>
-                {s.pieces && s.pieces.length ? `${s.pieces.length} 首曲目` : '还没有曲目'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {shownStudents.map(s => {
+            const on = isSelected(s.id);
+            return (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.stuChip, on && styles.stuChipOn]}
+                disabled={starting}
+                onPress={() => toggleSelect(s)}>
+                <Text style={[styles.stuName, on && styles.stuNameOn]}>
+                  {on ? '✓ ' : ''}
+                  {nameOf(s)}
+                </Text>
+                <Text style={[styles.stuSub, on && styles.stuSubOn]}>
+                  {s.pieces && s.pieces.length ? `${s.pieces.length} 首曲目` : '还没有曲目'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
           {!shownStudents.length ? (
             <Text style={styles.hint}>还没有学生。可以在「学生信息录入」或「陪练提示设置」里先添加。</Text>
           ) : null}
         </View>
       )}
+      <TouchableOpacity
+        style={[styles.btn, (starting || selected.length < 1) && styles.btnDim]}
+        disabled={starting || selected.length < 1}
+        onPress={() => begin(selected)}>
+        <Text style={styles.btnText}>
+          {starting
+            ? '准备中…'
+            : selected.length
+              ? `开始上课（${selected.length} 人）`
+              : '开始上课'}
+        </Text>
+      </TouchableOpacity>
       {starting ? <ActivityIndicator color={colors.primary} style={styles.spin} /> : null}
       <TouchableOpacity onPress={() => setManualOpen(v => !v)}>
         <Text style={styles.link}>{manualOpen ? '收起' : '名单里没有？用学生码'}</Text>
@@ -649,9 +734,14 @@ export default function LessonCaptureScreen({navigation}) {
               const id = manualId.trim();
               if (!id) return;
               const known = (students || []).find(s => s.id === id);
-              begin(known || {id, name: '', pieces: []});
+              const stu = known || {id, name: '', pieces: []};
+              if (!known) {
+                setStudents(prev => (prev ? [...prev, stu] : [stu]));
+              }
+              if (!isSelected(id)) toggleSelect(stu);
+              setManualId('');
             }}>
-            <Text style={styles.btnText}>开始</Text>
+            <Text style={styles.btnText}>加入</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -665,7 +755,7 @@ export default function LessonCaptureScreen({navigation}) {
     <>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>{nameOf(student)}</Text>
+          <Text style={styles.cardTitle}>{namesOf(lessonPeople)}</Text>
           <Text style={[styles.status, listening ? styles.statusOn : null]}>
             {listening ? `● 正在听 ${clock(elapsed)}` : starting ? '准备中…' : '已暂停'}
           </Text>
@@ -776,9 +866,9 @@ export default function LessonCaptureScreen({navigation}) {
             </TouchableOpacity>
           </View>
         ) : null}
-        <Text style={styles.title}>{nameOf(student)} · 这节课的重点</Text>
+        <Text style={styles.title}>{namesOf(lessonPeople)} · 这节课的重点</Text>
         <Text style={styles.hint}>
-          选好曲目，每条重点选挂到「通用重点」或「第N段」谱面分段重点。分段建议会出现在谱面编辑里原有快捷语下面。
+          选好曲目，每条重点选挂到「通用重点」或「第N段」谱面分段重点。分段建议会出现在谱面编辑里原有快捷语下面。多人课时确认后会同步给每位所选学生。
         </Text>
         {reviewSegs.map((g, i) => {
           const chosen = pieceFor[g.idx] || g.piece || '';
@@ -967,8 +1057,11 @@ function makeStyles(colors) {
       paddingVertical: 10,
       minWidth: 96,
     },
+    stuChipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
     stuName: {color: colors.textPrimary, fontSize: 16, fontWeight: '700'},
+    stuNameOn: {color: '#fff'},
     stuSub: {color: colors.textSecondary, fontSize: 12, marginTop: 2},
+    stuSubOn: {color: 'rgba(255,255,255,0.85)'},
     card: {
       backgroundColor: colors.card || '#fff',
       borderRadius: 14,
