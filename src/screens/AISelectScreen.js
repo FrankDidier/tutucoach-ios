@@ -28,6 +28,8 @@ const px = n => Math.round(n * S);
 
 // 蓝湖 AI选择 卡片副标题：AI分身 / 温柔亲和
 function stillUnlocked(id, wallet, coach) {
+  // 公测免费期内所有角色可直接用，不弹光币解锁。
+  if (wallet && (wallet.freeBeta || wallet.free_beta)) return true;
   if ((coach && Number(coach.rentPrice) || 0) <= 0) return true;
   const exp = wallet && wallet.unlockExpires && wallet.unlockExpires[id];
   if (exp && Number(exp) * 1000 <= Date.now()) return false;
@@ -69,6 +71,7 @@ const AISelectScreen = ({navigation, route}) => {
     unlocked: [],
     unlockExpires: {},
     freeUses: null,
+    freeBeta: false,
   });
   const [unlocking, setUnlocking] = useState(false);
 
@@ -76,6 +79,7 @@ const AISelectScreen = ({navigation, route}) => {
     try {
       const r = await fetchCoaches();
       if (r && r.ok && Array.isArray(r.coaches)) {
+        // 空数组也要落盘：小提琴/二胡无角色时绝不能回退到本地 3 个旧预制。
         setRemoteCoaches(r.coaches.filter(c => c.enabled !== false));
       }
     } catch (e) {}
@@ -87,6 +91,7 @@ const AISelectScreen = ({navigation, route}) => {
           unlocked: Array.isArray(w.unlocked) ? w.unlocked : [],
           unlockExpires: w.unlockExpires || {},
           freeUses: freeUsesFromWallet(w),
+          freeBeta: !!(w.free_beta || w.freeBeta),
         });
       }
     } catch (e) {}
@@ -111,6 +116,10 @@ const AISelectScreen = ({navigation, route}) => {
   );
 
   const onConfirm = async () => {
+    if (remoteCoaches != null && remoteCoaches.length === 0) {
+      Alert.alert('暂无角色', '当前乐器暂无可选角色，请先在后台为该乐器配置角色。');
+      return;
+    }
     const picked = (remoteCoaches || []).find(x => x.id === selected);
     const price = picked ? Number(picked.rentPrice) || 0 : 0;
     const already = stillUnlocked(selected, wallet, picked);
@@ -158,6 +167,7 @@ const AISelectScreen = ({navigation, route}) => {
             [selected]: Number(r.expiresAt) || Math.floor(Date.now() / 1000) + 86400,
           },
           freeUses: freeUsesFromWallet(r) || prev.freeUses,
+          freeBeta: !!(r.free_beta || r.freeBeta) || !!prev.freeBeta,
         }));
       } catch (e) {
         Alert.alert('解锁失败', '网络异常，请稍后重试');
@@ -191,22 +201,24 @@ const AISelectScreen = ({navigation, route}) => {
   };
 
   const gridItems = useMemo(() => {
+    // remoteCoaches===null：尚未拉到服务器，临时用内置占位；
+    // 已拉到（含空数组）：严格按服务器结果，避免小提琴/二胡空列表回退出 3 个旧预制。
     const source =
-      remoteCoaches && remoteCoaches.length
-        ? remoteCoaches.map(c => ({
+      remoteCoaches == null
+        ? builtInProfiles.map(p => ({
+            id: p.id,
+            name: p.displayName,
+            style: p.style,
+            rentPrice: p.id === 'coach_pro' ? 0 : 80,
+            unlocked: p.id === 'coach_pro',
+          }))
+        : remoteCoaches.map(c => ({
             id: c.id,
             name: c.name,
             style: c.style,
             avatarUrl: c.avatarUrl,
             rentPrice: Number(c.rentPrice) || 0,
             unlocked: !!c.unlocked,
-          }))
-        : builtInProfiles.map(p => ({
-            id: p.id,
-            name: p.displayName,
-            style: p.style,
-            rentPrice: p.id === 'coach_pro' ? 0 : 80,
-            unlocked: p.id === 'coach_pro',
           }));
     return source.map(c => ({
       id: c.id,
@@ -242,38 +254,42 @@ const AISelectScreen = ({navigation, route}) => {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
         <View style={styles.grid}>
-          {gridItems.map(item => {
-            const active = selected === item.id;
-            return (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.9}
-                style={[styles.cell, active && styles.cellSelected]}
-                onPress={() => setSelected(item.id)}>
-                <View style={styles.avatarCircle}>
-                  <Image
-                    source={item.avatar}
-                    style={styles.avatarImg}
-                    resizeMode="cover"
-                  />
-                </View>
-                <View style={styles.cellTextCol}>
-                  <Text
-                    style={[styles.cellName, active && styles.cellNameSelected]}
-                    numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.cellSubtitle} numberOfLines={1}>
-                    {item.unlocked
-                      ? item.styleText
-                      : item.rentPrice > 0
-                        ? `${item.rentPrice} 光币解锁一天`
-                        : item.styleText}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+          {remoteCoaches != null && gridItems.length === 0 ? (
+            <Text style={styles.emptyHint}>当前乐器暂无可选角色</Text>
+          ) : (
+            gridItems.map(item => {
+              const active = selected === item.id;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.9}
+                  style={[styles.cell, active && styles.cellSelected]}
+                  onPress={() => setSelected(item.id)}>
+                  <View style={styles.avatarCircle}>
+                    <Image
+                      source={item.avatar}
+                      style={styles.avatarImg}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View style={styles.cellTextCol}>
+                    <Text
+                      style={[styles.cellName, active && styles.cellNameSelected]}
+                      numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.cellSubtitle} numberOfLines={1}>
+                      {item.unlocked
+                        ? item.styleText
+                        : item.rentPrice > 0
+                          ? `${item.rentPrice} 光币解锁一天`
+                          : item.styleText}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
 
@@ -315,6 +331,13 @@ const makeStyles = (colors, dark) =>
     walletHint: {width: 72, textAlign: 'right', fontSize: 12, color: colors.textMuted, paddingRight: 8},
     // 蓝湖卡片区从 y≈98；顶栏后 padTop 约 10
     scroll: {paddingHorizontal: px(15), paddingTop: px(10), paddingBottom: 100},
+    emptyHint: {
+      width: '100%',
+      textAlign: 'center',
+      color: colors.textMuted,
+      fontSize: 14,
+      paddingVertical: px(40),
+    },
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',

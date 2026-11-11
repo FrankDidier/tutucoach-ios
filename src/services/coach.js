@@ -5,7 +5,7 @@ import {currentInstrument} from './instrument';
 
 /** 拉取后台配置的可见 AI 角色（含 voiceId / systemPrompt）。
  * 带 viewer=本设备id：这样能额外看到「自己老师」设为班内/私有且已审核通过的分身。
- * instrument=当前乐器：过滤「全乐器」或匹配该乐器的角色。 */
+ * instrument=当前乐器：只返回匹配该乐器的角色（空列表表示当前乐器暂无角色）。 */
 export function fetchCoaches() {
   return getJson('/api/coach/list', {
     viewer: getDeviceId(),
