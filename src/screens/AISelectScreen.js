@@ -125,26 +125,30 @@ const AISelectScreen = ({navigation, route}) => {
     const already = stillUnlocked(selected, wallet, picked);
     if (picked && !already) {
       if (unlocking) return;
-      if ((Number(wallet.balance) || 0) < price) {
-        Alert.alert(
-          '光币不够',
-          `解锁「${picked.name}」需要 ${price} 光币，当前 ${wallet.balance || 0} 光币。订阅可获得光币。`,
-        );
-        return;
-      }
       const freeLeft =
         wallet.freeUses && Number(wallet.freeUses.remaining) > 0
           ? Number(wallet.freeUses.remaining)
           : 0;
-      const freeHint =
-        freeLeft > 0 ? `\n本月还可免费使用 ${freeLeft} 次。` : '';
+      const bal = Number(wallet.balance) || 0;
+      // 有免费次数时不要求光币余额；否则余额不足才拦截。
+      if (freeLeft <= 0 && bal < price) {
+        Alert.alert(
+          '光币不够',
+          `解锁「${picked.name}」需要 ${price} 光币，当前 ${bal} 光币。订阅可获得光币。`,
+        );
+        return;
+      }
+      const msg =
+        freeLeft > 0
+          ? `本月还有 ${freeLeft} 次免费解锁，确认免费使用「${picked.name}」一整天？\n（不扣光币；到期后需再解锁）`
+          : `用 ${price} 光币解锁「${picked.name}」一整天？到期后需再花光币。`;
       const go = await new Promise(resolve => {
         Alert.alert(
-          '解锁角色',
-          `用 ${price} 光币解锁「${picked.name}」一整天？到期后需再花光币。${freeHint}`,
+          freeLeft > 0 ? '免费解锁' : '解锁角色',
+          msg,
           [
             {text: '取消', style: 'cancel', onPress: () => resolve(false)},
-            {text: '解锁', onPress: () => resolve(true)},
+            {text: freeLeft > 0 ? '免费使用' : '解锁', onPress: () => resolve(true)},
           ],
         );
       });

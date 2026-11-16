@@ -1203,6 +1203,9 @@ export default function CompanionScreen({navigation}) {
               {coachName} ▾
             </Text>
           </TouchableOpacity>
+          <View style={styles.aiGeneratedBadge}>
+            <Text style={styles.aiGeneratedBadgeText}>AI生成·仅供参考</Text>
+          </View>
           <View style={{flex: 1}} />
           <TouchableOpacity
             onPress={pickPracticeTime}
@@ -1321,10 +1324,19 @@ export default function CompanionScreen({navigation}) {
           {messages.map(m => (
             <View
               key={m.key}
-              style={[styles.bubble, m.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}>
-              <Text style={m.role === 'user' ? styles.bubbleUserText : styles.bubbleAiText}>
-                {m.shown}
-              </Text>
+              style={[
+                styles.bubbleWrap,
+                m.role === 'user' ? styles.bubbleWrapUser : styles.bubbleWrapAi,
+              ]}>
+              <View
+                style={[styles.bubble, m.role === 'user' ? styles.bubbleUser : styles.bubbleAi]}>
+                <Text style={m.role === 'user' ? styles.bubbleUserText : styles.bubbleAiText}>
+                  {m.shown}
+                </Text>
+              </View>
+              {m.role !== 'user' ? (
+                <Text style={styles.aiGeneratedTag}>AI生成·仅供参考</Text>
+              ) : null}
             </View>
           ))}
         </ScrollView>
@@ -1539,12 +1551,30 @@ const makeStyles = colors =>
   forgetIcon: {color: '#fff', fontSize: 18, fontWeight: '700', marginTop: -1},
   chat: {flex: 1},
   chatContent: {padding: 12, paddingBottom: 8},
-  bubble: {maxWidth: '82%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10},
+  aiGeneratedBadge: {
+    marginLeft: 8,
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+  },
+  aiGeneratedBadgeText: {color: '#E3A1FF', fontSize: 11, fontWeight: '700'},
+  bubbleWrap: {maxWidth: '82%', marginBottom: 10},
+  bubbleWrapAi: {alignSelf: 'flex-start'},
+  bubbleWrapUser: {alignSelf: 'flex-end'},
+  bubble: {borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10},
   // 蓝湖气泡正文 13；AI 底 #1A1A1A
-  bubbleAi: {alignSelf: 'flex-start', backgroundColor: '#1A1A1A'},
-  bubbleUser: {alignSelf: 'flex-end', backgroundColor: colors.primary},
+  bubbleAi: {backgroundColor: '#1A1A1A'},
+  bubbleUser: {backgroundColor: colors.primary},
   bubbleAiText: {color: '#fff', fontSize: 13, lineHeight: 20},
   bubbleUserText: {color: '#fff', fontSize: 13, lineHeight: 20},
+  aiGeneratedTag: {
+    marginTop: 3,
+    marginLeft: 4,
+    color: 'rgba(227,161,255,0.8)',
+    fontSize: 10,
+  },
   metro: {marginBottom: 10, marginHorizontal: 14},
   inputBar: {
     backgroundColor: 'transparent',

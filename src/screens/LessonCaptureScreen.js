@@ -757,7 +757,11 @@ export default function LessonCaptureScreen({navigation}) {
         <View style={styles.rowBetween}>
           <Text style={styles.cardTitle}>{namesOf(lessonPeople)}</Text>
           <Text style={[styles.status, listening ? styles.statusOn : null]}>
-            {listening ? `● 正在听 ${clock(elapsed)}` : starting ? '准备中…' : '已暂停'}
+            {listening
+              ? `● 正在录音 ${clock(elapsed)}`
+              : starting
+                ? '等待录音启动'
+                : '已暂停'}
           </Text>
         </View>
         {netBad ? <Text style={styles.warn}>网络不稳，说的话先存在手机上，连上后自动补传。</Text> : null}
@@ -779,9 +783,21 @@ export default function LessonCaptureScreen({navigation}) {
           />
         ) : (
           <TouchableOpacity onPress={() => setNewPieceOpen(true)}>
-            <Text style={styles.link}>＋ 新曲目</Text>
+            <Text style={styles.link}>＋ 新增曲目</Text>
           </TouchableOpacity>
         )}
+        {curPiece ? (
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('ScoreEditor', {
+                studentId: (lessonPeople || [])[0]?.id || getDeviceId(),
+                studentName: namesOf(lessonPeople),
+                pieceName: curPiece,
+              })
+            }>
+            <Text style={styles.link}>编辑和调整乐谱 ›</Text>
+          </TouchableOpacity>
+        ) : null}
         {current && (current.points || []).length ? (
           (current.points || []).map((p, i) => (
             <Text key={i} style={styles.point}>
@@ -792,7 +808,9 @@ export default function LessonCaptureScreen({navigation}) {
         <Text style={styles.heard} numberOfLines={3}>
           {current && current.chars
             ? `已记下 ${current.chars} 字：…${(current.text || '').slice(-60)}`
-            : '还没听到这首的内容'}
+            : listening
+              ? '暂无录音内容'
+              : '还没听到这首的内容'}
         </Text>
       </View>
 
@@ -803,7 +821,7 @@ export default function LessonCaptureScreen({navigation}) {
           pressNext();
           setNewPieceOpen(false);
         }}>
-        <Text style={styles.nextText}>{nextPending ? '正在切到下一首…' : '下一首 ▶'}</Text>
+        <Text style={styles.nextText}>{nextPending ? '正在切到下一首…' : '下一首'}</Text>
       </TouchableOpacity>
 
       <View style={styles.row}>
@@ -822,10 +840,10 @@ export default function LessonCaptureScreen({navigation}) {
         <TouchableOpacity
           style={[styles.btnGhost, styles.flex]}
           onPress={() => (dimmed ? undim() : dimOn())}>
-          <Text style={styles.btnGhostText}>{dimmed ? '亮屏' : '关屏省电'}</Text>
+          <Text style={styles.btnGhostText}>{dimmed ? '亮屏' : '息屏省电'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btn, styles.flex]} disabled={starting} onPress={askFinish}>
-          <Text style={styles.btnText}>下课，整理重点</Text>
+          <Text style={styles.btnText}>结束整理</Text>
         </TouchableOpacity>
       </View>
       {dimmed ? (
@@ -996,7 +1014,10 @@ export default function LessonCaptureScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.root}>
-      <ScreenHeader title="上课录音" onBack={leave} />
+      <ScreenHeader
+        title={phase === 'live' ? '录音详情' : '上课录音'}
+        onBack={leave}
+      />
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

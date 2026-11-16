@@ -40,7 +40,13 @@ export async function getJson(path, params, headers) {
     }),
     TIMEOUT_MS,
   );
-  return res.json();
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch (_) {
+    // Production may briefly 404 HTML for newly added routes before deploy.
+    return {ok: false, error: 'bad_json', status: res.status, items: []};
+  }
 }
 
 // 上传 multipart/form-data（不要手动设置 Content-Type，交给 fetch 自动带 boundary）。

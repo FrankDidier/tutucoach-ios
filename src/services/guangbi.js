@@ -46,3 +46,17 @@ export function requestCashout(amount, teacherId) {
     amount,
   });
 }
+
+/** kind: all | recharge | spend */
+export function fetchLedger(userId, kind = 'all') {
+  return getJson('/api/guangbi/ledger', {
+    user_id: userId || getDeviceId(),
+    kind,
+  });
+}
+
+export function fetchTeacherIncome(teacherId) {
+  return getJson('/api/guangbi/teacher_income', {
+    teacher_id: teacherId || getDeviceId(),
+  });
+}

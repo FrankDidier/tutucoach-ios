@@ -80,6 +80,13 @@ export const Images = {
   ailistDeleteLight: require('./img/ailist_delete_light.png'),
   pointsCard: require('./img/bg_points_card_img.png'),
   cardHeaderGradient: require('./img/bg_card_header_gradient.png'),
+  // 蓝湖二级页顶 375×220 柔光（新稿 t1/t2）
+  lanhuPageHeaderDark: require('./img/lanhu_page_header_dark.png'),
+  lanhuPageHeaderLight: require('./img/lanhu_page_header_light.png'),
+  lanhuWalletCardDark: require('./img/lanhu_wallet_card_dark.png'),
+  lanhuWalletCardLight: require('./img/lanhu_wallet_card_light.png'),
+  lanhuShield: require('./img/lanhu_shield.png'),
+  lanhuCheck: require('./img/lanhu_check.png'),
   detectHeaderLight: require('./img/bg_detect_header_light.png'),
   detectHeaderDark: require('./img/bg_detect_header_dark.png'),
   detectCameraLight: require('./img/ic_det_camera_light.png'),

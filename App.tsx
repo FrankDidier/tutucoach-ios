@@ -27,13 +27,24 @@ import LessonHistoryScreen from './src/screens/LessonHistoryScreen';
 import LegalScreen from './src/screens/LegalScreen';
 import ScoreEditorScreen from './src/screens/ScoreEditorScreen';
 import ScoreViewerScreen from './src/screens/ScoreViewerScreen';
+import RechargeScreen from './src/screens/RechargeScreen';
+import RechargeSuccessScreen from './src/screens/RechargeSuccessScreen';
+import LedgerHistoryScreen from './src/screens/LedgerHistoryScreen';
+import WithdrawScreen from './src/screens/WithdrawScreen';
+import WithdrawHistoryScreen from './src/screens/WithdrawHistoryScreen';
+import IncomeDetailScreen from './src/screens/IncomeDetailScreen';
+import LessonDetailScreen from './src/screens/LessonDetailScreen';
 
 import {Images} from './src/assets/images';
 import {getItem, setItem} from './src/services/storage';
 import {initDeviceId, getDeviceId} from './src/services/device';
 import {startStoreListener} from './src/services/appStore';
 import {askAiConsent, getAiConsent} from './src/services/aiConsent';
+import {privacyAgreed} from './src/services/privacyConsent';
+import {registerAndroidTeacherPrompt} from './src/services/teacherAuth';
 import AiConsentHost from './src/components/AiConsentHost';
+import PrivacyHost from './src/components/PrivacyHost';
+import TeacherPassModal from './src/components/TeacherPassModal';
 import withAiConsent from './src/components/withAiConsent';
 
 const CompanionGated = withAiConsent(CompanionScreen);
@@ -123,27 +134,36 @@ function AppInner(): React.JSX.Element {
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
   // Lanhu audit: AsyncStorage verify_boot_route → stack/tab name for cold start.
   const [bootParams, setBootParams] = useState<Record<string, unknown> | undefined>();
+  const [teacherPass, setTeacherPass] = useState<{
+    onCancel: () => void;
+    onSubmit: (token: string) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    registerAndroidTeacherPrompt(handlers => setTeacherPass(handlers));
+    return () => registerAndroidTeacherPrompt(null);
+  }, []);
 
   useEffect(() => {
     (async () => {
-      // 先固化稳定设备 ID（账号/会员/练习/入班绑定都依赖它），再决定首屏。
-      await initDeviceId();
-      // 一进 App 就开始下陪练照片，老师拿给朋友看时不用等进到那一页才开始读。
-      try {
-        const coachId = await getSelectedCoachId();
-        const avatar = await getCachedCoachAvatarUri(coachId);
-        const thumb = avatar ? await getCachedCoachAvatarThumb(coachId) : null;
-        rememberCompanionPhoto(coachId, avatar, thumb);
-        if (avatar && String(avatar).startsWith('http')) {
-          const preview = previewAvatarUrl(String(avatar));
-          if (preview) Image.prefetch(preview).catch(() => {});
-          Image.prefetch(String(avatar)).catch(() => {});
-          if (!thumb) rememberCoachAvatarThumb(coachId, String(avatar));
-        }
-      } catch (e) {}
-      // 冷启动即静默注册到服务端，避免学生没进过「我的」导致老师入班找不到 ID。
-      // 不等它返回，否则进陪练要先卡住账号请求。
-      registerAccount(getDeviceId(), 'student').catch(() => {});
+      // 应用商店：未同意《隐私政策》前不初始化设备号、不静默注册。
+      const privacyOk = await privacyAgreed();
+      if (privacyOk) {
+        await initDeviceId();
+        try {
+          const coachId = await getSelectedCoachId();
+          const avatar = await getCachedCoachAvatarUri(coachId);
+          const thumb = avatar ? await getCachedCoachAvatarThumb(coachId) : null;
+          rememberCompanionPhoto(coachId, avatar, thumb);
+          if (avatar && String(avatar).startsWith('http')) {
+            const preview = previewAvatarUrl(String(avatar));
+            if (preview) Image.prefetch(preview).catch(() => {});
+            Image.prefetch(String(avatar)).catch(() => {});
+            if (!thumb) rememberCoachAvatarThumb(coachId, String(avatar));
+          }
+        } catch (e) {}
+        registerAccount(getDeviceId(), 'student').catch(() => {});
+      }
       // 注册微信（已集成原生模块且配好 Universal Link 后生效；未集成时安全跳过）。
       registerWeChat();
       // App Store 订阅：续费等不经过购买按钮的交易也要收下并开通会员。
@@ -218,11 +238,18 @@ function AppInner(): React.JSX.Element {
           'LessonPlan',
           'LessonCapture',
           'LessonHistory',
+          'LessonDetail',
           'Detection',
           'MainTabs',
           'StudentReminder',
           'StudentEntry',
           'ScoreViewer',
+          'Recharge',
+          'RechargeSuccess',
+          'LedgerHistory',
+          'Withdraw',
+          'WithdrawHistory',
+          'IncomeDetail',
         ].includes(boot)
       ) {
         setInitialRoute(boot);
@@ -288,6 +315,13 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="LessonPlan" component={LessonPlanGated} />
         <Stack.Screen name="LessonCapture" component={LessonCaptureGated} />
         <Stack.Screen name="LessonHistory" component={LessonHistoryScreen} />
+        <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
+        <Stack.Screen name="Recharge" component={RechargeScreen} />
+        <Stack.Screen name="RechargeSuccess" component={RechargeSuccessScreen} />
+        <Stack.Screen name="LedgerHistory" component={LedgerHistoryScreen} />
+        <Stack.Screen name="Withdraw" component={WithdrawScreen} />
+        <Stack.Screen name="WithdrawHistory" component={WithdrawHistoryScreen} />
+        <Stack.Screen name="IncomeDetail" component={IncomeDetailScreen} />
         <Stack.Screen name="Legal" component={LegalScreen} />
         <Stack.Screen name="CheckinStats" component={CheckinStatsScreen} />
         <Stack.Screen name="StudentEntry" component={StudentEntryScreen} />
@@ -302,7 +336,20 @@ function AppInner(): React.JSX.Element {
           initialParams={initialRoute === 'ScoreViewer' ? bootParams : undefined}
         />
       </Stack.Navigator>
+      <PrivacyHost navigationRef={navigationRef} />
       <AiConsentHost navigationRef={navigationRef} />
+      <TeacherPassModal
+        visible={!!teacherPass}
+        onCancel={() => {
+          teacherPass?.onCancel?.();
+          setTeacherPass(null);
+        }}
+        onSubmit={token => {
+          const submit = teacherPass?.onSubmit;
+          setTeacherPass(null);
+          submit?.(token);
+        }}
+      />
     </NavigationContainer>
   );
 }

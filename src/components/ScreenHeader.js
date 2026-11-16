@@ -1,25 +1,27 @@
 import React, {useMemo} from 'react';
 import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
 
-// 与安卓二级页头部 1:1：蓝湖 375×220 柔光底 + 返回 + 居中标题。
+// 与蓝湖二级页头部 1:1：375×220 柔光底裁顶栏 + 返回 + 居中标题（t1/t2）。
 const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
   const {colors, mode} = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const detect = variant === 'detect';
-  // detect 页由 DetectionScreen 铺满 375×220 柔光底，此处不再叠一层裁切图
   const headerBg = detect
     ? null
     : mode === 'light'
-      ? Images.cardHeaderGradient
-      : null;
+      ? Images.lanhuPageHeaderLight || Images.cardHeaderGradient
+      : Images.lanhuPageHeaderDark;
+
   return (
-    <View style={[styles.wrap, detect && styles.wrapDetect]}>
+    <View style={[styles.wrap, detect && styles.wrapDetect, {paddingTop: Math.max(insets.top, 0)}]}>
       {headerBg ? (
         <Image
           source={headerBg}
-          style={StyleSheet.absoluteFill}
+          style={styles.bg}
           resizeMode="cover"
         />
       ) : null}
@@ -57,12 +59,18 @@ const makeStyles = colors =>
       minHeight: 56,
       backgroundColor: 'transparent',
     },
+    bg: {
+      ...StyleSheet.absoluteFillObject,
+      // 蓝湖 375×220 顶柔光：只露出导航带高度
+      height: 220,
+    },
     bar: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingVertical: 10,
+      minHeight: 44,
     },
     side: {
       width: 40,

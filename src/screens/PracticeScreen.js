@@ -13,9 +13,21 @@ import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
-import {useFocusEffect} from '@react-navigation/native';
+import {CommonActions, useFocusEffect} from '@react-navigation/native';
 import {getDeviceId} from '../services/device';
 import {fetchLessonRecap} from '../services/companionChat';
+
+function openLessonHistory(navigation) {
+  const jump = nav => {
+    if (!nav || typeof nav.dispatch !== 'function') return false;
+    nav.dispatch(CommonActions.navigate({name: 'LessonHistory'}));
+    return true;
+  };
+  if (jump(navigation)) return;
+  const parent = navigation?.getParent?.();
+  if (jump(parent)) return;
+  jump(parent?.getParent?.());
+}
 
 // 蓝湖设计稿基准宽度 375pt；按屏宽等比缩放，保证与设计稿 1:1 的相对尺寸/间距。
 const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
@@ -88,7 +100,7 @@ const PracticeScreen = ({navigation}) => {
         {recap ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('LessonHistory')}
+            onPress={() => openLessonHistory(navigation)}
             style={{
               marginHorizontal: px(15),
               marginTop: 8,
@@ -106,7 +118,7 @@ const PracticeScreen = ({navigation}) => {
         ) : null}
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => navigation.navigate('LessonHistory')}
+          onPress={() => openLessonHistory(navigation)}
           style={{
             marginHorizontal: px(15),
             marginTop: recap ? 6 : 8,
@@ -114,9 +126,14 @@ const PracticeScreen = ({navigation}) => {
             paddingHorizontal: 12,
             borderRadius: 12,
             backgroundColor: dark ? 'rgba(181,149,255,0.1)' : 'rgba(255,95,131,0.08)',
-          }}>
+            // 兔子绝对定位会上移盖住此条；抬高命中层保证可点进「课堂重点」
+            zIndex: 20,
+            elevation: 20,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="课堂重点">
           <Text style={{color: colors.primary, fontWeight: '700', fontSize: 14}}>
-            课堂重点历史 ›
+            课堂重点 ›
           </Text>
         </TouchableOpacity>
 
@@ -146,7 +163,7 @@ const PracticeScreen = ({navigation}) => {
 
           {/* 兔子：夹在 MUSIC 水印(zIndex0) 与 主卡(zIndex2) 之间 → 兔子在 MUSIC 之前、主卡之后。
               位置与之前一致（原在 hero 内 top:-23；移入 cardOuter 后 top = -23 - hero高156 = -179）。 */}
-          <RabbitMascot loopAction="stand" style={styles.mascot} />
+          <RabbitMascot loopAction="stand" style={styles.mascot} pointerEvents="none" />
 
           {/* 主卡片：带缺口的容器贴图 + 内部绝对定位 */}
           <View style={styles.card}>

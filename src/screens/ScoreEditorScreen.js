@@ -35,6 +35,7 @@ import {
   deleteScore,
 } from '../services/score';
 import {fetchPieceLessonTips} from '../services/companionChat';
+import UploadMethodSheet from '../components/UploadMethodSheet';
 
 const SCORE_IMG_OPTS = {
   // 相册 ph:// 不带 base64 时 FormData 会挂死；压到 1600 + base64 保证立刻能传。
@@ -178,6 +179,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   // 全屏放大看谱（眼神不好也能点准术语）
   const [zoomPage, setZoomPage] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const [uploadSheet, setUploadSheet] = useState(false);
 
   const load = async () => {
     if (route?.params?.preview) {
@@ -859,7 +861,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   return (
     <SafeAreaView style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <ScreenHeader title="乐谱上传与重点框" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="乐谱上传及重点框" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={ui.scroll}>
         <View style={ui.card}>
           <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
@@ -899,20 +901,8 @@ export default function ScoreEditorScreen({navigation, route}) {
             <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
           ) : null}
           <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={doCameraSequential}>
-              <Text style={ui.btnText}>拍照拍谱</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[ui.btn, ui.btnGhost]}
-              onPress={() =>
-                doUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}))
-              }>
-              <Text style={ui.btnGhostText}>相册多选</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => doUpload(pickPdf)}>
-              <Text style={ui.btnText}>上传 PDF</Text>
+            <TouchableOpacity style={ui.btn} onPress={() => setUploadSheet(true)}>
+              <Text style={ui.btnText}>添加乐谱</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onRecognizeTerms}>
               <Text style={ui.btnGhostText}>翻译术语</Text>
@@ -1433,6 +1423,15 @@ export default function ScoreEditorScreen({navigation, route}) {
         }}
         onSave={saveSectionNote}
         onDelete={deleteSection}
+      />
+      <UploadMethodSheet
+        visible={uploadSheet}
+        onClose={() => setUploadSheet(false)}
+        onCamera={doCameraSequential}
+        onGallery={() =>
+          doUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}))
+        }
+        onPdf={() => doUpload(pickPdf)}
       />
     </SafeAreaView>
   );

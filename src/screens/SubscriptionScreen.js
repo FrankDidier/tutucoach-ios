@@ -348,8 +348,13 @@ const SubscriptionScreen = ({navigation}) => {
                 try {
                   const r = await payWithWeChat(pack.id, getDeviceId());
                   if (r && r.ok) {
-                    Alert.alert('充值成功', `已到账 ${pack.guangbi} 光币`);
                     refreshVip();
+                    navigation.navigate('RechargeSuccess', {
+                      amount: pack.price,
+                      guangbi: pack.guangbi,
+                      method: '微信',
+                      at: Date.now(),
+                    });
                   } else {
                     Alert.alert('充值', (r && r.message) || '支付未完成，可改用连续订阅。');
                   }

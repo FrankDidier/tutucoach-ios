@@ -10,7 +10,6 @@ import {
   StatusBar,
   Alert,
   Platform,
-  TextInput,
 } from 'react-native';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
@@ -21,13 +20,14 @@ import {
 import {ensureTeacherUnlocked} from '../services/teacherAuth';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
-import {fetchTeacherGuangbi, requestCashout} from '../services/guangbi';
+import {fetchTeacherGuangbi} from '../services/guangbi';
 import {
-  INSTRUMENTS,
   currentInstrument,
+  instrumentName,
   loadInstrument,
   setInstrument,
 } from '../services/instrument';
+import InstrumentPickerModal from '../components/InstrumentPickerModal';
 
 const TeacherProfileScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
@@ -37,9 +37,9 @@ const TeacherProfileScreen = ({navigation}) => {
   const [avatarUri, setAvatar] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [gb, setGb] = useState(0);
-  const [cashAmt, setCashAmt] = useState('');
   const [yuan, setYuan] = useState(0);
   const [instrument, setInst] = useState(currentInstrument());
+  const [instPicker, setInstPicker] = useState(false);
 
   const MenuRow = ({icon, label, onPress, divider}) => (
     <TouchableOpacity
@@ -173,85 +173,45 @@ const TeacherProfileScreen = ({navigation}) => {
         </View>
 
         <View style={styles.cardGroup}>
-          <View style={styles.cashBlock}>
+          <TouchableOpacity
+            style={styles.cashBlock}
+            activeOpacity={0.85}
+            onPress={() => setInstPicker(true)}>
             <Text style={styles.cashTitle}>乐器模式</Text>
-            <Text style={styles.cashHint}>切换后，曲目推荐和教案会按这个乐器出曲目</Text>
-            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8}}>
-              {INSTRUMENTS.map(it => {
-                const on = instrument === it.id;
-                return (
-                  <TouchableOpacity
-                    key={it.id}
-                    onPress={() => {
-                      setInst(it.id);
-                      setInstrument(it.id);
-                    }}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 14,
-                      backgroundColor: on ? '#7F47FE' : 'transparent',
-                      borderWidth: 1,
-                      borderColor: on ? '#7F47FE' : '#ccc',
-                    }}>
-                    <Text style={{color: on ? '#fff' : colors.textPrimary, fontWeight: '600'}}>
-                      {it.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+            <Text style={styles.cashHint}>
+              当前：{instrumentName(instrument)} · 点击选择乐器
+            </Text>
+            <Text style={[styles.cashHint, {marginTop: 4}]}>
+              切换后，曲目推荐和教案会按这个乐器出曲目
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.cardGroup}>
-          <View style={styles.cashBlock}>
+          <TouchableOpacity
+            style={styles.cashBlock}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Withdraw')}>
             <Text style={styles.cashTitle}>学生消费光币</Text>
             <Text style={styles.cashBal}>{gb}</Text>
             <Text style={styles.cashHint}>
-              兑现规则：100 光币 = 7 元人民币。当前约合 ¥{yuan}。100 光币起兑，我们会线下打款。
+              兑现规则：100 光币 = 7 元人民币。当前约合 ¥{yuan}。点此进入提现。
             </Text>
-            <View style={styles.cashRow}>
-              <TextInput
-                style={styles.cashInput}
-                value={cashAmt}
-                onChangeText={t => setCashAmt(t.replace(/[^\d]/g, ''))}
-                placeholder="兑现数量"
-                placeholderTextColor="#979797"
-                keyboardType="number-pad"
-              />
-              <TouchableOpacity
-                style={styles.cashBtn}
-                onPress={async () => {
-                  const n = parseInt(cashAmt, 10) || 0;
-                  if (n < 100) {
-                    Alert.alert('数量太少', '至少 100 光币才能申请兑现。');
-                    return;
-                  }
-                  let r = null;
-                  try {
-                    r = await requestCashout(n, getDeviceId());
-                  } catch (e) {
-                    r = null;
-                  }
-                  if (r && r.ok) {
-                    setGb(Number(r.balance) || 0);
-                    setCashAmt('');
-                    Alert.alert('已提交', '兑现申请已记下，我们会把对应现金打给你。');
-                  } else {
-                    Alert.alert(
-                      '无法兑现',
-                      r && r.error === 'insufficient'
-                        ? '光币不够。'
-                        : r && r.error === 'too_small'
-                          ? '至少 100 光币。'
-                          : '请稍后重试',
-                    );
-                  }
-                }}>
-                <Text style={styles.cashBtnText}>申请兑现</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={[styles.cashHint, {marginTop: 8, color: colors.primary}]}>
+              立即提现 ›
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.walletLinks}>
+            <TouchableOpacity
+              style={styles.walletLinkHit}
+              onPress={() => navigation.navigate('IncomeDetail')}>
+              <Text style={styles.walletLinkText}>收入明细</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.walletLinkHit}
+              onPress={() => navigation.navigate('WithdrawHistory')}>
+              <Text style={styles.walletLinkText}>提现记录</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -293,6 +253,15 @@ const TeacherProfileScreen = ({navigation}) => {
         })}
       </View>
       </SafeAreaView>
+      <InstrumentPickerModal
+        visible={instPicker}
+        currentId={instrument}
+        onClose={() => setInstPicker(false)}
+        onSelect={id => {
+          setInst(id);
+          setInstrument(id);
+        }}
+      />
     </View>
   );
 };
@@ -344,6 +313,18 @@ const makeStyles = (colors, dark) =>
     cashTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
     cashBal: {fontSize: 28, fontWeight: '700', color: colors.textPrimary, marginTop: 6},
     cashHint: {fontSize: 12, color: '#979797', marginTop: 4, marginBottom: 10},
+    walletLinks: {
+      flexDirection: 'row',
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.divider,
+    },
+    walletLinkHit: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 14,
+    },
+    walletLinkText: {fontSize: 14, fontWeight: '600', color: colors.primary},
     cashRow: {flexDirection: 'row', alignItems: 'center'},
     cashInput: {
       flex: 1,

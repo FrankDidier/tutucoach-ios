@@ -34,11 +34,13 @@ import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
 import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
 import {useTheme} from '../theme/ThemeContext';
 import {
-  INSTRUMENTS,
   currentInstrument,
+  instrumentName,
   loadInstrument,
   setInstrument,
 } from '../services/instrument';
+import InstrumentPickerModal from '../components/InstrumentPickerModal';
+import TextPromptModal from '../components/TextPromptModal';
 
 let Clipboard = null;
 try {
@@ -59,6 +61,7 @@ const ProfileScreen = ({navigation}) => {
   const [avatarUri, setAvatar] = useState(null);
   const [points, setPoints] = useState(0);
   const [instrument, setInst] = useState(currentInstrument());
+  const [instPicker, setInstPicker] = useState(false);
   // 没装微信就不显示微信登录；iOS 另给「通过 Apple 登录」
   const [hasWeChat, setHasWeChat] = useState(Platform.OS !== 'ios');
   const appleReady = isAppleSignInReady();
@@ -142,28 +145,13 @@ const ProfileScreen = ({navigation}) => {
     setAvatarUri('');
   };
 
-  const onEditName = () => {
-    if (Platform.OS === 'ios' && Alert.prompt) {
-      Alert.prompt(
-        '修改昵称',
-        '请输入新的昵称',
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '保存',
-            onPress: async value => {
-              const v = (value || '').trim() || '钢琴小达人';
-              setName(v);
-              await setDisplayName(v);
-            },
-          },
-        ],
-        'plain-text',
-        displayName,
-      );
-    } else {
-      Alert.alert('修改昵称', '请在 iOS 上编辑昵称');
-    }
+  const onEditName = () => setNamePromptOpen(true);
+
+  const saveDisplayName = async value => {
+    const v = (value || '').trim() || DEFAULT_DISPLAY_NAME || '钢琴小达人';
+    setName(v);
+    await setDisplayName(v);
+    setNamePromptOpen(false);
   };
 
   const onCopyId = async () => {
@@ -184,7 +172,14 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
+  const [wechatPrivacyChecked, setWechatPrivacyChecked] = useState(false);
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+
   const onWeChatLogin = async () => {
+    if (!wechatPrivacyChecked) {
+      Alert.alert('提示', '请先勾选同意《用户协议》和《隐私政策》');
+      return;
+    }
     try {
       const r = await loginWithWeChat(getDeviceId());
       if (r.ok) {
@@ -341,7 +336,10 @@ const ProfileScreen = ({navigation}) => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.pointsCardOuter}>
+        <TouchableOpacity
+          style={styles.pointsCardOuter}
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate('Recharge')}>
           <Image
             source={dark ? Images.pointsCardDark : Images.pointsCardLight}
             style={styles.pointsCardImg}
@@ -355,45 +353,34 @@ const ProfileScreen = ({navigation}) => {
             </View>
             <Text style={styles.pointsValue}>{points}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.menuSection}>
-          <View style={{paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8}}>
-            <Text style={{color: colors.textPrimary, fontWeight: '700', marginBottom: 6}}>乐器模式</Text>
-            <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 8}}>
+          <TouchableOpacity
+            style={{paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12}}
+            activeOpacity={0.8}
+            onPress={() => setInstPicker(true)}>
+            <Text style={{color: colors.textPrimary, fontWeight: '700', marginBottom: 6}}>
+              乐器模式
+            </Text>
+            <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 4}}>
+              当前：{instrumentName(instrument)} · 点击选择乐器
+            </Text>
+            <Text style={{color: colors.textMuted, fontSize: 11}}>
               切换后，曲目推荐和教案会按这个乐器出曲目
             </Text>
-            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-              {INSTRUMENTS.map(it => {
-                const on = instrument === it.id;
-                return (
-                  <TouchableOpacity
-                    key={it.id}
-                    onPress={() => {
-                      setInst(it.id);
-                      setInstrument(it.id);
-                    }}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 14,
-                      backgroundColor: on ? '#7F47FE' : 'transparent',
-                      borderWidth: 1,
-                      borderColor: on ? '#7F47FE' : '#ccc',
-                    }}>
-                    <Text style={{color: on ? '#fff' : colors.textPrimary, fontWeight: '600'}}>
-                      {it.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfSub}
             label="会员订阅"
             onPress={() => navigation.navigate('Subscription')}
+          />
+          <View style={styles.menuDivider} />
+          <MenuRow
+            icon={Images.pfSub}
+            label="充值光币"
+            onPress={() => navigation.navigate('Recharge')}
           />
           <View style={styles.menuDivider} />
           <MenuRow
@@ -411,6 +398,37 @@ const ProfileScreen = ({navigation}) => {
           {hasWeChat ? (
             <>
               <View style={styles.menuDivider} />
+              <TouchableOpacity
+                style={styles.privacyCheckRow}
+                onPress={() => setWechatPrivacyChecked(v => !v)}
+                activeOpacity={0.8}>
+                <View
+                  style={[
+                    styles.privacyBox,
+                    wechatPrivacyChecked && {
+                      backgroundColor: colors.primary,
+                      borderColor: colors.primary,
+                    },
+                  ]}>
+                  {wechatPrivacyChecked ? (
+                    <Text style={styles.privacyTick}>✓</Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.privacyHint, {color: colors.textSecondary}]}>
+                  已阅读并同意
+                  <Text
+                    style={{color: '#2F6BFF'}}
+                    onPress={() => navigation.navigate('Legal')}>
+                    《用户协议》
+                  </Text>
+                  和
+                  <Text
+                    style={{color: '#2F6BFF'}}
+                    onPress={() => navigation.navigate('Legal')}>
+                    《隐私政策》
+                  </Text>
+                </Text>
+              </TouchableOpacity>
               <MenuRow icon={Images.pfWechat} label="微信登录" onPress={onWeChatLogin} last />
             </>
           ) : null}
@@ -459,6 +477,25 @@ const ProfileScreen = ({navigation}) => {
         </TouchableOpacity>
       </ScrollView>
       </SafeAreaView>
+      <InstrumentPickerModal
+        visible={instPicker}
+        currentId={instrument}
+        onClose={() => setInstPicker(false)}
+        onSelect={id => {
+          setInst(id);
+          setInstrument(id);
+        }}
+      />
+      <TextPromptModal
+        visible={namePromptOpen}
+        title="修改昵称"
+        message="请输入新的昵称"
+        placeholder="昵称"
+        initialValue={displayName}
+        confirmLabel="保存"
+        onCancel={() => setNamePromptOpen(false)}
+        onSubmit={saveDisplayName}
+      />
     </View>
   );
 };
@@ -566,6 +603,26 @@ const makeStyles = (colors, dark) =>
       marginLeft: 53,
       backgroundColor: colors.divider,
     },
+    privacyCheckRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingHorizontal: 15,
+      paddingTop: 10,
+      paddingBottom: 6,
+    },
+    privacyBox: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      borderWidth: 1.5,
+      borderColor: '#999',
+      marginTop: 1,
+      marginRight: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    privacyTick: {color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14},
+    privacyHint: {flex: 1, fontSize: 12, lineHeight: 18},
   });
 
 export default ProfileScreen;

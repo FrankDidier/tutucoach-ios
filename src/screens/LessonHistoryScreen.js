@@ -1,4 +1,4 @@
-// 学生端：历次课堂重点，给家长也能翻看。
+// 学生端：蓝湖「课堂重点」列表 → 点「查看记录」进详情。
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {useTheme} from '../theme/ThemeContext';
@@ -20,12 +21,15 @@ function fmt(ts) {
   if (!ts) return '';
   const d = new Date(ts * (ts > 1e12 ? 1 : 1000));
   const p = n => (n < 10 ? `0${n}` : `${n}`);
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(
+    d.getMinutes(),
+  )}:${p(d.getSeconds())}`;
 }
 
 export default function LessonHistoryScreen({navigation}) {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [lessons, setLessons] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -47,7 +51,7 @@ export default function LessonHistoryScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.root}>
-      <ScreenHeader title="课堂重点历史" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="课堂重点" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={styles.body}
         refreshControl={
@@ -60,55 +64,53 @@ export default function LessonHistoryScreen({navigation}) {
             }}
           />
         }>
-        <Text style={styles.hint}>老师上课录音整理后的重点会留在这里，家长也可以随时翻看。</Text>
         {lessons == null ? (
           <ActivityIndicator color={colors.primary} style={{marginTop: 40}} />
         ) : !lessons.length ? (
           <Text style={styles.empty}>还没有课堂重点。老师用「上课录音」确认后会出现在这里。</Text>
         ) : (
-          lessons.map(les => (
-            <View key={les.session_id} style={styles.card}>
-              <Text style={styles.when}>{fmt(les.at)}</Text>
-              {(les.segments || []).map((seg, i) => (
-                <View key={`${les.session_id}-${i}`} style={styles.seg}>
-                  <Text style={styles.piece}>《{seg.piece || '本节课'}》</Text>
-                  {(seg.points || []).map((p, j) => {
-                    const text = typeof p === 'string' ? p : p.text;
-                    const tag =
-                      p && p.target === 'section' && p.seg
-                        ? `第${p.seg}段`
-                        : '通用';
-                    return (
-                      <Text key={j} style={styles.point}>
-                        · [{tag}] {text}
-                      </Text>
-                    );
-                  })}
+          lessons.map(les => {
+            const pieces = (les.segments || []).length;
+            return (
+              <TouchableOpacity
+                key={les.session_id}
+                style={styles.card}
+                activeOpacity={0.88}
+                onPress={() => navigation.navigate('LessonDetail', {lesson: les})}>
+                <View style={styles.mid}>
+                  <Text style={styles.title}>
+                    课堂重点·{pieces || 0}首曲目
+                  </Text>
+                  <Text style={styles.when}>{fmt(les.at)}</Text>
                 </View>
-              ))}
-            </View>
-          ))
+                <Text style={styles.link}>查看记录</Text>
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function makeStyles(colors) {
+function makeStyles(colors, dark) {
   return StyleSheet.create({
     root: {flex: 1, backgroundColor: colors.bg},
-    body: {padding: 16, paddingBottom: 40},
-    hint: {color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12},
+    body: {padding: 15, paddingBottom: 40},
     empty: {color: colors.textSecondary, fontSize: 14, marginTop: 24, textAlign: 'center'},
     card: {
-      backgroundColor: colors.card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: dark ? '#040428' : colors.card,
       borderRadius: 14,
-      padding: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 16,
       marginBottom: 12,
+      minHeight: 70,
     },
-    when: {color: colors.textSecondary, fontSize: 12, marginBottom: 8, fontWeight: '600'},
-    seg: {marginBottom: 10},
-    piece: {color: colors.textPrimary, fontSize: 15, fontWeight: '800', marginBottom: 4},
-    point: {color: colors.textPrimary, fontSize: 14, lineHeight: 22, marginLeft: 2},
+    mid: {flex: 1, marginRight: 10},
+    title: {color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 6},
+    when: {color: colors.textSecondary, fontSize: 12},
+    link: {color: colors.primary, fontSize: 13, fontWeight: '600'},
   });
 }
