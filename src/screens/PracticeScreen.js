@@ -116,27 +116,6 @@ const PracticeScreen = ({navigation}) => {
             </Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => openLessonHistory(navigation)}
-          style={{
-            marginHorizontal: px(15),
-            marginTop: recap ? 6 : 8,
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderRadius: 12,
-            backgroundColor: dark ? 'rgba(181,149,255,0.1)' : 'rgba(255,95,131,0.08)',
-            // 兔子绝对定位会上移盖住此条；抬高命中层保证可点进「课堂重点」
-            zIndex: 20,
-            elevation: 20,
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="课堂重点">
-          <Text style={{color: colors.primary, fontWeight: '700', fontSize: 14}}>
-            课堂重点 ›
-          </Text>
-        </TouchableOpacity>
-
         {/* 顶部问候区：左文案 + 右上角兔子（216x217，压住卡片顶部缺口） */}
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
@@ -229,6 +208,38 @@ const PracticeScreen = ({navigation}) => {
               <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 光币解锁角色</Text>
             </TouchableOpacity>
           </View>
+
+          {/* 蓝湖 练琴：主卡下方 课程重点 / 上课录音 两个磁贴 */}
+          <View style={styles.lessonRow}>
+            <TouchableOpacity
+              style={styles.lessonTile}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="课程重点"
+              onPress={() => openLessonHistory(navigation)}>
+              <View style={{flex: 1}}>
+                <Text style={styles.lessonTileTitle}>课程重点</Text>
+                <Text style={styles.lessonTileSub}>点击查看</Text>
+              </View>
+              <View style={styles.lessonIcon}>
+                <Text style={styles.lessonNote}>♪</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.lessonTile}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="上课录音"
+              onPress={() => navigation.navigate('LessonCapture')}>
+              <View style={{flex: 1}}>
+                <Text style={styles.lessonTileTitle}>上课录音</Text>
+                <Text style={styles.lessonTileSub}>点击使用</Text>
+              </View>
+              <View style={styles.lessonIcon}>
+                <Image source={Images.companionMic} style={styles.lessonMic} resizeMode="contain" />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -301,6 +312,35 @@ const makeStyles = (colors, dark) =>
       height: px(217),
       zIndex: 1,
     },
+    lessonRow: {
+      width: px(345),
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: px(14),
+      zIndex: 2,
+    },
+    lessonTile: {
+      width: px(165),
+      height: px(68),
+      borderRadius: px(14),
+      paddingLeft: px(14),
+      paddingRight: px(12),
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+    },
+    lessonTileTitle: {fontSize: 16, fontWeight: '700', color: colors.textPrimary},
+    lessonTileSub: {fontSize: 12, marginTop: 4, color: colors.textSecondary},
+    lessonIcon: {
+      width: px(44),
+      height: px(44),
+      borderRadius: px(22),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+    },
+    lessonNote: {fontSize: 22, fontWeight: '700', color: '#FFFFFF'},
+    lessonMic: {width: px(22), height: px(22), tintColor: '#FFFFFF'},
     cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
     // 母图 1x=362x81（含描边留白），glyph 宽≈352；left 微调到 px(12) 让字身对齐 x16。

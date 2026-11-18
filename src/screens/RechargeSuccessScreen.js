@@ -1,7 +1,6 @@
 // 蓝湖「充值成功」
 import React, {useMemo} from 'react';
-import {View, Text, StyleSheet, SafeAreaView, TouchableOpacity} from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import {View, Text, StyleSheet, SafeAreaView} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -25,8 +24,11 @@ export default function RechargeSuccessScreen({navigation, route}) {
 
   return (
     <SafeAreaView style={styles.root}>
-      <ScreenHeader title="充值成功" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="" onBack={() => navigation.goBack()} />
       <View style={styles.body}>
+        <View style={styles.checkCircle}>
+          <Text style={styles.checkMark}>✓</Text>
+        </View>
         <Text style={styles.ok}>充值成功</Text>
         <Text style={styles.money}>¥{Number(amount).toFixed(2)}</Text>
 
@@ -46,19 +48,6 @@ export default function RechargeSuccessScreen({navigation, route}) {
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('Recharge')}>
-          <LinearGradient
-            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 0}}
-            style={styles.cta}>
-            <Text style={styles.ctaText}>确认</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -67,7 +56,17 @@ function makeStyles(colors, dark) {
   return StyleSheet.create({
     root: {flex: 1, backgroundColor: colors.bg},
     body: {paddingHorizontal: 15, paddingTop: 40, alignItems: 'center'},
-    ok: {fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 8},
+    checkCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? '#A98BF5' : colors.primary,
+      marginBottom: 10,
+    },
+    checkMark: {color: '#FFFFFF', fontSize: 26, fontWeight: '700', lineHeight: 30},
+    ok: {fontSize: 13, fontWeight: '600', color: dark ? '#B7A0F8' : colors.primary, marginBottom: 10},
     money: {fontSize: 32, fontWeight: '800', color: colors.textPrimary, marginBottom: 28},
     card: {
       width: '100%',
@@ -82,18 +81,5 @@ function makeStyles(colors, dark) {
     },
     label: {color: colors.textSecondary, fontSize: 14},
     val: {color: colors.textPrimary, fontSize: 14, fontWeight: '600'},
-    footer: {
-      position: 'absolute',
-      left: 16,
-      right: 16,
-      bottom: 28,
-    },
-    cta: {
-      height: 44,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    ctaText: {color: '#fff', fontSize: 16, fontWeight: '700'},
   });
 }
