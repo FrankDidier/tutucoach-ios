@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -111,7 +112,7 @@ const AIListScreen = ({navigation}) => {
         resizeMode="cover"
         pointerEvents="none"
       />
-      <SafeAreaView style={styles.safe}>
+      <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.safe}>
         <ScreenHeader title="AI分身列表" onBack={() => navigation?.goBack?.()} />
 
         {loading ? (
@@ -219,7 +220,7 @@ const AIListScreen = ({navigation}) => {
             </TouchableOpacity>
           </>
         )}
-      </SafeAreaView>
+      </EdgeSafeArea>
     </View>
   );
 };

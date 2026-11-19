@@ -1,4 +1,5 @@
 // 蓝湖「提现 / 光币提现」
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -85,7 +86,7 @@ export default function WithdrawScreen({navigation}) {
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="光币提现" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.card}>
@@ -155,7 +156,7 @@ export default function WithdrawScreen({navigation}) {
           </LinearGradient>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

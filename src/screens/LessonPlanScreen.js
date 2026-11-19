@@ -3,6 +3,7 @@
 // - 一键选取曲目重点：从「陪练重点」里直接挑一首已设曲目的重点填进来，教案会据此调整、呼应。
 // - 内置多套排版样式（清新 / 雅致 / 简约），一键切换，无需外部 UI 设计。
 // - 点任一板块 → 弹出「板块详解」页，AI 就该板块展开更细致的讲解。
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -19,7 +20,10 @@ import {
   Alert,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import {Images} from '../assets/images';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -182,8 +186,10 @@ function renderRich(text, bodyStyle) {
 }
 
 export default function LessonPlanScreen({navigation}) {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode: themeMode} = useTheme();
+  const dark = themeMode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const [instOpen, setInstOpen] = useState(false);
   const PLAN_STYLES = useMemo(() => makePlanStyles(colors), [colors]);
   const [piece, setPiece] = useState('');
   const [composer, setComposer] = useState('');
@@ -406,9 +412,9 @@ export default function LessonPlanScreen({navigation}) {
   const parsed = plan ? parseSections(plan) : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <ScreenHeader title="曲目解读 · 教案" onBack={() => navigation?.goBack?.()} />
+      <ScreenHeader title="曲目解读·教案" onBack={() => navigation?.goBack?.()} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -437,33 +443,54 @@ export default function LessonPlanScreen({navigation}) {
               );
             })}
           </View>
-          <View style={[styles.chipRow, {marginBottom: 10}]}>
-            {INSTRUMENTS.map(it => {
-              const on = instrument === it.id;
-              return (
-                <TouchableOpacity
-                  key={it.id}
-                  style={[styles.chip, on && styles.chipOn]}
-                  onPress={() => {
-                    setInst(it.id);
-                    setInstrument(it.id);
-                    setRecResult(null);
-                  }}>
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{it.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.instCard}>
+            <View style={styles.instHead}>
+              <Text style={styles.instNote}>♫</Text>
+              <Text style={styles.instTitle}>乐器选择</Text>
+              <View style={{flex: 1}} />
+              <TouchableOpacity
+                style={styles.instPickBtn}
+                activeOpacity={0.8}
+                onPress={() => setInstOpen(v => !v)}>
+                <Text style={styles.instPickText}>选择 {instOpen ? '⌃' : '›'}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.instBody}>
+              <Image
+                source={dark ? Images.planPianoDark : Images.planPianoLight}
+                style={styles.instImg}
+              />
+              <View style={styles.instTexts}>
+                <Text style={styles.instCurrent}>
+                  当前乐器：{INSTRUMENTS.find(x => x.id === instrument)?.name || '钢琴'}
+                </Text>
+                <Text style={styles.instHint}>
+                  切换后，曲目推荐和教案会按选择乐器出曲目
+                </Text>
+              </View>
+            </View>
+            {instOpen ? (
+              <View style={styles.instChips}>
+                {INSTRUMENTS.map(it => {
+                  const on = instrument === it.id;
+                  return (
+                    <TouchableOpacity
+                      key={it.id}
+                      style={[styles.chip, on && styles.chipOn]}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setInst(it.id);
+                        setInstrument(it.id);
+                        setRecResult(null);
+                        setInstOpen(false);
+                      }}>
+                      <Text style={[styles.chipText, on && styles.chipTextOn]}>{it.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.fieldLabel}>
-            当前乐器：{INSTRUMENTS.find(x => x.id === instrument)?.name || '钢琴'}（曲目推荐和教案都按这个来）
-          </Text>
-          <TouchableOpacity
-            style={[styles.modeTab, styles.modeTabOn, {marginBottom: 12}]}
-            onPress={() => navigation.navigate('LessonCapture')}>
-            <Text style={[styles.modeTabText, styles.modeTabTextOn]}>
-              上课录音 · 自动整理重点
-            </Text>
-          </TouchableOpacity>
 
           {mode === 'plan' ? (
           <>
@@ -486,7 +513,7 @@ export default function LessonPlanScreen({navigation}) {
               })}
             </View>
 
-            <Text style={[styles.fieldLabel, {marginTop: 14}]}>曲目名称</Text>
+            <Text style={[styles.fieldLabel, {marginTop: 16}]}>曲目名称</Text>
             <TextInput
               style={styles.input}
               value={piece}
@@ -494,7 +521,7 @@ export default function LessonPlanScreen({navigation}) {
               placeholder="如：致爱丽丝 / 车尔尼599 No.1"
               placeholderTextColor={colors.textSecondary}
             />
-            <Text style={[styles.fieldLabel, {marginTop: 12}]}>作曲家（可选）</Text>
+            <Text style={[styles.fieldLabel, {marginTop: 16}]}>作曲家</Text>
             <TextInput
               style={styles.input}
               value={composer}
@@ -504,14 +531,11 @@ export default function LessonPlanScreen({navigation}) {
             />
 
             <View style={[styles.focusHead, {marginTop: 12}]}>
-              <Text style={styles.fieldLabel}>关联已设重点（可选）</Text>
+              <Text style={styles.fieldLabel}>关联已设重点</Text>
               <TouchableOpacity onPress={openPicker} activeOpacity={0.75}>
-                <Text style={styles.pickBtn}>＋ 一键选取曲目重点</Text>
+                <View style={styles.pickPill}><Text style={styles.pickBtn}>＋ 一键选取曲目重点</Text></View>
               </TouchableOpacity>
             </View>
-            <Text style={styles.fieldHint}>
-              点右上角从「陪练重点」直接选一首已设曲目的重点填进来，教案会围绕这些重点调整。
-            </Text>
             <TextInput
               style={styles.multiline}
               value={focus}
@@ -520,17 +544,6 @@ export default function LessonPlanScreen({navigation}) {
               placeholderTextColor={colors.textSecondary}
               multiline
             />
-            <TouchableOpacity
-              style={styles.genBtn}
-              onPress={onGenerate}
-              activeOpacity={0.88}
-              disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.genBtnText}>生成解读 + 教案</Text>
-              )}
-            </TouchableOpacity>
             {loading ? (
               <Text style={styles.loadingHint}>
                 AI 正在备课，约需 1 分钟，请保持网络畅通、不要离开本页…
@@ -681,17 +694,6 @@ export default function LessonPlanScreen({navigation}) {
                       : '冷门'
                   }」三个方向各推荐几项。点某项可直接带入教案生成。`}
             </Text>
-            <TouchableOpacity
-              style={styles.genBtn}
-              onPress={onRecommend}
-              activeOpacity={0.88}
-              disabled={recLoading}>
-              {recLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.genBtnText}>推荐曲目</Text>
-              )}
-            </TouchableOpacity>
             {recLoading ? (
               <Text style={styles.loadingHint}>
                 AI 正在挑选适合的曲目，请稍候…
@@ -765,6 +767,27 @@ export default function LessonPlanScreen({navigation}) {
           </>
           )}
         </ScrollView>
+        <View style={styles.footer}>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            disabled={mode === 'plan' ? loading : recLoading}
+            onPress={mode === 'plan' ? onGenerate : onRecommend}
+            style={styles.footBtn}>
+            <LinearGradient
+              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+              start={{x: 0.5, y: 0}}
+              end={{x: 0.5, y: 1}}
+              style={StyleSheet.absoluteFill}
+            />
+            {(mode === 'plan' ? loading : recLoading) ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.genBtnText}>
+                {mode === 'plan' ? '生成解读+教案' : '推荐曲目'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
 
       {/* 板块详解页 */}
@@ -865,34 +888,30 @@ export default function LessonPlanScreen({navigation}) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: colors.bg},
     flex: {flex: 1},
-    scroll: {padding: 16, paddingBottom: 40},
+    scroll: {padding: 15, paddingBottom: 24},
     card: {
       backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: 12,
+      padding: 15,
       marginBottom: 14,
-      shadowColor: '#000',
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      shadowOffset: {width: 0, height: 2},
-      elevation: 2,
     },
-    fieldLabel: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+    fieldLabel: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
     fieldHint: {fontSize: 11.5, color: colors.primaryDark, marginTop: 4, lineHeight: 17},
+    // 蓝湖：顶部 345×44 胶囊 tab，选中块 165×36
     modeRow: {
       flexDirection: 'row',
       backgroundColor: colors.card,
       borderRadius: 22,
       padding: 4,
-      marginBottom: 14,
+      marginBottom: 12,
     },
     modeTab: {
       flex: 1,
@@ -902,8 +921,47 @@ const makeStyles = colors =>
       justifyContent: 'center',
     },
     modeTabOn: {backgroundColor: colors.primary},
-    modeTabText: {fontSize: 14, fontWeight: '700', color: colors.textSecondary},
+    modeTabText: {fontSize: 14, fontWeight: '600', color: dark ? '#A1A1B4' : '#6B5560'},
     modeTabTextOn: {color: '#fff'},
+    // 乐器选择卡 345×110
+    instCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingTop: 10,
+      paddingBottom: 12,
+      marginBottom: 14,
+    },
+    instHead: {flexDirection: 'row', alignItems: 'center', height: 24},
+    instNote: {fontSize: 14, color: dark ? '#B595FF' : colors.primary, marginRight: 4},
+    instTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    instPickBtn: {
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
+    },
+    instPickText: {fontSize: 12, fontWeight: '500', color: dark ? '#B595FF' : colors.primary},
+    instBody: {flexDirection: 'row', alignItems: 'center', marginTop: 12},
+    instImg: {width: 60, height: 60, borderRadius: 8},
+    instTexts: {flex: 1, marginLeft: 10},
+    instCurrent: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    instHint: {fontSize: 12, color: '#A1A1B4', marginTop: 8},
+    instChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12},
+    footer: {
+      backgroundColor: colors.card,
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    footBtn: {
+      height: 44,
+      borderRadius: 22,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     recGroupHead: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -935,27 +993,26 @@ const makeStyles = colors =>
       color: colors.accent,
       marginTop: 6,
     },
-    chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8},
+    chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 15},
     chip: {
-      paddingHorizontal: 16,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: colors.bg,
+      minWidth: 50,
+      paddingHorizontal: 10,
+      height: 24,
+      borderRadius: 6,
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
     },
-    chipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
-    chipText: {fontSize: 14, fontWeight: '600', color: colors.textSecondary},
+    chipOn: {backgroundColor: colors.primary},
+    chipText: {fontSize: 12, fontWeight: '500', color: dark ? '#B595FF' : colors.primary},
     chipTextOn: {color: '#fff'},
     input: {
-      marginTop: 6,
-      height: 42,
-      borderRadius: 10,
-      backgroundColor: colors.bg,
+      marginTop: 10,
+      height: 44,
+      borderRadius: 8,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
       paddingHorizontal: 12,
-      fontSize: 15,
+      fontSize: 14,
       color: colors.textPrimary,
     },
     focusHead: {
@@ -963,12 +1020,19 @@ const makeStyles = colors =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    pickBtn: {fontSize: 12.5, fontWeight: '700', color: colors.accent},
+    pickPill: {
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
+    },
+    pickBtn: {fontSize: 12, fontWeight: '500', color: dark ? '#B595FF' : colors.primary},
     multiline: {
-      marginTop: 8,
-      minHeight: 90,
-      borderRadius: 10,
-      backgroundColor: colors.bg,
+      marginTop: 10,
+      height: 100,
+      borderRadius: 8,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
       padding: 12,
       fontSize: 14,
       color: colors.textPrimary,

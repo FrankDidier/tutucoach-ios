@@ -1,5 +1,6 @@
 // 陪练提示设置（老师端）—— 对应安卓 StudentReminderActivity。
 // 老师从班级学生里选一个，按「曲目」分别设置「AI 陪练模式」的重点播报内容 + 播报频率。
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -410,7 +411,7 @@ export default function StudentReminderScreen({navigation}) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader
         title="陪练提示设置"
@@ -777,7 +778,7 @@ export default function StudentReminderScreen({navigation}) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

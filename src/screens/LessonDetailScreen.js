@@ -1,4 +1,5 @@
 // 蓝湖「课堂重点详情」
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useMemo} from 'react';
 import {View, Text, StyleSheet, SafeAreaView, ScrollView} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
@@ -21,7 +22,7 @@ export default function LessonDetailScreen({navigation, route}) {
   const segments = lesson.segments || [];
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="课堂重点详情" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.panel}>
@@ -57,7 +58,7 @@ export default function LessonDetailScreen({navigation, route}) {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

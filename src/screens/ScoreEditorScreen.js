@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -859,7 +860,7 @@ export default function ScoreEditorScreen({navigation, route}) {
   const hasPending = !!(manifest?.has_pending_review || (manifest?.pages || []).some(p => p.pending_review));
 
   return (
-    <SafeAreaView style={ui.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱上传及重点框" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={ui.scroll}>
@@ -1433,7 +1434,7 @@ export default function ScoreEditorScreen({navigation, route}) {
         }
         onPdf={() => doUpload(pickPdf)}
       />
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

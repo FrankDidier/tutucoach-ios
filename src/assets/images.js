@@ -69,6 +69,10 @@ export const Images = {
   tStudent: require('./img/t_student.png'),
   tClass: require('./img/t_class.png'),
   // AI 选择页顶部背景（蓝湖 1:1）
+  planPianoDark: require('./img/plan_piano_dark.png'),
+  planPianoLight: require('./img/plan_piano_light.png'),
+  avatarCapDark: require('./img/avatar_cap_dark.png'),
+  avatarCapLight: require('./img/avatar_cap_light.png'),
   aiselectTopDark: require('./img/aiselect_top_dark.png'),
   aiselectTopLight: require('./img/aiselect_top_light.png'),
   // AI 分身列表（蓝湖 ai设置）

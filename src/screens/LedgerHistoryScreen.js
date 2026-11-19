@@ -1,4 +1,5 @@
 // 蓝湖「充值记录」/「消费记录」
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -53,7 +54,7 @@ export default function LedgerHistoryScreen({navigation, route}) {
   );
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title={title} onBack={() => navigation.goBack()} />
       {items == null ? (
         <ActivityIndicator color={colors.primary} style={{marginTop: 40}} />
@@ -98,7 +99,7 @@ export default function LedgerHistoryScreen({navigation, route}) {
           }}
         />
       )}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

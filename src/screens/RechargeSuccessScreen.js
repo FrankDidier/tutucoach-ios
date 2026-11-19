@@ -1,4 +1,5 @@
 // 蓝湖「充值成功」
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useMemo} from 'react';
 import {View, Text, StyleSheet, SafeAreaView} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
@@ -23,7 +24,7 @@ export default function RechargeSuccessScreen({navigation, route}) {
   const at = route?.params?.at || Date.now();
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="" onBack={() => navigation.goBack()} />
       <View style={styles.body}>
         <View style={styles.checkCircle}>
@@ -48,7 +49,7 @@ export default function RechargeSuccessScreen({navigation, route}) {
         </View>
       </View>
 
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

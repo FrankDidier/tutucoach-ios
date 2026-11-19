@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   View,
@@ -467,7 +468,7 @@ const ClassManageScreen = ({navigation}) => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       <ScreenHeader title="班级管理" onBack={() => navigation?.goBack?.()} />
@@ -510,7 +511,7 @@ const ClassManageScreen = ({navigation}) => {
           </Text>
         }
       />
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 };
 

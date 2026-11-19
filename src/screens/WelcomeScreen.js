@@ -170,6 +170,12 @@ const WelcomeScreen = ({navigation}) => {
             }}
             pointerEvents="none"
           />
+          {/* 星光改为独立透明贴图（背景图里烘焙的星带有方形底，会在深色下露出一个方框） */}
+          <Image
+            source={Images.homeSparkleDark}
+            style={styles.bgSparkle}
+            resizeMode="contain"
+          />
         </View>
       ) : (
         <View style={styles.lightBgStack} pointerEvents="none">

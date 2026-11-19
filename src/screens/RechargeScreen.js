@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 // 蓝湖「充值光币」t1/t2 1:1
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
@@ -116,7 +117,7 @@ export default function RechargeScreen({navigation}) {
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="充值光币" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.walletWrap}>
@@ -202,7 +203,7 @@ export default function RechargeScreen({navigation}) {
           </LinearGradient>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

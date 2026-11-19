@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useState} from 'react';
 import {View, Text, StyleSheet, SafeAreaView, ScrollView, StatusBar} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
@@ -58,7 +59,7 @@ const CheckinStatsScreen = ({navigation}) => {
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} />
       <ScreenHeader title="打卡统计" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -109,7 +110,7 @@ const CheckinStatsScreen = ({navigation}) => {
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 };
 

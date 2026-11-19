@@ -1,4 +1,5 @@
 // 蓝湖「提现记录」1:1：顶部分类 tab + 列表
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -76,7 +77,7 @@ export default function WithdrawHistoryScreen({navigation}) {
   }, [items, tab]);
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="提现记录" onBack={() => navigation.goBack()} />
       <View style={styles.tabs}>
         {TABS.map(t => {
@@ -128,7 +129,7 @@ export default function WithdrawHistoryScreen({navigation}) {
           }}
         />
       )}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

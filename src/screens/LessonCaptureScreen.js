@@ -1,5 +1,6 @@
 // 上课录音：先点学生；上课时老师说「现在开始下一首」或点「下一首」切曲子；
 // 下课整理成重点，老师改好、选好曲目再挂到学生的曲目重点。
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -15,12 +16,15 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {speak, isSpeaking, setKeepAwake, setScreenDim} from '../services/voice';
-import {getJson, setJson} from '../services/storage';
+import {getItem, setItem, getJson, setJson} from '../services/storage';
 import {listStudents} from '../services/students';
 import {fetchScore} from '../services/score';
 import {readingSections} from '../utils/sections';
@@ -47,8 +51,9 @@ function clock(sec) {
 }
 
 export default function LessonCaptureScreen({navigation}) {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode: themeMode} = useTheme();
+  const dark = themeMode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
 
   const [phase, setPhase] = useState('pick');
   const [students, setStudents] = useState(null);
@@ -80,6 +85,7 @@ export default function LessonCaptureScreen({navigation}) {
   const [targets, setTargets] = useState({});
   // piece name -> [1,2,3...] 分段号
   const [pieceSegs, setPieceSegs] = useState({});
+  const [scopeOpen, setScopeOpen] = useState({});
 
   const mounted = useRef(true);
   const live = useRef(false);
@@ -95,6 +101,30 @@ export default function LessonCaptureScreen({navigation}) {
   const lastSummary = useRef(0);
   const midRunning = useRef(false);
   const bgAt = useRef(0);
+
+  // 界面核对用（仅当本地设置了 audit_capture_phase 才生效，正常用户不会有）
+  useEffect(() => {
+    (async () => {
+      const v = await getItem('audit_capture_phase');
+      if (!v) return;
+      await setItem('audit_capture_phase', '');
+      const st = {id: 'debug01', name: '卡贡CAGON', pieces: ['致爱丽丝']};
+      setStudent(st);
+      studentRef.current = st;
+      setStudentsInLesson([st]);
+      if (v === 'live' || v === 'liveon') {
+        setSegments([{idx: 0, piece: '', points: [], chars: v === 'liveon' ? 86 : 0, text: ''}]);
+        setElapsed(5);
+        setListening(v === 'liveon');
+        setPhase('live');
+      } else if (v === 'review') {
+        setSegments([
+          {idx: 0, piece: '斯克里亚宾', points: ['左手分解和弦要轻', '右手主旋律突出'], chars: 120, text: ''},
+        ]);
+        setPhase('review');
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     pieceRef.current = pieceFor;
@@ -620,6 +650,11 @@ export default function LessonCaptureScreen({navigation}) {
   const pieces = (student && student.pieces) || [];
   const lessonPeople = studentsInLesson.length ? studentsInLesson : student ? [student] : [];
 
+  useEffect(() => {
+    if (phase === 'live' && curPiece) loadPieceSections(curPiece);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, curPiece]);
+
   const pieceChips = (idx, chosen) => (
     <View style={styles.chipWrap}>
       {pieces.map(p => (
@@ -633,224 +668,290 @@ export default function LessonCaptureScreen({navigation}) {
     </View>
   );
 
+  const resumeNames = resumable
+    ? namesOf(
+        Array.isArray(resumable.students) && resumable.students.length
+          ? resumable.students
+          : resumable.student
+            ? [resumable.student]
+            : [],
+      )
+    : '';
+  const codeQ = filter.trim();
+  const codeIsNew =
+    codeQ.length >= 4 && !(students || []).some(x => x.id === codeQ || nameOf(x) === codeQ) && !shownStudents.length;
+
+  const addByCode = () => {
+    const id = codeQ;
+    if (!id) return;
+    const known = (students || []).find(x => x.id === id);
+    const stu = known || {id, name: '', pieces: []};
+    if (!known) setStudents(prev => (prev ? [...prev, stu] : [stu]));
+    if (!isSelected(id)) toggleSelect(stu);
+    setFilter('');
+  };
+
   const renderPick = () => (
     <>
       {resumable ? (
-        <View style={[styles.card, styles.warnCard]}>
-          <Text style={styles.cardTitle}>
-            {namesOf(
-              Array.isArray(resumable.students) && resumable.students.length
-                ? resumable.students
-                : resumable.student
-                  ? [resumable.student]
-                  : [],
-            )}{' '}
-            的课还没确认
-          </Text>
-          <View style={styles.row}>
-            <TouchableOpacity style={[styles.btn, styles.flex]} onPress={() => resume(resumable)}>
-              <Text style={styles.btnText}>接着这节课</Text>
+        <View style={styles.resumeCard}>
+          <View style={styles.resumeTop}>
+            <View style={styles.scoreTile}>
+              <Text style={styles.scoreTileGlyph}>♪</Text>
+            </View>
+            <View style={styles.stuTexts}>
+              <Text style={styles.stuTitle} numberOfLines={1}>
+                {resumeNames}·尚未确认
+              </Text>
+              <Text style={styles.stuCaption}>有一节课程还未确认</Text>
+            </View>
+          </View>
+          <View style={styles.resumeBtns}>
+            <TouchableOpacity
+              style={styles.resumeBtn}
+              activeOpacity={0.88}
+              onPress={() => resume(resumable)}>
+              <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={styles.resumeBtnText}>继续课程</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.btnGhost, styles.flex]}
+              style={[styles.resumeBtn, styles.resumeBtnGhost]}
+              activeOpacity={0.8}
               onPress={() => {
                 setResumable(null);
                 clearOpen();
               }}>
-              <Text style={styles.btnGhostText}>不要了</Text>
+              <Text style={[styles.resumeBtnText, styles.resumeBtnGhostText]}>暂不继续</Text>
             </TouchableOpacity>
           </View>
         </View>
       ) : null}
-      <Text style={styles.title}>这节课是谁？可多选</Text>
-      <Text style={styles.hint}>
-        点名字勾选，再点「开始上课」。集体课的课堂反馈会同时出现在所选学生手里。
-      </Text>
-      {students && students.length > 8 ? (
-        <TextInput
-          style={styles.input}
-          value={filter}
-          onChangeText={setFilter}
-          placeholder="搜名字"
-          placeholderTextColor={colors.textSecondary}
-        />
-      ) : null}
-      {students == null ? (
-        <ActivityIndicator color={colors.primary} style={styles.spin} />
-      ) : (
-        <View style={styles.chipWrap}>
-          {shownStudents.map(s => {
-            const on = isSelected(s.id);
-            return (
-              <TouchableOpacity
-                key={s.id}
-                style={[styles.stuChip, on && styles.stuChipOn]}
-                disabled={starting}
-                onPress={() => toggleSelect(s)}>
-                <Text style={[styles.stuName, on && styles.stuNameOn]}>
-                  {on ? '✓ ' : ''}
-                  {nameOf(s)}
-                </Text>
-                <Text style={[styles.stuSub, on && styles.stuSubOn]}>
-                  {s.pieces && s.pieces.length ? `${s.pieces.length} 首曲目` : '还没有曲目'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          {!shownStudents.length ? (
-            <Text style={styles.hint}>还没有学生。可以在「学生信息录入」或「陪练提示设置」里先添加。</Text>
-          ) : null}
-        </View>
-      )}
-      <TouchableOpacity
-        style={[styles.btn, (starting || selected.length < 1) && styles.btnDim]}
-        disabled={starting || selected.length < 1}
-        onPress={() => begin(selected)}>
-        <Text style={styles.btnText}>
-          {starting
-            ? '准备中…'
-            : selected.length
-              ? `开始上课（${selected.length} 人）`
-              : '开始上课'}
-        </Text>
-      </TouchableOpacity>
-      {starting ? <ActivityIndicator color={colors.primary} style={styles.spin} /> : null}
-      <TouchableOpacity onPress={() => setManualOpen(v => !v)}>
-        <Text style={styles.link}>{manualOpen ? '收起' : '名单里没有？用学生码'}</Text>
-      </TouchableOpacity>
-      {manualOpen ? (
-        <View style={styles.row}>
+
+      <View style={styles.pickCard}>
+        <Text style={styles.pieceTitle}>选择上课学生</Text>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchGlyph}>⌕</Text>
           <TextInput
-            style={[styles.input, styles.flex]}
-            value={manualId}
-            onChangeText={setManualId}
-            placeholder="学生码"
-            placeholderTextColor={colors.textSecondary}
+            style={styles.searchInput}
+            value={filter}
+            onChangeText={setFilter}
+            placeholder="名单里没有，搜索学生码"
+            placeholderTextColor="#A1A1B4"
             autoCapitalize="none"
           />
-          <TouchableOpacity
-            style={styles.btnSmall}
-            onPress={() => {
-              const id = manualId.trim();
-              if (!id) return;
-              const known = (students || []).find(s => s.id === id);
-              const stu = known || {id, name: '', pieces: []};
-              if (!known) {
-                setStudents(prev => (prev ? [...prev, stu] : [stu]));
-              }
-              if (!isSelected(id)) toggleSelect(stu);
-              setManualId('');
-            }}>
-            <Text style={styles.btnText}>加入</Text>
-          </TouchableOpacity>
         </View>
-      ) : null}
+        {students == null ? (
+          <ActivityIndicator color={colors.primary} style={styles.spin} />
+        ) : (
+          <View style={styles.stuGrid}>
+            {shownStudents.map(sd => {
+              const on = isSelected(sd.id);
+              return (
+                <TouchableOpacity
+                  key={sd.id}
+                  style={[styles.stuTile, on && styles.stuTileOn]}
+                  activeOpacity={0.85}
+                  disabled={starting}
+                  onPress={() => toggleSelect(sd)}>
+                  <Image
+                    source={dark ? Images.avatarCapDark : Images.avatarCapLight}
+                    style={styles.stuTileAvatar}
+                  />
+                  <View style={styles.stuTexts}>
+                    <Text style={styles.stuTileName} numberOfLines={1}>
+                      {nameOf(sd)}
+                    </Text>
+                    <Text style={styles.stuTileSub} numberOfLines={1}>
+                      {sd.pieces && sd.pieces.length ? `${sd.pieces.length} 首曲目` : '点击上课'}
+                    </Text>
+                  </View>
+                  {on ? (
+                    <View style={styles.stuTick}>
+                      <Text style={styles.stuTickText}>✓</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+        {students != null && !shownStudents.length && !codeIsNew ? (
+          <Text style={styles.hint}>
+            {codeQ ? '没有找到这位学生。' : '还没有学生。可以在「学生信息录入」或「陪练提示设置」里先添加，或在上面输入学生码。'}
+          </Text>
+        ) : null}
+        {codeIsNew ? (
+          <TouchableOpacity style={styles.codeRow} activeOpacity={0.8} onPress={addByCode}>
+            <Text style={styles.codeRowText}>用学生码「{codeQ}」加入本节课 ›</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {starting ? <ActivityIndicator color={colors.primary} style={styles.spin} /> : null}
       <Text style={styles.hint}>
-        上课时把手机放在琴边、停在本页。可点「关屏省电」几乎熄屏省电（识别不停），点屏幕即可亮回。换曲子时说「现在开始下一首」，或点「下一首」。下课点「下课，整理重点」，每条可选挂到通用重点或谱面分段重点。
+        上课时把手机放在琴边、停在本页。可点「息屏省电」几乎熄屏省电（识别不停），点屏幕即可亮回。换曲子时说「现在开始下一首」，或点「下一首」。下课点「结束整理」，每条可选挂到通用重点或谱面分段重点。
       </Text>
     </>
   );
 
+  const renderPickFooter = () => {
+    const dis = starting || selected.length < 1;
+    return (
+      <View style={styles.footer}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          disabled={dis}
+          onPress={() => begin(selected)}
+          style={[styles.footBtn, dis && styles.btnDim]}>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={StyleSheet.absoluteFill}
+          />
+          <Text style={styles.footText}>
+            {starting ? '准备中…' : '开始上课'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const clock3 = sec => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const r = sec % 60;
+    const z = n => (n < 10 ? '0' : '') + n;
+    return `${z(h)}:${z(m)}:${z(r)}`;
+  };
+
+  const openScoreEditor = () => {
+    if (!curPiece) {
+      Alert.alert('先填曲目名称', '请先在「当前曲目」里输入曲目名称，再编辑乐谱。');
+      return;
+    }
+    navigation.navigate('ScoreEditor', {
+      studentId: (lessonPeople || [])[0]?.id || getDeviceId(),
+      studentName: namesOf(lessonPeople),
+      pieceName: curPiece,
+    });
+  };
+
+  const segNums = curPiece ? pieceSegs[curPiece] : undefined;
+  const scoreAdded = Array.isArray(segNums) && segNums.length > 0;
+  const charsNow = current && current.chars ? current.chars : 0;
+  const PlayGlyph = () => <View style={styles.playTri} />;
+  const PauseGlyph = () => (
+    <View style={styles.pauseWrap}>
+      <View style={styles.pauseBar} />
+      <View style={styles.pauseBar} />
+    </View>
+  );
+
   const renderLive = () => (
     <>
-      <View style={styles.card}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>{namesOf(lessonPeople)}</Text>
-          <Text style={[styles.status, listening ? styles.statusOn : null]}>
-            {listening
-              ? `● 正在录音 ${clock(elapsed)}`
-              : starting
-                ? '等待录音启动'
-                : '已暂停'}
+      <View style={styles.stuCard}>
+        <Image source={dark ? Images.avatarCapDark : Images.avatarCapLight} style={styles.stuAvatar} />
+        <View style={styles.stuTexts}>
+          <Text style={styles.stuTitle} numberOfLines={1}>
+            {namesOf(lessonPeople)}
           </Text>
+          <Text style={styles.stuCaption}>当前学生</Text>
         </View>
-        {netBad ? <Text style={styles.warn}>网络不稳，说的话先存在手机上，连上后自动补传。</Text> : null}
-        {gapNote ? <Text style={styles.warn}>{gapNote}</Text> : null}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() =>
+            Alert.alert('切换学生', '要换学生，请先点「结束整理」保存本节课，再重新开始上课录音。')
+          }>
+          <Text style={styles.stuSwitch}>切换学生 ›</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          第 {segments.length || 1} 首：{curPiece || '还没选曲目'}
-        </Text>
-        {pieceChips(curIdx, curPiece)}
-        {newPieceOpen ? (
-          <TextInput
-            style={styles.input}
-            value={pieces.includes(curPiece) ? '' : curPiece}
-            onChangeText={t => pickPiece(curIdx, t)}
-            placeholder="新曲目的名字"
-            placeholderTextColor={colors.textSecondary}
-          />
-        ) : (
-          <TouchableOpacity onPress={() => setNewPieceOpen(true)}>
-            <Text style={styles.link}>＋ 新增曲目</Text>
-          </TouchableOpacity>
-        )}
-        {curPiece ? (
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('ScoreEditor', {
-                studentId: (lessonPeople || [])[0]?.id || getDeviceId(),
-                studentName: namesOf(lessonPeople),
-                pieceName: curPiece,
-              })
-            }>
-            <Text style={styles.link}>编辑和调整乐谱 ›</Text>
-          </TouchableOpacity>
-        ) : null}
-        {current && (current.points || []).length ? (
-          (current.points || []).map((p, i) => (
-            <Text key={i} style={styles.point}>
-              · {p}
+      <View style={styles.statusCard}>
+        <View style={styles.statusTop}>
+          <View style={[styles.statusDot, listening && styles.statusDotOn]} />
+          <Text style={[styles.statusName, listening && styles.statusNameOn]}>
+            {listening ? '正在录音' : starting ? '等待开始' : '已暂停'}
+          </Text>
+          <View style={styles.flex} />
+          <Text style={styles.statusClock}>{clock3(elapsed)}</Text>
+        </View>
+        <View style={styles.statusLine} />
+        <View style={styles.statusChips}>
+          <View style={[styles.sChip, listening && styles.sChipOn]}>
+            <Text style={[styles.sChipText, listening && styles.sChipTextOn]}>
+              {listening ? '正在识别' : starting ? '等待录音启动' : '已暂停'}
             </Text>
-          ))
-        ) : null}
-        <Text style={styles.heard} numberOfLines={3}>
-          {current && current.chars
-            ? `已记下 ${current.chars} 字：…${(current.text || '').slice(-60)}`
-            : listening
-              ? '暂无录音内容'
-              : '还没听到这首的内容'}
-        </Text>
+          </View>
+          <View style={[styles.sChip, listening && styles.sChipOn]}>
+            <Text style={[styles.sChipText, listening && styles.sChipTextOn]}>
+              {charsNow ? `已记下 ${charsNow} 字` : '暂无录音内容'}
+            </Text>
+          </View>
+        </View>
+      </View>
+      {netBad ? <Text style={styles.warn}>网络不稳，说的话先存在手机上，连上后自动补传。</Text> : null}
+      {gapNote ? <Text style={styles.warn}>{gapNote}</Text> : null}
+
+      <View style={styles.pieceCard}>
+        <View style={styles.pieceHead}>
+          <Text style={styles.pieceTitle}>当前曲目</Text>
+          <View style={styles.pieceBadge}>
+            <Text style={styles.pieceBadgeText}>第{segments.length || 1}首</Text>
+          </View>
+        </View>
+        <TextInput
+          style={styles.pieceInput}
+          value={curPiece}
+          onChangeText={t => pickPiece(curIdx, t)}
+          placeholder="请输入曲目名称"
+          placeholderTextColor="#A1A1B4"
+        />
+        {pieces.length ? pieceChips(curIdx, curPiece) : null}
+        <View style={styles.pieceLine} />
+        <TouchableOpacity style={styles.scoreRow} activeOpacity={0.8} onPress={openScoreEditor}>
+          <View style={styles.scoreTile}>
+            <Text style={styles.scoreTileGlyph}>♪</Text>
+          </View>
+          <View style={styles.stuTexts}>
+            <Text style={styles.scoreTitle}>编辑和调整乐谱</Text>
+            <Text style={styles.scoreSub} numberOfLines={1}>
+              {scoreAdded ? `已添加乐谱·${segNums.length}条分段标记` : '点击上传乐谱，添加演奏重点'}
+            </Text>
+          </View>
+          <View style={[styles.sChip, scoreAdded && styles.sChipOn]}>
+            <Text style={[styles.sChipText, scoreAdded && styles.sChipTextOn]}>
+              {scoreAdded ? '已添加' : '未添加'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        {current && (current.points || []).length
+          ? (current.points || []).map((pt, i) => (
+              <Text key={i} style={styles.point}>
+                · {pt}
+              </Text>
+            ))
+          : null}
       </View>
 
       <TouchableOpacity
-        style={[styles.nextBtn, nextPending && styles.btnDim]}
+        style={[styles.addPiece, nextPending && styles.btnDim]}
+        activeOpacity={0.8}
         disabled={nextPending}
         onPress={() => {
           pressNext();
           setNewPieceOpen(false);
         }}>
-        <Text style={styles.nextText}>{nextPending ? '正在切到下一首…' : '下一首'}</Text>
+        <Text style={styles.addPieceText}>＋  新增曲目</Text>
       </TouchableOpacity>
 
-      <View style={styles.row}>
-        {listening ? (
-          <TouchableOpacity style={[styles.btnGhost, styles.flex]} onPress={pause}>
-            <Text style={styles.btnGhostText}>暂停</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.btnGhost, styles.flex]}
-            disabled={starting}
-            onPress={startListening}>
-            <Text style={styles.btnGhostText}>继续听</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.btnGhost, styles.flex]}
-          onPress={() => (dimmed ? undim() : dimOn())}>
-          <Text style={styles.btnGhostText}>{dimmed ? '亮屏' : '息屏省电'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, styles.flex]} disabled={starting} onPress={askFinish}>
-          <Text style={styles.btnText}>结束整理</Text>
-        </TouchableOpacity>
-      </View>
       {dimmed ? (
         <Text style={styles.warn}>已关屏省电（识别仍在跑）。点屏幕任意处，或点「亮屏」恢复亮度。</Text>
-      ) : (
-        <Text style={styles.hint}>可点「关屏省电」几乎熄屏省电，点屏幕即可亮回；识别不会停。</Text>
-      )}
+      ) : null}
 
       {segments.length > 1 ? (
         <View style={styles.card}>
@@ -863,6 +964,58 @@ export default function LessonCaptureScreen({navigation}) {
         </View>
       ) : null}
     </>
+  );
+
+  const renderLivePanel = () => (
+    <View style={styles.panel}>
+      <View style={styles.panelRow}>
+        <TouchableOpacity
+          style={styles.panelSide}
+          activeOpacity={0.8}
+          onPress={() => (dimmed ? undim() : dimOn())}>
+          <View style={styles.panelPill}>
+            <Text style={styles.panelPillGlyph}>☾</Text>
+          </View>
+          <Text style={styles.panelLabel}>{dimmed ? '亮屏' : '息屏省电'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={starting}
+          onPress={listening ? pause : startListening}
+          style={styles.panelMain}>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={StyleSheet.absoluteFill}
+          />
+          {listening ? <PauseGlyph /> : <PlayGlyph />}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.panelSide, nextPending && styles.btnDim]}
+          activeOpacity={0.8}
+          disabled={nextPending}
+          onPress={() => {
+            pressNext();
+            setNewPieceOpen(false);
+          }}>
+          <View style={styles.panelPill}>
+            <Text style={styles.panelPillGlyph}>⏭︎</Text>
+          </View>
+          <Text style={styles.panelLabel}>{nextPending ? '切换中' : '下一首'}</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity activeOpacity={0.88} disabled={starting} onPress={askFinish} style={styles.finishBtn}>
+        <LinearGradient
+          colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+          start={{x: 0.5, y: 0}}
+          end={{x: 0.5, y: 1}}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.finishSq} />
+        <Text style={styles.finishText}>结束整理</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const renderReview = () => {
@@ -884,54 +1037,76 @@ export default function LessonCaptureScreen({navigation}) {
             </TouchableOpacity>
           </View>
         ) : null}
-        <Text style={styles.title}>{namesOf(lessonPeople)} · 这节课的重点</Text>
-        <Text style={styles.hint}>
-          选好曲目，每条重点选挂到「通用重点」或「第N段」谱面分段重点。分段建议会出现在谱面编辑里原有快捷语下面。多人课时确认后会同步给每位所选学生。
-        </Text>
+        <View style={styles.howCard}>
+          <Text style={styles.howTitle}>如何分配课堂重点？</Text>
+          <Text style={styles.howSub}>
+            通用重点:适用于整首曲目。 分段重点:仅适用于指定乐段。
+          </Text>
+        </View>
         {reviewSegs.map((g, i) => {
           const chosen = pieceFor[g.idx] || g.piece || '';
           const pts = edits[g.idx] || g.points || [];
           const off = !!skip[g.idx];
           const segs = pieceSegs[chosen] || [];
+          const zh = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
           return (
-            <View key={g.idx} style={[styles.card, off && styles.cardOff]}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>
-                  第 {i + 1} 首：{chosen || '还没选曲目'}
-                </Text>
+            <View key={g.idx} style={[styles.reviewCard, off && styles.cardOff]}>
+              <View style={styles.scoreRowTop}>
+                <View style={styles.scoreTile}>
+                  <Text style={styles.scoreTileGlyph}>♪</Text>
+                </View>
+                <View style={styles.stuTexts}>
+                  <Text style={styles.stuTitle} numberOfLines={1}>
+                    第{zh[i] || i + 1}首·{chosen || '还没选曲目'}
+                  </Text>
+                  <Text style={styles.stuCaption}>{pts.length}条重点</Text>
+                </View>
                 <TouchableOpacity onPress={() => setSkip(prev => ({...prev, [g.idx]: !off}))}>
-                  <Text style={styles.link}>{off ? '要挂' : '这首不挂'}</Text>
+                  <Text style={styles.stuSwitch}>{off ? '要挂' : '这首不挂'}</Text>
                 </TouchableOpacity>
               </View>
               {!off ? (
                 <>
-                  {pieceChips(g.idx, chosen)}
+                  {pieces.length ? pieceChips(g.idx, chosen) : null}
                   <TextInput
-                    style={styles.input}
+                    style={styles.pieceInput}
                     value={pieces.includes(chosen) ? '' : chosen}
                     onChangeText={t => pickPiece(g.idx, t)}
                     placeholder="或者写新曲目的名字"
-                    placeholderTextColor={colors.textSecondary}
+                    placeholderTextColor="#A1A1B4"
                   />
+                  <View style={styles.pieceLine} />
+                  <View style={styles.listHead}>
+                    <Text style={styles.listTitle}>课堂重点列表（{pts.length}）</Text>
+                    <TouchableOpacity
+                      style={styles.addPill}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        const arr = [...(edits[g.idx] || g.points || []), ''];
+                        setEdits(prev => ({...prev, [g.idx]: arr}));
+                        setPointTarget(g.idx, arr.length - 1, 'global');
+                      }}>
+                      <Text style={styles.addPillText}>＋ 添加重点</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.listLine} />
                   {pts.map((p, j) => {
                     const tg = targets[`${g.idx}:${j}`] || {target: 'global', seg: 0};
+                    const key = `${g.idx}:${j}`;
+                    const scopeText =
+                      tg.target === 'section' && tg.seg ? `第${tg.seg}段` : '通用重点';
                     return (
-                      <View key={j} style={{marginBottom: 10}}>
-                        <View style={styles.row}>
-                          <TextInput
-                            style={[styles.input, styles.flex]}
-                            value={p}
-                            multiline
-                            onChangeText={t =>
-                              setEdits(prev => {
-                                const arr = (prev[g.idx] || g.points || []).slice();
-                                arr[j] = t;
-                                return {...prev, [g.idx]: arr};
-                              })
-                            }
-                          />
+                      <View key={j} style={styles.pointBlock}>
+                        <View style={styles.pointHead}>
+                          <View style={styles.pointBadge}>
+                            <Text style={styles.pointBadgeText}>
+                              重点{j + 1 < 10 ? '0' : ''}
+                              {j + 1}
+                            </Text>
+                          </View>
                           <TouchableOpacity
-                            style={styles.del}
+                            style={styles.delPill}
+                            activeOpacity={0.8}
                             onPress={() =>
                               setEdits(prev => {
                                 const arr = (prev[g.idx] || g.points || []).slice();
@@ -939,59 +1114,72 @@ export default function LessonCaptureScreen({navigation}) {
                                 return {...prev, [g.idx]: arr};
                               })
                             }>
-                            <Text style={styles.delText}>✕</Text>
+                            <Text style={styles.delPillText}>🗑 删除</Text>
                           </TouchableOpacity>
                         </View>
-                        <View style={styles.chipWrap}>
-                          <TouchableOpacity
-                            style={[styles.chip, tg.target === 'global' && styles.chipOn]}
-                            onPress={() => setPointTarget(g.idx, j, 'global')}>
-                            <Text style={[styles.chipText, tg.target === 'global' && styles.chipTextOn]}>
-                              通用重点
-                            </Text>
-                          </TouchableOpacity>
-                          {segs.map(n => (
+                        <TouchableOpacity
+                          style={styles.scopeRow}
+                          activeOpacity={0.8}
+                          onPress={() => setScopeOpen(prev => ({...prev, [key]: !prev[key]}))}>
+                          <Text style={styles.scopeLabel}>适用范围</Text>
+                          <Text style={styles.scopeValue}>{scopeText}  ›</Text>
+                        </TouchableOpacity>
+                        {scopeOpen[key] ? (
+                          <View style={styles.scopeChips}>
                             <TouchableOpacity
-                              key={n}
-                              style={[
-                                styles.chip,
-                                tg.target === 'section' && tg.seg === n && styles.chipOn,
-                              ]}
-                              onPress={() => setPointTarget(g.idx, j, 'section', n)}>
-                              <Text
-                                style={[
-                                  styles.chipText,
-                                  tg.target === 'section' && tg.seg === n && styles.chipTextOn,
-                                ]}>
-                                第{n}段
+                              style={[styles.chip, tg.target === 'global' && styles.chipOn]}
+                              onPress={() => setPointTarget(g.idx, j, 'global')}>
+                              <Text style={[styles.chipText, tg.target === 'global' && styles.chipTextOn]}>
+                                通用重点
                               </Text>
                             </TouchableOpacity>
-                          ))}
-                          {!segs.length ? (
-                            <Text style={styles.hint}>该曲还没有分段；可先只挂通用，或去谱面编辑加段。</Text>
-                          ) : null}
-                        </View>
+                            {segs.map(n => (
+                              <TouchableOpacity
+                                key={n}
+                                style={[
+                                  styles.chip,
+                                  tg.target === 'section' && tg.seg === n && styles.chipOn,
+                                ]}
+                                onPress={() => setPointTarget(g.idx, j, 'section', n)}>
+                                <Text
+                                  style={[
+                                    styles.chipText,
+                                    tg.target === 'section' && tg.seg === n && styles.chipTextOn,
+                                  ]}>
+                                  第{n}段
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                            {!segs.length ? (
+                              <Text style={styles.hint}>该曲还没有分段；可先只挂通用，或去谱面编辑加段。</Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+                        <TextInput
+                          style={styles.pointInput}
+                          value={p}
+                          multiline
+                          placeholder="请输入教案内容"
+                          placeholderTextColor="#A1A1B4"
+                          onChangeText={t =>
+                            setEdits(prev => {
+                              const arr = (prev[g.idx] || g.points || []).slice();
+                              arr[j] = t;
+                              return {...prev, [g.idx]: arr};
+                            })
+                          }
+                        />
                       </View>
                     );
                   })}
                   {!pts.length ? <Text style={styles.hint}>这首没整理出重点。</Text> : null}
-                  <View style={styles.rowBetween}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        const arr = [...(edits[g.idx] || g.points || []), ''];
-                        setEdits(prev => ({...prev, [g.idx]: arr}));
-                        setPointTarget(g.idx, arr.length - 1, 'global');
-                      }}>
-                      <Text style={styles.link}>＋ 加一条</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (!fullText) loadFullText();
-                        setOpenText(prev => ({...prev, [g.idx]: !prev[g.idx]}));
-                      }}>
-                      <Text style={styles.link}>{openText[g.idx] ? '收起原话' : `看原话（${g.chars || 0} 字）`}</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!fullText) loadFullText();
+                      setOpenText(prev => ({...prev, [g.idx]: !prev[g.idx]}));
+                    }}>
+                    <Text style={styles.link}>{openText[g.idx] ? '收起原话' : `看原话（${g.chars || 0} 字）`}</Text>
+                  </TouchableOpacity>
                   {openText[g.idx] ? (
                     <Text style={styles.heard}>{fullText ? fullText[g.idx] || '' : '加载中…'}</Text>
                   ) : null}
@@ -1005,15 +1193,31 @@ export default function LessonCaptureScreen({navigation}) {
             这节课没有记到老师说的话。下次请停在本页；可点「关屏省电」省电，不要真正锁屏。
           </Text>
         ) : null}
-        <TouchableOpacity style={[styles.btn, saving && styles.btnDim]} disabled={saving} onPress={confirm}>
-          <Text style={styles.btnText}>{saving ? '正在挂…' : '确认并挂到曲目'}</Text>
-        </TouchableOpacity>
       </>
     );
   };
 
+  const renderReviewFooter = () =>
+    summarizing ? null : (
+      <View style={styles.footer}>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          disabled={saving}
+          onPress={confirm}
+          style={[styles.footBtn, saving && styles.btnDim]}>
+          <LinearGradient
+            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+            start={{x: 0.5, y: 0}}
+            end={{x: 0.5, y: 1}}
+            style={StyleSheet.absoluteFill}
+          />
+          <Text style={styles.footText}>{saving ? '正在挂…' : '确认并挂到曲目'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader
         title={phase === 'live' ? '录音详情' : '上课录音'}
         onBack={leave}
@@ -1021,20 +1225,27 @@ export default function LessonCaptureScreen({navigation}) {
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[styles.body, styles.bodyLive]}
+          keyboardShouldPersistTaps="handled">
           {phase === 'pick' ? renderPick() : phase === 'live' ? renderLive() : renderReview()}
         </ScrollView>
+        {phase === 'live'
+          ? renderLivePanel()
+          : phase === 'pick'
+            ? renderPickFooter()
+            : renderReviewFooter()}
       </KeyboardAvoidingView>
       {dimmed && phase === 'live' ? (
         <TouchableOpacity style={styles.dimMask} activeOpacity={1} onPress={undim}>
           <Text style={styles.dimText}>点一下恢复亮度{"\n"}识别仍在继续</Text>
         </TouchableOpacity>
       ) : null}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 
-function makeStyles(colors) {
+function makeStyles(colors, dark) {
   const line = colors.cardBorder || colors.divider || '#ddd';
   return StyleSheet.create({
     root: {flex: 1, backgroundColor: colors.bg},
@@ -1053,6 +1264,298 @@ function makeStyles(colors) {
       marginBottom: 8,
       fontSize: 15,
     },
+    resumeCard: {
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      padding: 15,
+      marginBottom: 15,
+    },
+    resumeTop: {flexDirection: 'row', alignItems: 'center'},
+    resumeBtns: {flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, gap: 15},
+    resumeBtn: {
+      flex: 1,
+      height: 36,
+      borderRadius: 18,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    resumeBtnGhost: {borderWidth: 1, borderColor: dark ? '#B595FF' : colors.primary},
+    resumeBtnText: {fontSize: 14, fontWeight: '500', color: '#fff'},
+    resumeBtnGhostText: {color: dark ? '#B595FF' : colors.primary},
+    pickCard: {
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      padding: 15,
+      marginBottom: 15,
+    },
+    searchBox: {
+      marginTop: 15,
+      height: 44,
+      borderRadius: 8,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+    },
+    searchGlyph: {fontSize: 20, color: '#A1A1B4', marginRight: 8},
+    searchInput: {flex: 1, fontSize: 14, color: colors.textPrimary, paddingVertical: 0},
+    stuGrid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 15},
+    stuTile: {
+      width: '48.5%',
+      height: 60,
+      borderRadius: 8,
+      marginBottom: 15,
+      paddingLeft: 11,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
+      borderWidth: 1,
+      borderColor: 'transparent',
+      flexDirection: 'row',
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    stuTileOn: {borderColor: dark ? '#B595FF' : colors.primary},
+    stuTileAvatar: {width: 36, height: 36, borderRadius: 18},
+    stuTileName: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    stuTileSub: {fontSize: 12, color: '#A1A1B4', marginTop: 1},
+    stuTick: {
+      position: 'absolute',
+      right: 0,
+      bottom: 0,
+      width: 20,
+      height: 20,
+      borderTopLeftRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? '#B595FF' : colors.primary,
+    },
+    stuTickText: {fontSize: 12, fontWeight: '700', color: '#fff'},
+    codeRow: {
+      marginTop: 4,
+      height: 40,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
+    },
+    codeRowText: {fontSize: 13, fontWeight: '500', color: dark ? '#B595FF' : colors.primary},
+    footer: {backgroundColor: colors.card, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8},
+    footBtn: {
+      height: 44,
+      borderRadius: 22,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    footText: {fontSize: 16, fontWeight: '600', color: '#fff'},
+    howCard: {borderRadius: 12, backgroundColor: colors.card, paddingHorizontal: 15, paddingVertical: 13, marginBottom: 15},
+    howTitle: {fontSize: 16, fontWeight: '600', color: colors.textPrimary},
+    howSub: {fontSize: 12, color: '#A1A1B4', marginTop: 5, lineHeight: 17},
+    reviewCard: {borderRadius: 12, backgroundColor: colors.card, padding: 15, marginBottom: 15},
+    scoreRowTop: {flexDirection: 'row', alignItems: 'center'},
+    listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12},
+    listTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    addPill: {
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
+    },
+    addPillText: {fontSize: 12, color: dark ? '#B595FF' : colors.primary},
+    listLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.3)', marginTop: 12},
+    pointBlock: {marginTop: 15},
+    pointHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
+    pointBadge: {
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+    },
+    pointBadgeText: {fontSize: 12, fontWeight: '500', color: '#fff'},
+    delPill: {
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(255,55,97,0.16)' : '#FFE9EE',
+    },
+    delPillText: {fontSize: 12, color: '#FF3761'},
+    scopeRow: {
+      marginTop: 10,
+      height: 44,
+      borderRadius: 8,
+      paddingHorizontal: 15,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
+    },
+    scopeLabel: {fontSize: 14, color: colors.textPrimary},
+    scopeValue: {fontSize: 14, color: colors.textPrimary},
+    scopeChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8},
+    pointInput: {
+      marginTop: 10,
+      minHeight: 44,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 14,
+      color: colors.textPrimary,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
+    },
+    bodyLive: {paddingTop: 10, paddingHorizontal: 15, paddingBottom: 16},
+    // ---- 录音详情（蓝湖 345 宽卡片，卡片色 / 内部块 #131444） ----
+    stuCard: {
+      height: 70,
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      paddingHorizontal: 15,
+      marginBottom: 13,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    stuAvatar: {width: 44, height: 44, borderRadius: 22, backgroundColor: dark ? '#F3E6FF' : '#FFE3EA'},
+    stuTexts: {flex: 1, marginLeft: 10, marginRight: 6},
+    stuTitle: {fontSize: 16, fontWeight: '600', color: colors.textPrimary},
+    stuCaption: {fontSize: 12, color: '#A1A1B4', marginTop: 3},
+    stuSwitch: {fontSize: 12, color: '#A1A1B4'},
+    statusCard: {
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      paddingHorizontal: 15,
+      paddingTop: 11,
+      paddingBottom: 15,
+      marginBottom: 15,
+    },
+    statusTop: {flexDirection: 'row', alignItems: 'center', height: 24},
+    statusDot: {width: 10, height: 10, borderRadius: 5, backgroundColor: '#A1A1B4', marginRight: 5},
+    statusDotOn: {backgroundColor: dark ? '#B595FF' : '#FF3761'},
+    statusName: {fontSize: 14, fontWeight: '600', color: '#A1A1B4'},
+    statusNameOn: {color: colors.textPrimary},
+    statusClock: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
+    statusLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.4)', marginTop: 11},
+    statusChips: {flexDirection: 'row', justifyContent: 'space-between', marginTop: 9},
+    sChip: {
+      height: 22,
+      paddingHorizontal: 7,
+      borderRadius: 4,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(161,161,180,0.16)' : 'rgba(161,161,180,0.18)',
+    },
+    sChipOn: {backgroundColor: dark ? 'rgba(25,196,138,0.16)' : 'rgba(25,196,138,0.14)'},
+    sChipText: {fontSize: 11, color: '#A1A1B4'},
+    sChipTextOn: {color: '#19C48A'},
+    pieceCard: {
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      padding: 15,
+      marginBottom: 15,
+    },
+    pieceHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 24},
+    pieceTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    pieceBadge: {
+      height: 24,
+      paddingHorizontal: 14,
+      borderRadius: 6,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFE9EE',
+    },
+    pieceBadgeText: {fontSize: 12, color: dark ? '#B595FF' : colors.primary},
+    pieceInput: {
+      marginTop: 11,
+      height: 44,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      fontSize: 14,
+      color: colors.textPrimary,
+      backgroundColor: dark ? '#131444' : '#F7F7F7',
+    },
+    pieceLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.4)', marginTop: 15},
+    scoreRow: {flexDirection: 'row', alignItems: 'center', marginTop: 15},
+    scoreTile: {
+      width: 44,
+      height: 44,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFE9EE',
+    },
+    scoreTileGlyph: {fontSize: 22, color: dark ? '#B595FF' : colors.primary},
+    scoreTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    scoreSub: {fontSize: 12, color: '#A1A1B4', marginTop: 5},
+    addPiece: {
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    addPieceText: {fontSize: 14, fontWeight: '600', color: dark ? '#B595FF' : colors.primary},
+    panel: {
+      marginHorizontal: 15,
+      marginBottom: 12,
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: dark ? 'rgba(181,149,255,0.35)' : 'rgba(255,55,97,0.2)',
+      paddingTop: 26,
+      paddingHorizontal: 15,
+      paddingBottom: 15,
+    },
+    panelRow: {flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 30},
+    panelSide: {width: 60, alignItems: 'center', marginTop: 12},
+    panelPill: {
+      width: 60,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFE9EE',
+    },
+    panelPillGlyph: {fontSize: 17, color: dark ? '#B595FF' : colors.primary},
+    panelLabel: {fontSize: 12, color: '#A1A1B4', marginTop: 6},
+    panelMain: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    playTri: {
+      marginLeft: 4,
+      width: 0,
+      height: 0,
+      borderTopWidth: 9,
+      borderBottomWidth: 9,
+      borderLeftWidth: 15,
+      borderTopColor: 'transparent',
+      borderBottomColor: 'transparent',
+      borderLeftColor: '#FAFAFA',
+    },
+    pauseWrap: {flexDirection: 'row', gap: 6},
+    pauseBar: {width: 4, height: 18, borderRadius: 2, backgroundColor: '#FAFAFA'},
+    finishBtn: {
+      height: 44,
+      marginTop: 15,
+      borderRadius: 10,
+      overflow: 'hidden',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    finishSq: {
+      width: 14,
+      height: 14,
+      borderWidth: 2,
+      borderColor: '#fff',
+      borderRadius: 2,
+      marginRight: 10,
+    },
+    finishText: {fontSize: 14, fontWeight: '600', color: '#fff'},
     row: {flexDirection: 'row', alignItems: 'center', gap: 10},
     rowBetween: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     flex: {flex: 1},
@@ -1060,14 +1563,14 @@ function makeStyles(colors) {
     center: {alignItems: 'center', paddingVertical: 60},
     chipWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 6},
     chip: {
-      borderWidth: 1,
-      borderColor: line,
-      borderRadius: 16,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      borderRadius: 6,
+      height: 24,
+      paddingHorizontal: 10,
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
     },
-    chipOn: {backgroundColor: colors.primary, borderColor: colors.primary},
-    chipText: {color: colors.textPrimary, fontSize: 14},
+    chipOn: {backgroundColor: colors.primary},
+    chipText: {color: dark ? '#B595FF' : colors.primary, fontSize: 12},
     chipTextOn: {color: '#fff', fontWeight: '700'},
     stuChip: {
       backgroundColor: colors.card || '#fff',

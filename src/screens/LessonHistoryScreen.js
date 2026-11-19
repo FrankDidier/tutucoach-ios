@@ -1,4 +1,5 @@
 // 学生端：蓝湖「课堂重点」列表 → 点「查看记录」进详情。
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -50,7 +51,7 @@ export default function LessonHistoryScreen({navigation}) {
   );
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="课堂重点" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={styles.body}
@@ -89,7 +90,7 @@ export default function LessonHistoryScreen({navigation}) {
           })
         )}
       </ScrollView>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

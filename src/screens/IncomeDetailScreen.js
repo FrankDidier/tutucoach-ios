@@ -1,4 +1,5 @@
 // 蓝湖「收入明细」
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   View,
@@ -47,7 +48,7 @@ export default function IncomeDetailScreen({navigation}) {
   );
 
   return (
-    <SafeAreaView style={styles.root}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="收入明细" onBack={() => navigation.goBack()} />
       {items == null ? (
         <ActivityIndicator color={colors.primary} style={{marginTop: 40}} />
@@ -78,7 +79,7 @@ export default function IncomeDetailScreen({navigation}) {
           )}
         />
       )}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

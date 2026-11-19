@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -483,7 +484,7 @@ export default function ScoreViewerScreen({navigation, route}) {
   };
 
   return (
-    <SafeAreaView style={ui.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱重点" onBack={() => navigation.goBack()} />
       <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
@@ -818,7 +819,7 @@ export default function ScoreViewerScreen({navigation, route}) {
           onLocate={() => locate(openSec)}
         />
       ) : null}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 }
 

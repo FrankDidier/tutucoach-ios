@@ -37,9 +37,10 @@ function stillUnlocked(id, wallet, coach) {
   return !!(wallet && (wallet.unlocked || []).includes(id));
 }
 
+// 蓝湖 AI选择 卡片副标题：「AI分身·专业指导」/「AI分身·温柔内敛」
 function styleLabel(style) {
-  if (style === 'ENCOURAGING' || style === 'PLAYFUL') return '温柔亲和';
-  return 'AI分身';
+  if (style === 'STRICT' || style === 'PROFESSIONAL') return 'AI分身·专业指导';
+  return 'AI分身·温柔内敛';
 }
 
 // 与安卓 SettingsActivity.avatarFor 一致：名字含「老师/专业」用真人头像，否则用兔子吉祥物
@@ -267,16 +268,16 @@ const AISelectScreen = ({navigation, route}) => {
                 <TouchableOpacity
                   key={item.id}
                   activeOpacity={0.9}
-                  style={[styles.cell, active && styles.cellSelected]}
+                  style={styles.cell}
                   onPress={() => setSelected(item.id)}>
-                  <View style={styles.avatarCircle}>
+                  <View style={styles.cardImgWrap}>
                     <Image
                       source={item.avatar}
-                      style={styles.avatarImg}
+                      style={styles.cardImg}
                       resizeMode="cover"
                     />
                   </View>
-                  <View style={styles.cellTextCol}>
+                  <View style={styles.cardTextPanel}>
                     <Text
                       style={[styles.cellName, active && styles.cellNameSelected]}
                       numberOfLines={1}>
@@ -290,6 +291,7 @@ const AISelectScreen = ({navigation, route}) => {
                           : item.styleText}
                     </Text>
                   </View>
+                  {active ? <View style={styles.cardBorder} pointerEvents="none" /> : null}
                 </TouchableOpacity>
               );
             })
@@ -334,7 +336,7 @@ const makeStyles = (colors, dark) =>
     headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
     walletHint: {width: 72, textAlign: 'right', fontSize: 12, color: colors.textMuted, paddingRight: 8},
     // 蓝湖卡片区从 y≈98；顶栏后 padTop 约 10
-    scroll: {paddingHorizontal: px(15), paddingTop: px(10), paddingBottom: 100},
+    scroll: {paddingHorizontal: px(15), paddingTop: px(22), paddingBottom: 130},
     emptyHint: {
       width: '100%',
       textAlign: 'center',
@@ -347,44 +349,57 @@ const makeStyles = (colors, dark) =>
       flexWrap: 'wrap',
       justifyContent: 'space-between',
     },
-    // 蓝湖 165×80，列间距 15，行间距 15
+    // 蓝湖 AI选择：卡片 165×165（列间距 15、行间距 15）；上部 159×159 立绘（内缩 3），
+    // 底部 165×50 文字面板（名称 15/600 + 副标题 12 #A1A1B4）。
     cell: {
       width: px(165),
-      height: px(80),
+      height: px(165),
       marginBottom: px(15),
-      flexDirection: 'row',
-      alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: px(16),
-      paddingHorizontal: px(10),
-      borderWidth: 2,
-      borderColor: 'transparent',
-    },
-    // t1 选中：底 #131444 + 边 #B595FF；t2 选中：白底 + 粉边
-    cellSelected: {
-      borderColor: dark ? '#B595FF' : colors.primary,
-      backgroundColor: dark ? colors.cardAlt : '#FFFFFF',
-    },
-    avatarCircle: {
-      width: px(44),
-      height: px(44),
-      borderRadius: px(22),
-      backgroundColor: '#FFEDF1',
       overflow: 'hidden',
     },
-    avatarImg: {width: '100%', height: '100%'},
-    cellTextCol: {flex: 1, marginLeft: px(10)},
-    cellName: {fontSize: 15, fontWeight: '600', color: colors.textPrimary},
-    cellNameSelected: {color: dark ? '#B595FF' : colors.textPrimary},
-    cellSubtitle: {fontSize: 12, color: '#979797', marginTop: 4},
+    cardImgWrap: {
+      position: 'absolute',
+      top: px(3),
+      left: px(3),
+      width: px(159),
+      height: px(159),
+      borderRadius: px(13),
+      overflow: 'hidden',
+      backgroundColor: dark ? '#2A1A5E' : '#FFEDF1',
+    },
+    cardImg: {width: '100%', height: '100%'},
+    cardTextPanel: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: px(50),
+      paddingLeft: px(10),
+      paddingTop: px(5),
+      backgroundColor: colors.card,
+    },
+    // t1 选中：边 #B595FF；t2 选中：粉边（矩形 1182）
+    cardBorder: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: px(16),
+      borderWidth: 1.5,
+      borderColor: dark ? '#B595FF' : colors.primary,
+    },
+    cellName: {fontSize: 15, fontWeight: '600', color: colors.textPrimary, lineHeight: px(20)},
+    cellNameSelected: {color: colors.textPrimary},
+    cellSubtitle: {fontSize: 12, color: '#A1A1B4', marginTop: px(2), lineHeight: px(17)},
+    // 蓝湖：底部整条面板（卡片色，高 60）+ 确认按钮 343×44（边距 16 / 上 8）
     footer: {
       position: 'absolute',
       left: 0,
       right: 0,
       bottom: 0,
       paddingHorizontal: px(16),
-      paddingBottom: 28,
-      paddingTop: 10,
+      paddingBottom: 30,
+      paddingTop: 8,
+      backgroundColor: colors.card,
     },
     // 蓝湖确认 343×44
     confirmOuter: {

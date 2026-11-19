@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -441,7 +442,7 @@ const AISettingsScreen = ({navigation, route}) => {
     : Images.avatarRabbit;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.aiPageBg || colors.bg} />
       <ScreenHeader title="AI分身设置" onBack={() => navigation?.goBack?.()} />
 
@@ -678,7 +679,7 @@ const AISettingsScreen = ({navigation, route}) => {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 };
 

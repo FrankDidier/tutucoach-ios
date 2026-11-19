@@ -1,3 +1,4 @@
+import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   View,
@@ -127,7 +128,7 @@ const StudentEntryScreen = ({navigation, route}) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} />
       <ScreenHeader title="学生信息录入" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -188,7 +189,7 @@ const StudentEntryScreen = ({navigation, route}) => {
         )}
         <Text style={styles.tip}>提示：点按编辑，长按删除。</Text>
       </ScrollView>
-    </SafeAreaView>
+    </EdgeSafeArea>
   );
 };
 
