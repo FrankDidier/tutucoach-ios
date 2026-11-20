@@ -97,6 +97,10 @@ export function createCompanionSession(host) {
   let timer = null;
   let stopped = false;
   let levels = [];
+  // 听音辨谱：弹琴时攒下的音名格子，跟下一次 tick 一起送上去认弹到哪一段。
+  let chroma = [];
+  // 角色刚说过话：原生那边攒的格子里有它自己的声音，下一次取到的扔掉。
+  let dropChroma = false;
   let silentSec = 0;
   let quietAt = 0;
   let lastPianoAt = Date.now();
@@ -316,6 +320,8 @@ export function createCompanionSession(host) {
     // 有人在说话就说明人还在，这段时间不算「没动静」，不然会说「一声不吭就走了」。
     if (Date.now() < speakingUntil || (await isSpeaking())) {
       levels = levels.concat(0).slice(-6);
+      chroma = [];
+      dropChroma = true;
       return;
     }
     try {
@@ -323,6 +329,13 @@ export function createCompanionSession(host) {
       const raw = Number(lv && lv.rms) || 0;
       // 原生层按当前乐器分辨是不是在练：说话、电视、角色自己的声音再响也不算。
       const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
+      const cells = Array.isArray(lv && lv.chroma) ? lv.chroma : [];
+      if (piano && !dropChroma) {
+        chroma = chroma.concat(cells).slice(-32);
+      } else {
+        chroma = [];
+      }
+      dropChroma = false;
       // 刚说完「我再弹一遍」就弹起来了：马上算在弹，不再当成还在说话。
       if (piano) {
         voiceUntil = 0;
@@ -364,11 +377,14 @@ export function createCompanionSession(host) {
     if (event === 'open') needOpen = false;
     try {
       if (event === 'tick') await sample();
+      const cellsOut = event === 'tick' ? chroma : [];
+      if (event === 'tick') chroma = [];
       const plan = await planCompanionTick({
         student_id: host.studentId(),
         piece: piece || host.pieceName(),
         event,
         levels,
+        ...(cellsOut.length ? {chroma: cellsOut} : {}),
         sections: sections.map(s => s.line),
         section_notes: sections.map(s => s.note || ''),
         recent_lines: recentSpoken.slice(-3),
@@ -447,6 +463,7 @@ export function createCompanionSession(host) {
     // 几秒就够：太长会把马上接着弹的琴声当成还在说话。
     voiceUntil = Date.now() + 5000;
     levels = [];
+    chroma = [];
     silentSec = 0;
   };
 
@@ -702,6 +719,7 @@ export function createCompanionSession(host) {
       if (!ended) return;
       ended = false;
       levels = [];
+      chroma = [];
       silentSec = 0;
       hadPlaying = false;
       awaitingField = '';

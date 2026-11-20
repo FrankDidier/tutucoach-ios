@@ -8,6 +8,7 @@
 @interface TutuToneFeed : NSObject
 - (void)feed:(AVAudioPCMBuffer *)buf rate:(double)rate;
 - (NSDictionary *)level;
+- (NSArray *)drainChroma;
 - (void)setInstrument:(NSString *)instrumentId;
 - (NSString *)instrumentId;
 @end
@@ -82,6 +83,21 @@
                       @"instrument": instId};
   return @{@"rms": @(lv.rms), @"piano": @(lv.piano), @"loud": @(lv.loud), @"swing": @(lv.swing),
            @"tone": @(heard), @"instrument": instId};
+}
+
+// 听音辨谱：上次取走之后攒下的音名格子，每格 12 个 0~99。
+- (NSArray *)drainChroma {
+  int cells[TUTU_CHROMA_KEEP][12];
+  os_unfair_lock_lock(&_lock);
+  int n = tutu_tone_drain_chroma(_tone, cells, TUTU_CHROMA_KEEP);
+  os_unfair_lock_unlock(&_lock);
+  NSMutableArray *out = [NSMutableArray arrayWithCapacity:n];
+  for (int i = 0; i < n; i++) {
+    NSMutableArray *cell = [NSMutableArray arrayWithCapacity:12];
+    for (int k = 0; k < 12; k++) [cell addObject:@(cells[i][k])];
+    [out addObject:cell];
+  }
+  return out;
 }
 
 - (void)setInstrument:(NSString *)instrumentId {
@@ -301,12 +317,12 @@ RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
     if (rms > 1) rms = 1;
     BOOL voice = [scripted rangeOfString:@"voice"].location != NSNotFound;
     BOOL loud = rms >= 0.08f;
-    resolve(@{@"rms": @(rms), @"piano": @(voice ? 0 : 1), @"loud": @(loud ? 1 : 0), @"swing": @3,
-              @"tone": @((loud && !voice) ? 1 : 0)});
+    resolve([self withChroma:@{@"rms": @(rms), @"piano": @(voice ? 0 : 1), @"loud": @(loud ? 1 : 0), @"swing": @3,
+                               @"tone": @((loud && !voice) ? 1 : 0)}]);
     return;
   }
   if (self.listenEngine != nil) {
-    resolve([[self toneFeed] level]);
+    resolve([self withChroma:[[self toneFeed] level]]);
     return;
   }
   if (self.recorder && self.recorder.recording) {
@@ -324,9 +340,37 @@ RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
         resolve(@{@"rms": @0, @"tone": @0});
         return;
       }
-      resolve([[self toneFeed] level]);
+      resolve([self withChroma:[[self toneFeed] level]]);
     });
   }];
+}
+
+// 测试写一行一次的格子（JSON），用掉一行删一行；没写就取麦里攒下的。
+- (NSDictionary *)withChroma:(NSDictionary *)level {
+  NSMutableDictionary *out = [level mutableCopy];
+  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tutu_chroma.txt"];
+  NSString *text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
+  if (text != nil) {
+    NSMutableArray *lines = [[text componentsSeparatedByString:@"\n"] mutableCopy];
+    [lines filterUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
+    NSArray *cells = @[];
+    if (lines.count > 0) {
+      id parsed = [NSJSONSerialization JSONObjectWithData:[lines[0] dataUsingEncoding:NSUTF8StringEncoding]
+                                                  options:0 error:nil];
+      if ([parsed isKindOfClass:[NSArray class]]) cells = parsed;
+      [lines removeObjectAtIndex:0];
+    }
+    if (lines.count > 0) {
+      [[lines componentsJoinedByString:@"\n"] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } else {
+      [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    }
+    [[self toneFeed] drainChroma];
+    out[@"chroma"] = cells;
+    return out;
+  }
+  out[@"chroma"] = [[self toneFeed] drainChroma];
+  return out;
 }
 
 RCT_EXPORT_METHOD(stopMeter:(RCTPromiseResolveBlock)resolve

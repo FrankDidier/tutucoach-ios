@@ -16,6 +16,10 @@
 // 停下来后不要拖太久还当成在弹，不然会一直念重点。
 #define TUTU_TONE_CHECK 16
 #define TUTU_TONE_RECENT 62
+// 听音辨谱：每半秒把响着的泛音按十二个音名攒成一格，服务器拿它认弹到谱上哪一段。和安卓 PianoTone 一样。
+#define TUTU_CHROMA_BLOCK 16
+#define TUTU_CHROMA_MIN 4
+#define TUTU_CHROMA_KEEP 32
 
 typedef struct {
   float rms;      // 最近一秒的响度，0~1（原始振幅 / 0.20，和以前的刻度一样）
@@ -60,6 +64,12 @@ typedef struct {
   long hitPrev;
   TutuToneLevel hit;
   int instrument; // TUTU_INST_*
+  float chromaAcc[12];
+  int chromaFrames;
+  int chromaVoiced;
+  int chroma[TUTU_CHROMA_KEEP][12];
+  int chromaHead;
+  int chromaCount;
 } TutuPianoTone;
 
 
@@ -75,5 +85,7 @@ int tutu_tone_is_piano(TutuToneLevel lv);
 int tutu_tone_is_playing(TutuToneLevel lv, int instrument);
 // 最近 4 秒里有没有两次听到琴声。听到了 out 是最近那次的情况，没听到是现在的情况。
 int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out);
+// 取走上次之后攒下的音名格子，每格 12 个 0~99。返回取走了几格。
+int tutu_tone_drain_chroma(TutuPianoTone *t, int out[][12], int max);
 
 #endif

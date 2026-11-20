@@ -68,7 +68,7 @@ function makeStyles(colors, dark) {
     },
     checkMark: {color: '#FFFFFF', fontSize: 26, fontWeight: '700', lineHeight: 30},
     ok: {fontSize: 13, fontWeight: '600', color: dark ? '#B7A0F8' : colors.primary, marginBottom: 10},
-    money: {fontSize: 32, fontWeight: '800', color: colors.textPrimary, marginBottom: 28},
+    money: {fontSize: 32, fontWeight: '600', color: colors.textPrimary, marginBottom: 28},
     card: {
       width: '100%',
       backgroundColor: dark ? '#040428' : colors.card,
@@ -80,7 +80,7 @@ function makeStyles(colors, dark) {
       justifyContent: 'space-between',
       marginBottom: 16,
     },
-    label: {color: colors.textSecondary, fontSize: 14},
+    label: {color: colors.textPrimary, fontSize: 14, fontWeight: '500'},
     val: {color: colors.textPrimary, fontSize: 14, fontWeight: '600'},
   });
 }

@@ -14,6 +14,9 @@
 // 底噪每帧最多往上爬一点点，一直有声音时不会把琴声当成底噪。
 #define FLOOR_RISE 1.0005f
 #define SLOTS (TUTU_TONE_LAG2 + 1)
+// 太低的音分辨不清半音，太高的多半是泛音，只取中间这一截。
+#define CHROMA_LO 100.0f
+#define CHROMA_HI 2500.0f
 
 static void fft(float *re, float *im, int n) {
   for (int i = 1, j = 0; i < n; i++) {
@@ -72,6 +75,54 @@ static int near_any(float f, const float *freqs, int n) {
   float tol = tol_for(f);
   for (int j = 0; j < n; j++) if (fabsf(f - freqs[j]) <= tol) return 1;
   return 0;
+}
+
+static void add_chroma(TutuPianoTone *t, const float *freq, const float *amp, int count, int voiced) {
+  if (voiced) {
+    for (int i = 0; i < count; i++) {
+      float f = freq[i];
+      if (f < CHROMA_LO || f > CHROMA_HI) continue;
+      int pc = (int)lround(12.0 * log(f / 261.6256) / log(2.0));
+      pc = ((pc % 12) + 12) % 12;
+      t->chromaAcc[pc] += sqrtf(amp[i]);
+    }
+    t->chromaVoiced++;
+  }
+  if (++t->chromaFrames < TUTU_CHROMA_BLOCK) return;
+  if (t->chromaVoiced >= TUTU_CHROMA_MIN) {
+    double norm = 0;
+    for (int k = 0; k < 12; k++) norm += (double)t->chromaAcc[k] * t->chromaAcc[k];
+    norm = sqrt(norm);
+    if (norm > 0) {
+      int at = (t->chromaHead + t->chromaCount) % TUTU_CHROMA_KEEP;
+      if (t->chromaCount == TUTU_CHROMA_KEEP) {
+        at = t->chromaHead;
+        t->chromaHead = (t->chromaHead + 1) % TUTU_CHROMA_KEEP;
+      } else {
+        t->chromaCount++;
+      }
+      for (int k = 0; k < 12; k++) {
+        long v = lround(99.0 * t->chromaAcc[k] / norm);
+        t->chroma[at][k] = (int)(v > 99 ? 99 : v);
+      }
+    }
+  }
+  memset(t->chromaAcc, 0, sizeof(t->chromaAcc));
+  t->chromaFrames = 0;
+  t->chromaVoiced = 0;
+}
+
+int tutu_tone_drain_chroma(TutuPianoTone *t, int out[][12], int max) {
+  if (!t) return 0;
+  int n = t->chromaCount < max ? t->chromaCount : max;
+  int skip = t->chromaCount - n;
+  for (int i = 0; i < n; i++) {
+    int at = (t->chromaHead + skip + i) % TUTU_CHROMA_KEEP;
+    memcpy(out[i], t->chroma[at], sizeof(int) * 12);
+  }
+  t->chromaHead = 0;
+  t->chromaCount = 0;
+  return n;
 }
 
 static void analyze(TutuPianoTone *t) {
@@ -155,6 +206,7 @@ static void analyze(TutuPianoTone *t) {
   t->fall[r] = fall;
   t->rise[r] = rise;
   t->pers[r] = pers;
+  add_chroma(t, freq, amp, count, rms >= t->gate[r]);
   t->ringAt = (r + 1) % TUTU_TONE_FRAMES;
   if (t->ringCount < TUTU_TONE_FRAMES) t->ringCount++;
   if (t->frames >= TUTU_TONE_FRAMES && t->frames % TUTU_TONE_CHECK == 0) {
