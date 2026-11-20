@@ -1,4 +1,4 @@
-import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
+import {SafeAreaView as EdgeSafeArea, useSafeAreaInsets} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -15,6 +15,7 @@ import {
   Alert,
   ActivityIndicator,
   ActionSheetIOS,
+  Dimensions,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
@@ -38,6 +39,9 @@ import {
 } from '../services/recorder';
 import {getDeviceId, getPreviousUserId} from '../services/device';
 import {INSTRUMENTS, currentInstrument, instrumentName} from '../services/instrument';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 
 // 人设「懒人框架」示例：一键填入，老师照着改即可。
 const PERSONA_EXAMPLE =
@@ -134,7 +138,9 @@ function visibilityLabel(v) {
  */
 const AISettingsScreen = ({navigation, route}) => {
   const {colors, mode} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const dark = mode === 'dark';
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const coachId = route?.params?.coachId || '';
   const [draft, setDraft] = useState(emptyDraft());
   const [loading, setLoading] = useState(!!coachId);
@@ -439,10 +445,13 @@ const AISettingsScreen = ({navigation, route}) => {
 
   const avatarSrc = draft.avatarUrl
     ? {uri: absAvatarUrl(draft.avatarUrl)}
-    : Images.avatarRabbit;
+    : dark
+      ? Images.aieditAvatarDark
+      : Images.aieditAvatarLight;
+  const rowArrow = dark ? Images.icRowArrowDark : Images.icRowArrowLight;
 
   return (
-    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
+    <EdgeSafeArea edges={['left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.aiPageBg || colors.bg} />
       <ScreenHeader title="AI分身设置" onBack={() => navigation?.goBack?.()} />
 
@@ -476,16 +485,17 @@ const AISettingsScreen = ({navigation, route}) => {
 
             {/* 1. 头像 */}
             <View style={styles.avatarWrap}>
-              <TouchableOpacity onPress={onChangeAvatar} activeOpacity={0.85}>
+              <TouchableOpacity onPress={onChangeAvatar} activeOpacity={0.85} style={styles.avatarBox}>
                 <Image source={avatarSrc} style={styles.avatarTop} resizeMode="cover" />
-                <View style={styles.avatarCam}>
-                  <Text style={styles.avatarCamText}>📷</Text>
-                </View>
+                <Image
+                  source={dark ? Images.aieditCamDark : Images.aieditCamLight}
+                  style={styles.avatarCam}
+                />
               </TouchableOpacity>
             </View>
 
             {/* 2. 分身名称 */}
-            <View style={styles.card}>
+            <View style={[styles.card, styles.rowCard, styles.nameCard]}>
               <View style={styles.fieldRow}>
                 <Text style={styles.fieldLabel}>分身名称</Text>
                 <TextInput
@@ -493,7 +503,7 @@ const AISettingsScreen = ({navigation, route}) => {
                   value={draft.name}
                   onChangeText={t => set('name', t)}
                   placeholder="请输入"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor="#979797"
                   textAlign="right"
                 />
               </View>
@@ -501,22 +511,18 @@ const AISettingsScreen = ({navigation, route}) => {
 
             {/* 3. 陪练提示设置（行卡片，非紫色横幅） */}
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, styles.blockCard]}
               activeOpacity={0.85}
               onPress={() => navigation.navigate('StudentReminder')}>
-              <View style={styles.fieldRow}>
-                <View style={{flex: 1, paddingRight: 8}}>
-                  <Text style={styles.fieldLabel}>陪练提示设置</Text>
-                  <Text style={styles.hintMuted}>
-                    按学生·按曲目设置「AI陪练模式」重点播报内容
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </View>
+              <Text style={styles.fieldLabel}>陪练提示设置</Text>
+              <Text style={styles.hintMuted}>
+                按学生·按曲目设置「AI陪练模式」重点播报内容
+              </Text>
+              <Image source={rowArrow} style={styles.blockArrow} />
             </TouchableOpacity>
 
             {/* 4. 专属音色 */}
-            <View style={styles.card}>
+            <View style={[styles.card, styles.blockCard, styles.voiceCard]}>
               <Text style={styles.fieldLabel}>专属音色（声音复刻）</Text>
               <Text style={styles.hintMuted}>
                 {draft.mmVoice
@@ -530,25 +536,28 @@ const AISettingsScreen = ({navigation, route}) => {
                 disabled={voiceBusy}>
                 {!recording ? (
                   <LinearGradient
-                    colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-                    start={{x: 0, y: 0.5}}
-                    end={{x: 1, y: 0.5}}
+                    colors={dark ? ['#B595FF', '#7F47FE'] : ['#FF7A9A', '#FF355F']}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
                     style={StyleSheet.absoluteFill}
                   />
                 ) : null}
                 {voiceBusy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.voiceBtnText}>
-                    {recording ? '停止并生成音色' : '开始录音'}
-                  </Text>
+                  <>
+                    {!recording ? <Image source={Images.aieditMic} style={styles.voiceIcon} /> : null}
+                    <Text style={styles.voiceBtnText}>
+                      {recording ? '停止并生成音色' : '开始录音'}
+                    </Text>
+                  </>
                 )}
               </TouchableOpacity>
             </View>
 
             {/* 5. 可见范围（行 + 未设置 ›） */}
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, styles.rowCard]}
               activeOpacity={0.85}
               onPress={pickVisibility}>
               <View style={styles.fieldRow}>
@@ -557,14 +566,14 @@ const AISettingsScreen = ({navigation, route}) => {
                   <Text style={styles.valueMuted}>
                     {visibilityLabel(draft.visibility)}
                   </Text>
-                  <Text style={styles.chevron}>›</Text>
+                  <Image source={rowArrow} style={styles.rowArrow} />
                 </View>
               </View>
             </TouchableOpacity>
 
             {/* 5.5 适用乐器 */}
             <TouchableOpacity
-              style={styles.card}
+              style={[styles.card, styles.rowCard]}
               activeOpacity={0.85}
               onPress={pickInstrument}>
               <View style={styles.fieldRow}>
@@ -575,14 +584,14 @@ const AISettingsScreen = ({navigation, route}) => {
                       ? instrumentName(draft.instrument)
                       : '未设置（全乐器）'}
                   </Text>
-                  <Text style={styles.chevron}>›</Text>
+                  <Image source={rowArrow} style={styles.rowArrow} />
                 </View>
               </View>
             </TouchableOpacity>
 
             {/* 6. 光币租用价格：管理员任意改；老师只改自己生成的（含合并前旧 ID） */}
             {canEditRent ? (
-            <View style={styles.card}>
+            <View style={[styles.card, styles.blockCard]}>
               <Text style={styles.fieldLabel}>光币租用价格</Text>
               <Text style={styles.hintMuted}>
                 学生用光币解锁后可用一整天；消费的光币进你的账户，100光币=7元。
@@ -592,19 +601,19 @@ const AISettingsScreen = ({navigation, route}) => {
                 value={String(draft.rentPrice ?? '')}
                 onChangeText={t => set('rentPrice', t.replace(/[^\d]/g, ''))}
                 placeholder="例如 80"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor="#A6A6A6"
                 keyboardType="number-pad"
               />
             </View>
             ) : (
-            <View style={styles.card}>
+            <View style={[styles.card, styles.blockCard]}>
               <Text style={styles.fieldLabel}>光币租用价格</Text>
               <Text style={styles.hintMuted}>这个角色不是你生成的，解锁价不能改。</Text>
             </View>
             )}
 
             {/* 6.5 陪伴语言 */}
-            <View style={styles.card}>
+            <View style={[styles.card, styles.blockCard]}>
               <Text style={styles.fieldLabel}>陪伴语言</Text>
               <Text style={styles.hintMuted}>
                 AI 全程用所选语言说话（也会写入人设「语言：」一行）
@@ -630,7 +639,7 @@ const AISettingsScreen = ({navigation, route}) => {
             </View>
 
             {/* 7. 分身人设 */}
-            <View style={styles.card}>
+            <View style={[styles.card, styles.blockCard]}>
               <View style={styles.personaHead}>
                 <Text style={styles.fieldLabel}>分身人设</Text>
                 <TouchableOpacity
@@ -643,95 +652,101 @@ const AISettingsScreen = ({navigation, route}) => {
                 决定AI的性格与说话方式，越具体越像真人。也可在文中写「语言：英语」
               </Text>
               <TextInput
-                style={[styles.multiline, {minHeight: 130}]}
+                style={styles.multiline}
                 value={draft.systemPrompt}
                 onChangeText={t => set('systemPrompt', t)}
                 placeholder="不知道怎么写，点击填入示例"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor="#A6A6A6"
                 multiline
               />
             </View>
 
-            <View style={styles.footerRow}>
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={onDelete}
-                activeOpacity={0.85}
-                disabled={saving}>
-                <Text style={styles.deleteBtnText}>删除</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveBtnOuter}
-                onPress={onSave}
-                activeOpacity={0.88}
-                disabled={saving}>
-                <LinearGradient
-                  colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-                  start={{x: 0, y: 0.5}}
-                  end={{x: 1, y: 0.5}}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Text style={styles.saveBtnText}>
-                  {saving ? '保存中…' : '保存提交'}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </ScrollView>
+        <View style={[styles.footerRow, {paddingBottom: Math.max(insets.bottom, px(8))}]}>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={onDelete}
+              activeOpacity={0.85}
+              disabled={saving}>
+              <Text style={styles.deleteBtnText}>删除</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.saveBtnOuter}
+              onPress={onSave}
+              activeOpacity={0.88}
+              disabled={saving}>
+              <LinearGradient
+                colors={dark ? ['#B595FF', '#7F47FE'] : ['#FF7A9A', '#FF355F']}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={styles.saveBtnText}>
+                {saving ? '保存中…' : dark ? '保存提交' : '保存'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       )}
     </EdgeSafeArea>
   );
 };
 
-const makeStyles = colors =>
+// 蓝湖「ai分身设置」：卡片 345 宽 r10，间距 15；行卡 50 高；输入框 r10；底栏双钮 165×44。
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.aiPageBg || colors.bg},
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
     flex: {flex: 1},
     center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-    scroll: {paddingHorizontal: 16, paddingBottom: 40, paddingTop: 4},
+    scroll: {paddingHorizontal: px(15), paddingBottom: px(20)},
     statusCardPending: {
       backgroundColor: 'rgba(245,166,35,0.15)',
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: px(10),
+      padding: px(12),
+      marginTop: px(10),
     },
-    statusText: {fontSize: 12, color: '#C9A227', lineHeight: 18},
+    statusText: {fontSize: px(12), color: '#C9A227', lineHeight: px(18)},
     statusCardRejected: {
-      backgroundColor: 'rgba(247,164,0,0.18)',
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      backgroundColor: dark ? 'rgba(247,164,0,0.1)' : '#FFF4DD',
+      borderRadius: px(10),
+      padding: px(12),
+      marginTop: px(10),
     },
-    statusTextRejected: {fontSize: 12, color: '#F7A400', lineHeight: 18},
+    statusTextRejected: {fontSize: px(12), color: '#F7A400', lineHeight: px(18)},
     card: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
-      marginTop: 14,
-      borderWidth: colors.mode === 'dark' ? 1 : 0,
-      borderColor: colors.cardBorder,
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      paddingHorizontal: px(15),
+      marginTop: px(15),
     },
-    avatarWrap: {alignItems: 'center', marginTop: 16, marginBottom: 4},
+    rowCard: {height: px(50), justifyContent: 'center'},
+    nameCard: {marginTop: px(37)},
+    blockCard: {paddingTop: px(14), paddingBottom: px(14)},
+    voiceCard: {paddingBottom: px(17)},
+    blockArrow: {
+      position: 'absolute',
+      right: px(15),
+      top: '50%',
+      marginTop: -px(8),
+      width: px(16),
+      height: px(16),
+    },
+    rowArrow: {width: px(16), height: px(16), marginLeft: px(5)},
+    avatarWrap: {alignItems: 'center', marginTop: px(32)},
+    avatarBox: {width: px(80), height: px(80)},
     avatarTop: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: colors.cardAlt,
+      width: px(80),
+      height: px(80),
+      borderRadius: px(40),
+      backgroundColor: dark ? '#F3E6FA' : '#FFE1E8',
     },
     avatarCam: {
       position: 'absolute',
-      right: -2,
-      bottom: -2,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: colors.bg,
+      left: px(56),
+      top: px(55),
+      width: px(24),
+      height: px(24),
     },
-    avatarCamText: {fontSize: 13},
     fieldRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -739,37 +754,39 @@ const makeStyles = colors =>
     },
     rowInput: {
       flex: 1,
-      marginLeft: 12,
-      height: 32,
-      fontSize: 14,
+      marginLeft: px(12),
+      height: px(40),
+      paddingVertical: 0,
+      fontSize: px(14),
       color: colors.textPrimary,
     },
-    fieldLabel: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
-    hintMuted: {
-      fontSize: 12,
-      color: '#979797',
-      marginTop: 6,
-      lineHeight: 18,
+    fieldLabel: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: dark ? '#FFFFFF' : '#261216',
     },
-    chevron: {
-      fontSize: 22,
-      color: colors.textMuted,
-      marginLeft: 4,
-      lineHeight: 24,
+    hintMuted: {
+      fontSize: px(12),
+      color: '#979797',
+      marginTop: px(5),
+      lineHeight: px(17),
+      paddingRight: px(20),
     },
     valueRow: {flexDirection: 'row', alignItems: 'center'},
-    valueMuted: {fontSize: 14, color: '#A6A6A6'},
+    valueMuted: {fontSize: px(14), lineHeight: px(20), color: '#A6A6A6'},
     voiceBtnOuter: {
-      marginTop: 12,
-      height: 44,
-      borderRadius: 22,
+      marginTop: px(10),
+      height: px(40),
+      borderRadius: px(20),
       overflow: 'hidden',
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primary,
     },
     voiceBtnRec: {backgroundColor: '#E5484D'},
-    voiceBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+    voiceIcon: {width: px(20), height: px(20), marginRight: px(7)},
+    voiceBtnText: {color: '#fff', fontSize: px(14), lineHeight: px(24), fontWeight: '600'},
     personaHead: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -778,64 +795,83 @@ const makeStyles = colors =>
     langRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      marginTop: 10,
+      gap: px(10),
+      marginTop: px(10),
     },
     langChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 18,
-      backgroundColor: colors.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#F2F2F5',
+      height: px(24),
+      paddingHorizontal: px(12),
+      borderRadius: px(4),
+      justifyContent: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFEAEF',
     },
-    langChipOn: {
-      backgroundColor: colors.primary || '#E85A7A',
-    },
+    langChipOn: {backgroundColor: dark ? '#7F47FE' : '#FF355F'},
     langChipText: {
-      fontSize: 13,
-      color: colors.textSecondary || '#888',
-      fontWeight: '600',
+      fontSize: px(12),
+      lineHeight: px(17),
+      fontWeight: '500',
+      color: dark ? '#B595FF' : '#FF355F',
     },
     langChipTextOn: {color: '#fff'},
-    fillExample: {fontSize: 14, color: colors.accent, fontWeight: '600'},
+    fillExample: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: dark ? '#B595FF' : '#FF355F',
+    },
     input: {
-      marginTop: 10,
-      minHeight: 44,
-      borderRadius: 10,
-      backgroundColor: colors.inputBg,
-      paddingHorizontal: 12,
-      fontSize: 16,
+      marginTop: px(10),
+      height: px(44),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
+      paddingHorizontal: px(10),
+      paddingVertical: 0,
+      fontSize: px(14),
       color: colors.textPrimary,
     },
     multiline: {
-      marginTop: 10,
-      minHeight: 90,
-      borderRadius: 10,
-      backgroundColor: colors.inputBg,
-      padding: 12,
-      fontSize: 14,
+      marginTop: px(10),
+      height: px(160),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
+      paddingHorizontal: px(10),
+      paddingTop: px(11),
+      paddingBottom: px(8),
+      fontSize: px(14),
+      lineHeight: px(20),
       color: colors.textPrimary,
       textAlignVertical: 'top',
     },
-    footerRow: {flexDirection: 'row', gap: 15, marginTop: 22},
-    // 蓝湖双钮各 165×44
+    footerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: px(15),
+      paddingTop: px(8),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+    },
     deleteBtn: {
-      flex: 1,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.cardAlt,
+      width: px(165),
+      height: px(44),
+      borderRadius: px(22),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    deleteBtnText: {color: colors.textPrimary, fontSize: 14, fontWeight: '600'},
+    deleteBtnText: {
+      color: dark ? '#FFFFFF' : '#212122',
+      fontSize: px(14),
+      lineHeight: px(24),
+      fontWeight: '500',
+    },
     saveBtnOuter: {
-      flex: 1,
-      height: 44,
-      borderRadius: 22,
+      width: px(165),
+      height: px(44),
+      borderRadius: px(22),
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '600'},
+    saveBtnText: {color: '#fff', fontSize: px(14), lineHeight: px(24), fontWeight: '500'},
   });
 
 export default AISettingsScreen;

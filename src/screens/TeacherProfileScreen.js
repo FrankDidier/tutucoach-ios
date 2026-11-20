@@ -9,8 +9,9 @@ import {
   ScrollView,
   StatusBar,
   Alert,
-  Platform,
+  Dimensions,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
 import {
@@ -23,35 +24,26 @@ import {getDeviceId} from '../services/device';
 import {fetchTeacherGuangbi} from '../services/guangbi';
 import {
   currentInstrument,
-  instrumentName,
   loadInstrument,
   setInstrument,
 } from '../services/instrument';
 import InstrumentPickerModal from '../components/InstrumentPickerModal';
+import InstrumentCard from '../components/InstrumentCard';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 
 const TeacherProfileScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const insets = useSafeAreaInsets();
 
   const [avatarUri, setAvatar] = useState(null);
   const [unlocked, setUnlocked] = useState(false);
   const [gb, setGb] = useState(0);
-  const [yuan, setYuan] = useState(0);
   const [instrument, setInst] = useState(currentInstrument());
   const [instPicker, setInstPicker] = useState(false);
-
-  const MenuRow = ({icon, label, onPress, divider}) => (
-    <TouchableOpacity
-      style={styles.menuRow}
-      activeOpacity={0.7}
-      onPress={onPress}>
-      <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
-      <Text style={styles.menuLabel}>{label}</Text>
-      <Text style={styles.menuArrow}>›</Text>
-      {divider ? <View style={styles.menuDivider} /> : null}
-    </TouchableOpacity>
-  );
 
   // 进入教师端先做口令校验（对应安卓 TeacherGate）。未通过则退回上一页。
   useEffect(() => {
@@ -70,7 +62,6 @@ const TeacherProfileScreen = ({navigation}) => {
         .then(r => {
           if (alive && r && r.ok) {
             setGb(Number(r.balance) || 0);
-            setYuan(Number(r.yuan) || 0);
           }
         })
         .catch(() => {});
@@ -109,32 +100,44 @@ const TeacherProfileScreen = ({navigation}) => {
     return <SafeAreaView style={styles.container} />;
   }
 
+  const rowArrow = dark ? Images.icRowArrowDark : Images.icRowArrowLight;
+  const MenuRow = ({icon, label, onPress}) => (
+    <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
+      <Image source={icon} style={styles.menuIcon} />
+      <Text style={styles.menuLabel}>{label}</Text>
+      <Image source={rowArrow} style={styles.menuArrow} />
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {/* 背景：与「我的（学生端）」一致（暗色整屏 / 浅色顶部渐变） */}
-      <Image
-        source={dark ? Images.profileBgDark : Images.profileBgLight}
-        style={
-          dark
-            ? StyleSheet.absoluteFill
-            : {position: 'absolute', top: 0, left: 0, right: 0, height: 400}
-        }
-        resizeMode="cover"
-        pointerEvents="none"
-      />
-      <SafeAreaView style={styles.safe}>
-      <View style={styles.topBar}>
-        <Text style={styles.pageTitle}>我的</Text>
-      </View>
-
+      <View style={[styles.safe, {paddingBottom: insets.bottom}]}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
+        {/* 背景：蓝湖「我的教师端」切图（暗 375×812 / 浅 375×400），随内容滚动 */}
+        <Image
+          source={dark ? Images.teacherBgDark : Images.profileBgLight}
+          style={[
+            dark ? styles.bgDark : styles.bgLight,
+            {height: (dark ? px(812) : px(400)) + insets.top - px(44)},
+          ]}
+          resizeMode="stretch"
+          pointerEvents="none"
+        />
+        <Text style={styles.pageTitle}>我的</Text>
+
         <View style={styles.profileBlock}>
           <TouchableOpacity activeOpacity={0.85} onPress={onChangeAvatar}>
             <Image
-              source={avatarUri ? {uri: avatarUri} : Images.teacherAvatar}
+              source={
+                avatarUri
+                  ? {uri: avatarUri}
+                  : dark
+                  ? Images.teacherAvatarDark
+                  : Images.teacherAvatar
+              }
               onError={avatarUri ? onAvatarBroken : undefined}
               style={styles.avatar}
               resizeMode="cover"
@@ -144,12 +147,35 @@ const TeacherProfileScreen = ({navigation}) => {
           <Text style={styles.hintText}>立即注册体验完整功能</Text>
         </View>
 
-        <View style={styles.cardGroup}>
+        {/* 光币卡 (15,260) 345×80：暗「总积分 / 立即提现」，浅「总光币 / 立即查看」（按稿） */}
+        <TouchableOpacity
+          style={styles.pointsCard}
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate('MyGuangbi')}>
+          <Image
+            source={dark ? Images.pointsCardDark : Images.pointsCardLight}
+            style={styles.pointsCardImg}
+            resizeMode="stretch"
+          />
+          <Text style={styles.pointsLabel}>{dark ? '总积分' : '总光币'}</Text>
+          <Image source={Images.pfEye} style={styles.eyeIcon} />
+          <Text style={styles.pointsValue}>{gb}</Text>
+          <View style={styles.cardBtn}>
+            <Text style={styles.cardBtnText}>{dark ? '立即提现' : '立即查看'}</Text>
+          </View>
+        </TouchableOpacity>
+
+        <InstrumentCard
+          instrument={instrument}
+          onPick={() => setInstPicker(true)}
+          style={styles.instCard}
+        />
+
+        <View style={[styles.menuSection, styles.menuFirst]}>
           <MenuRow
             icon={Images.tAi}
             label="AI分身｜陪练设置"
             onPress={() => navigation.navigate('AIList')}
-            divider
           />
           <MenuRow
             icon={Images.tLesson}
@@ -158,12 +184,11 @@ const TeacherProfileScreen = ({navigation}) => {
           />
         </View>
 
-        <View style={styles.cardGroup}>
+        <View style={styles.menuSection}>
           <MenuRow
             icon={Images.tStudent}
             label="学生信息录入"
             onPress={() => navigation.navigate('StudentEntry')}
-            divider
           />
           <MenuRow
             icon={Images.tClass}
@@ -171,51 +196,7 @@ const TeacherProfileScreen = ({navigation}) => {
             onPress={() => navigation.navigate('ClassManage')}
           />
         </View>
-
-        <View style={styles.cardGroup}>
-          <TouchableOpacity
-            style={styles.cashBlock}
-            activeOpacity={0.85}
-            onPress={() => setInstPicker(true)}>
-            <Text style={styles.cashTitle}>乐器模式</Text>
-            <Text style={styles.cashHint}>
-              当前：{instrumentName(instrument)} · 点击选择乐器
-            </Text>
-            <Text style={[styles.cashHint, {marginTop: 4}]}>
-              切换后，曲目推荐和教案会按这个乐器出曲目
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.cardGroup}>
-          <TouchableOpacity
-            style={styles.cashBlock}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('Withdraw')}>
-            <Text style={styles.cashTitle}>学生消费光币</Text>
-            <Text style={styles.cashBal}>{gb}</Text>
-            <Text style={styles.cashHint}>
-              兑现规则：100 光币 = 7 元人民币。当前约合 ¥{yuan}。点此进入提现。
-            </Text>
-            <Text style={[styles.cashHint, {marginTop: 8, color: colors.primary}]}>
-              立即提现 ›
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.walletLinks}>
-            <TouchableOpacity
-              style={styles.walletLinkHit}
-              onPress={() => navigation.navigate('IncomeDetail')}>
-              <Text style={styles.walletLinkText}>收入明细</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.walletLinkHit}
-              onPress={() => navigation.navigate('WithdrawHistory')}>
-              <Text style={styles.walletLinkText}>提现记录</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </ScrollView>
-
       {/* 蓝湖「我的教师端」含底栏；跳回 MainTabs 对应 Tab */}
       <View style={styles.tabBar}>
         {[
@@ -252,7 +233,7 @@ const TeacherProfileScreen = ({navigation}) => {
           );
         })}
       </View>
-      </SafeAreaView>
+      </View>
       <InstrumentPickerModal
         visible={instPicker}
         currentId={instrument}
@@ -266,96 +247,95 @@ const TeacherProfileScreen = ({navigation}) => {
   );
 };
 
+// 坐标均取自蓝湖 我的教师端（状态栏下 y−44），按屏宽 px() 等比；与学生端「我的」同一套栅格。
 const makeStyles = (colors, dark) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: colors.bg},
     safe: {flex: 1},
-    topBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 15,
-      paddingTop: 10,
-    },
-    // 标题「我的」18/600（蓝湖教师端无返回箭头，与学生端「我的」一致）
-    pageTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
-    scroll: {paddingBottom: 40, paddingHorizontal: 15},
-    profileBlock: {alignItems: 'center', paddingTop: 20, paddingBottom: 8},
-    avatar: {width: 80, height: 80, borderRadius: 40, marginBottom: 12},
-    loginText: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
-    hintText: {fontSize: 12, color: '#979797', marginTop: 6},
-    cardGroup: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      marginTop: 16,
-      paddingVertical: 4,
-      overflow: 'hidden',
-      borderWidth: dark ? 1 : 0,
-      borderColor: colors.cardBorder,
-      shadowColor: '#000',
-      shadowOpacity: dark ? 0.25 : 0.05,
-      shadowRadius: 10,
-      shadowOffset: {width: 0, height: 2},
-      elevation: 1,
-    },
-    menuRow: {flexDirection: 'row', alignItems: 'center', height: 55, paddingHorizontal: 15},
-    menuIcon: {width: 28, height: 28, marginRight: 10},
-    menuLabel: {flex: 1, fontSize: 14, fontWeight: '600', color: colors.textPrimary},
-    menuArrow: {fontSize: 20, color: colors.textMuted, marginTop: -2},
-    menuDivider: {
-      position: 'absolute',
-      left: 53,
-      right: 0,
-      bottom: 0,
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.divider,
-    },
-    cashBlock: {paddingHorizontal: 15, paddingVertical: 14},
-    cashTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
-    cashBal: {fontSize: 28, fontWeight: '700', color: colors.textPrimary, marginTop: 6},
-    cashHint: {fontSize: 12, color: '#979797', marginTop: 4, marginBottom: 10},
-    walletLinks: {
-      flexDirection: 'row',
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.divider,
-    },
-    walletLinkHit: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 14,
-    },
-    walletLinkText: {fontSize: 14, fontWeight: '600', color: colors.primary},
-    cashRow: {flexDirection: 'row', alignItems: 'center'},
-    cashInput: {
-      flex: 1,
-      height: 40,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      backgroundColor: colors.inputBg || colors.cardAlt,
+    scroll: {paddingBottom: px(30), paddingHorizontal: px(15)},
+    bgDark: {position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: px(812)},
+    bgLight: {position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: px(400)},
+    pageTitle: {
+      marginTop: px(10),
+      fontSize: px(18),
+      lineHeight: px(25),
+      fontWeight: '600',
       color: colors.textPrimary,
-      marginRight: 10,
+      alignSelf: 'flex-start',
     },
-    cashBtn: {
-      height: 40,
-      paddingHorizontal: 14,
-      borderRadius: 20,
-      backgroundColor: colors.primary,
+    profileBlock: {alignItems: 'center', marginTop: px(25)},
+    avatar: {width: px(80), height: px(80), borderRadius: px(40)},
+    loginText: {
+      marginTop: px(9),
+      fontSize: px(18),
+      lineHeight: px(25),
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    hintText: {marginTop: px(5), fontSize: px(12), lineHeight: px(17), color: '#979797'},
+    pointsCard: {marginTop: px(20), width: px(345), height: px(80)},
+    pointsCardImg: {position: 'absolute', top: 0, left: 0, width: px(345), height: px(80)},
+    pointsLabel: {
+      position: 'absolute',
+      left: px(19),
+      top: px(15),
+      fontSize: px(13),
+      lineHeight: px(14),
+      color: '#FFFFFF',
+    },
+    eyeIcon: {position: 'absolute', left: px(63), top: px(14), width: px(16), height: px(16)},
+    pointsValue: {
+      position: 'absolute',
+      left: px(19),
+      top: px(34),
+      fontSize: px(24),
+      lineHeight: px(34),
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    cardBtn: {
+      position: 'absolute',
+      left: px(250),
+      top: px(26),
+      width: px(80),
+      height: px(28),
+      borderRadius: px(14),
+      backgroundColor: '#FFFFFF',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cashBtnText: {color: '#fff', fontSize: 13, fontWeight: '700'},
+    cardBtnText: {fontSize: px(11), lineHeight: px(15), color: dark ? '#7F47FE' : '#FF355F'},
+    instCard: {marginTop: px(15)},
+    menuSection: {
+      marginTop: px(15),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      overflow: 'hidden',
+    },
+    menuFirst: {marginTop: px(14)},
+    menuItem: {height: px(55)},
+    menuIcon: {position: 'absolute', left: px(15), top: px(14), width: px(28), height: px(28)},
+    menuLabel: {
+      position: 'absolute',
+      left: px(53),
+      top: px(18),
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    menuArrow: {position: 'absolute', left: px(314), top: px(20), width: px(16), height: px(16)},
     tabBar: {
       flexDirection: 'row',
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.divider,
+      borderTopWidth: 0.5,
+      borderTopColor: colors.tabBarBorder || colors.divider,
       backgroundColor: colors.tabBarBg,
       paddingTop: 6,
-      paddingBottom: Platform.OS === 'ios' ? 8 : 8,
-      minHeight: 64,
+      height: 57,
     },
-    tabItem: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+    tabItem: {flex: 1, alignItems: 'center'},
     tabIcon: {width: 24, height: 24},
-    tabLabel: {fontSize: 11, fontWeight: '600', marginTop: 2},
+    tabLabel: {fontSize: 10, fontWeight: '400', marginTop: 3},
   });
 
 export default TeacherProfileScreen;

@@ -6,10 +6,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   StatusBar,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getJson} from '../services/api';
+import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
 
 function stripHtml(html) {
   if (!html) return '';
@@ -44,7 +47,23 @@ async function loadDoc(doc) {
   return '';
 }
 
-/** 合并展示隐私政策 + 用户服务协议（公安合规：App 内可查阅）。 */
+const onAiConsent = async () => {
+  const now = await getAiConsent();
+  if (now !== 'yes') {
+    askAiConsent();
+    return;
+  }
+  Alert.alert(
+    'AI 数据授权',
+    '你已同意 AI 功能把对话内容、称呼/年龄等资料和练习记录发送给 DeepSeek、百度文心、MiniMax 和 Apple 处理。撤回后将不能使用 AI 陪练等 AI 功能。',
+    [
+      {text: '保持同意', style: 'cancel'},
+      {text: '撤回同意', style: 'destructive', onPress: () => setAiConsent(false)},
+    ],
+  );
+};
+
+/** 合并展示隐私政策 + 用户服务协议（公安合规：App 内可查阅）；含 AI 数据授权的查看/撤回入口。 */
 const LegalScreen = () => {
   const {colors} = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -75,6 +94,10 @@ const LegalScreen = () => {
         <ActivityIndicator style={styles.loader} color={colors.accent} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator>
+          <TouchableOpacity style={styles.aiRow} activeOpacity={0.8} onPress={onAiConsent}>
+            <Text style={styles.aiRowText}>AI 数据授权（查看 / 撤回）</Text>
+            <Text style={styles.aiRowArrow}>›</Text>
+          </TouchableOpacity>
           <Text style={styles.sectionTitle}>一、隐私政策</Text>
           <Text style={styles.body}>{privacy}</Text>
           <Text style={[styles.sectionTitle, styles.sectionGap]}>二、用户服务协议</Text>
@@ -97,6 +120,17 @@ const makeStyles = colors =>
       marginBottom: 10,
     },
     sectionGap: {marginTop: 28},
+    aiRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 44,
+      paddingHorizontal: 14,
+      marginBottom: 20,
+      borderRadius: 10,
+      backgroundColor: colors.card,
+    },
+    aiRowText: {flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: '600'},
+    aiRowArrow: {color: colors.textMuted, fontSize: 20},
     body: {
       color: colors.textPrimary,
       fontSize: 14,

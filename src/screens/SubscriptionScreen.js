@@ -4,7 +4,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   Alert,
@@ -17,6 +16,8 @@ import LinearGradient from 'react-native-linear-gradient';
 import {useFocusEffect} from '@react-navigation/native';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
+import ScreenHeader from '../components/ScreenHeader';
+import LanhuCTA from '../components/LanhuCTA';
 import {getDeviceId} from '../services/device';
 import {getMembership} from '../services/account';
 import {payWithWeChat} from '../services/wechat';
@@ -37,13 +38,6 @@ const DEFAULT_PLANS = [
   {id: 'monthly', name: '连续包月', price: '98', original: '¥118.00', guangbi: 1000},
 ];
 
-const DEFAULT_RECHARGE = [
-  {id: 'r30', name: '300 光币', price: '30', guangbi: 300},
-  {id: 'r100', name: '1000 光币', price: '100', guangbi: 1000},
-  {id: 'r200', name: '2200 光币', price: '200', guangbi: 2200},
-  {id: 'r300', name: '3300 光币', price: '300', guangbi: 3300},
-  {id: 'r500', name: '6000 光币', price: '500', guangbi: 6000},
-];
 
 const PLAN_CN = {
   yearly: {name: '连续包年', unit: '年', cycle: '每年'},
@@ -80,12 +74,6 @@ const SubscriptionScreen = ({navigation}) => {
   const [agreed, setAgreed] = useState(false);
   const [vip, setVip] = useState(null);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
-  const [packs, setPacks] = useState(DEFAULT_RECHARGE);
-  const [copy, setCopy] = useState({
-    subscribe: '连续订阅：月卡98元到账1000光币，季卡268元到账3000光币，年卡998元到账12000光币。',
-    recharge: '学生充值：30元=300光币，100元=1000光币，200元=2200光币，300元=3300光币，500元=6000光币。',
-    unlock: '用光币解锁后，该角色可用一整天。',
-  });
   // iOS：价格以 App Store 返回的为准（按 Apple ID 所在地区显示币种）
   const [storePrices, setStorePrices] = useState({});
   const [busy, setBusy] = useState(false);
@@ -98,19 +86,6 @@ const SubscriptionScreen = ({navigation}) => {
       });
       const parsed = parsePlansFromApi(j);
       if (parsed) setPlans(parsed);
-      if (j && Array.isArray(j.recharge) && j.recharge.length) {
-        setPacks(
-          j.recharge.map(p => ({
-            id: p.id,
-            name: p.name || `${p.guangbi} 光币`,
-            price: String(Math.round(parseFloat(p.amount || p.price || '0'))),
-            guangbi: Number(p.guangbi) || 0,
-          })),
-        );
-      }
-      if (j && j.copy) {
-        setCopy(prev => ({...prev, ...j.copy}));
-      }
     } catch (e) {}
   }, []);
 
@@ -210,54 +185,36 @@ const SubscriptionScreen = ({navigation}) => {
   const curPrice = curPlan.price ? priceText(curPlan) : '';
   const curName = (PLAN_CN[selected] || {}).name || curPlan.name || '会员';
 
+  const ink = dark ? '#FFFFFF' : '#261216';
+  const accent = dark ? '#B595FF' : '#FF355F';
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor="transparent" translucent />
-      {/* 顶部背景（含电路纹理），深/浅两版 */}
       <Image
         source={dark ? Images.subTopDark : Images.subTopLight}
         style={styles.topBg}
         resizeMode="stretch"
         pointerEvents="none"
       />
-      {dark ? (
-        <LinearGradient
-          colors={['rgba(14,10,35,0)', colors.bg]}
-          style={styles.topBgFade}
-          pointerEvents="none"
-        />
-      ) : null}
-      <Image
-        source={dark ? Images.subCornerLines : Images.subCornerLinesLight}
-        style={styles.cornerLines}
-        resizeMode="stretch"
-        pointerEvents="none"
-      />
-
-      {/* 顶部导航：返回 + 居中标题 */}
-      <SafeAreaView style={styles.headerSafe}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={[styles.backHit, IOS && styles.backHitWide]}
-            onPress={() => navigation?.goBack?.()}>
-            <Text style={styles.backChevron}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>会员订阅</Text>
-          {IOS ? (
-            <TouchableOpacity style={styles.restoreHit} activeOpacity={0.7} onPress={onRestore}>
+      <ScreenHeader
+        title="会员订阅"
+        variant="detect"
+        onBack={() => navigation?.goBack?.()}
+        right={
+          IOS ? (
+            <TouchableOpacity activeOpacity={0.7} onPress={onRestore}>
               <Text style={styles.restoreText}>恢复购买</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.backHit} />
-          )}
-        </View>
-      </SafeAreaView>
+          ) : null
+        }
+      />
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* VIP 卡片 345x80（贴图渐变 + 钻石 + svip + 已开通 + 有效期） */}
+        {/* VIP 卡 345×80 (16,111)：svip (31,130)；已开通 48×20 r4 (83,127)；有效期 (31,157)；钻石 64 (279,111) */}
         <View style={styles.vipCard}>
           <Image source={dark ? Images.subVipDark : Images.subVipLight} style={styles.vipCardBg} resizeMode="stretch" />
           <Image source={dark ? Images.subDiamondDark : Images.subDiamondLight} style={styles.vipDiamond} resizeMode="contain" />
@@ -265,352 +222,215 @@ const SubscriptionScreen = ({navigation}) => {
           <View style={styles.vipBadge}>
             <Text style={styles.vipBadgeText}>{isVip ? '已开通' : '未开通'}</Text>
           </View>
-          <Text style={styles.vipDate}>
+          <Text style={[styles.vipDate, {color: ink}]}>
             {isVip
               ? vip.guangbi != null
                 ? `当前光币 ${vip.guangbi}`
-                : `订阅有效至${vip.expire_text}`
+                : `会员有效期至${vip.expire_text}`
               : '开通后获得光币，用于解锁 AI 角色'}
           </Text>
         </View>
 
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>会员权益</Text>
+          <Text style={[styles.sectionTitle, {color: ink}]}>会员权益</Text>
           <Image source={dark ? Images.subStarDark : Images.subStarLight} style={styles.sectionStar} resizeMode="contain" />
         </View>
 
         <View style={styles.benefitCard}>
           <Image source={dark ? Images.subAiDark : Images.subAiLight} style={styles.benefitIcon} resizeMode="contain" />
-          <View style={styles.benefitTextCol}>
-            <Text style={styles.benefitTitle}>订阅获得光币</Text>
-            <Text style={styles.benefitSub}>用光币解锁各 AI 角色一整天</Text>
+          <View>
+            <Text style={[styles.benefitTitle, {color: ink}]}>解锁智能AI训练</Text>
+            <Text style={styles.benefitSub}>多种AI模型选择</Text>
           </View>
         </View>
 
-        <Text style={[styles.renewText, {marginHorizontal: 16, marginBottom: 8}]}>
-          {copy.subscribe}
-          {'\n'}
-          {copy.unlock}
-        </Text>
-        <Text style={[styles.sectionTitle, styles.plansTitle]}>
-          选择套餐（连续订阅 · 自动续费）
-        </Text>
+        <Text style={[styles.sectionTitle, styles.plansTitle, {color: ink}]}>选择套餐</Text>
         <View style={styles.plansRow}>
           {plans.map(plan => {
             const on = selected === plan.id;
             const cn = PLAN_CN[plan.id] || {};
+            const priceColor = on ? accent : dark ? '#A6A6A6' : '#261216';
+            const card = (
+              <>
+                <Text style={[styles.planName, {color: ink}]}>{cn.name || plan.name}</Text>
+                {IOS ? (
+                  <Text style={styles.planSub} numberOfLines={1}>
+                    {plan.guangbi ? `到账 ${plan.guangbi} 光币` : `${cn.cycle || '每月'}自动续费`}
+                  </Text>
+                ) : (
+                  <Text style={[styles.planSub, styles.planStrike]}>{plan.original}</Text>
+                )}
+                {IOS ? (
+                  <Text
+                    style={[styles.priceStore, {color: priceColor}]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit>
+                    {priceText(plan)}
+                  </Text>
+                ) : (
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.priceCurrency, {color: priceColor}]}>¥</Text>
+                    <Text style={[styles.priceValue, {color: priceColor}]}>{plan.price}</Text>
+                  </View>
+                )}
+              </>
+            );
             return (
               <TouchableOpacity
                 key={plan.id}
-                style={[styles.planCard, on && styles.planCardSelected]}
+                style={styles.planHit}
                 activeOpacity={0.88}
                 onPress={() => setSelected(plan.id)}>
-                <Text style={styles.planName}>{cn.name || plan.name}</Text>
-                {IOS ? null : <Text style={styles.originalPrice}>{plan.original}</Text>}
-                <View style={styles.priceRow}>
-                  {IOS ? (
-                    <Text
-                      style={[styles.priceValue, styles.priceStore, on && styles.priceOn]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit>
-                      {priceText(plan)}
-                    </Text>
-                  ) : (
-                    <>
-                      <Text style={[styles.priceCurrency, on && styles.priceOn]}>¥</Text>
-                      <Text style={[styles.priceValue, on && styles.priceOn]}>{plan.price}</Text>
-                    </>
-                  )}
-                </View>
-                <Text style={styles.planCycle}>
-                  {plan.guangbi ? `到账 ${plan.guangbi} 光币` : cn.cycle ? `${cn.cycle}自动续费` : '自动续费'}
-                </Text>
+                {on ? (
+                  <LinearGradient
+                    colors={dark ? ['#B595FF', '#7F47FE'] : ['#FF7A9A', '#FF355F']}
+                    start={{x: 0.5, y: 0}}
+                    end={{x: 0.5, y: 1}}
+                    style={styles.planBorderGrad}>
+                    <View style={[styles.planInner, styles.planInnerOn]}>{card}</View>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.planInner, styles.planOff]}>{card}</View>
+                )}
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <Text style={[styles.sectionTitle, styles.plansTitle]}>学生充值（一次到账）</Text>
-        <Text style={[styles.renewText, {marginHorizontal: 16, marginBottom: 8}]}>
-          {copy.recharge}
-        </Text>
-        <View style={[styles.plansRow, {flexWrap: 'wrap'}]}>
-          {packs.map(pack => (
-            <TouchableOpacity
-              key={pack.id}
-              style={[styles.planCard, {marginBottom: 8}]}
-              activeOpacity={0.88}
-              onPress={async () => {
-                if (!agreed) {
-                  Alert.alert('提示', '请先阅读并同意《会员购买协议》');
-                  return;
-                }
-                try {
-                  const r = await payWithWeChat(pack.id, getDeviceId());
-                  if (r && r.ok) {
-                    refreshVip();
-                    navigation.navigate('RechargeSuccess', {
-                      amount: pack.price,
-                      guangbi: pack.guangbi,
-                      method: '微信',
-                      at: Date.now(),
-                    });
-                  } else {
-                    Alert.alert('充值', (r && r.message) || '支付未完成，可改用连续订阅。');
-                  }
-                } catch (e) {
-                  Alert.alert('充值', '网络异常，请重试');
-                }
-              }}>
-              <Text style={styles.planName}>{pack.name}</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceCurrency}>¥</Text>
-                <Text style={styles.priceValue}>{pack.price}</Text>
-              </View>
-              <Text style={styles.planCycle}>{pack.guangbi} 光币</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* 审核要求：订阅页必须写清楚这是自动续期订阅、续费价格与取消方式 */}
-        <View style={styles.renewCard}>
-          <Text style={styles.renewTitle}>连续订阅说明</Text>
-          <Text style={styles.renewText}>
-            · 本会员为<Text style={styles.renewStrong}>连续订阅（自动续费）</Text>
-            ，不是一次性购买。{'\n'}
-            · 订阅后按所选周期（{curCycle}）自动续费 {curPrice}，
-            {Platform.OS === 'ios' ? '由 Apple ID 账户扣款。' : '由所选支付方式扣款。'}
-            {'\n'}
-            · 在当前订阅期结束前 24 小时内自动续订；
-            如需取消，请在到期前 24 小时以上
-            {Platform.OS === 'ios'
-              ? '于「设置 → Apple ID → 订阅」中关闭自动续订。'
-              : '在「我的 → 会员订阅」中关闭自动续订。'}
-            {'\n'}
-            · 取消后本订阅期内权益仍可继续使用，到期不再扣费。
-          </Text>
-        </View>
-
         <TouchableOpacity style={styles.agreementRow} activeOpacity={0.85} onPress={() => setAgreed(a => !a)}>
-          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+          <View style={[styles.checkbox, agreed && {backgroundColor: accent, borderColor: accent}]}>
             {agreed ? <Text style={styles.checkboxMark}>✓</Text> : null}
           </View>
-          <Text style={styles.agreementText}>
+          <Text style={[styles.agreementText, {color: dark ? '#FFFFFF' : '#222222'}]}>
             已阅读并同意
-            <Text
-              style={styles.agreementLink}
-              onPress={() => navigation?.navigate?.('Legal')}>
+            <Text style={{color: accent}} onPress={() => navigation?.navigate?.('Legal')}>
               《会员购买协议》
             </Text>
-            、
-            <Text
-              style={styles.agreementLink}
-              onPress={() => navigation?.navigate?.('Legal')}>
-              《隐私政策》
-            </Text>
-            与
-            <Text
-              style={styles.agreementLink}
-              onPress={() => {
-                try {
-                  Linking.openURL(
-                    'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/',
-                  );
-                } catch (e) {}
-              }}>
-              《Terms of Use (EULA)》
-            </Text>
-            ，并知悉本订阅为连续订阅、到期自动续费
+            {IOS ? (
+              <>
+                、
+                <Text style={{color: accent}} onPress={() => navigation?.navigate?.('Legal')}>
+                  《隐私政策》
+                </Text>
+                与
+                <Text
+                  style={{color: accent}}
+                  onPress={() => {
+                    try {
+                      Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/');
+                    } catch (e) {}
+                  }}>
+                  《Terms of Use (EULA)》
+                </Text>
+              </>
+            ) : null}
           </Text>
         </TouchableOpacity>
+
+        {/* 审核要求：订阅页必须写清楚这是自动续期订阅、续费价格与取消方式 */}
+        <Text style={styles.renewText}>
+          本会员为连续订阅（自动续费），按所选周期（{curCycle}）自动续费 {curPrice}，
+          {IOS ? '由 Apple ID 账户扣款' : '由所选支付方式扣款'}；当前订阅期结束前 24 小时内自动续订，如需取消请在到期前 24 小时以上
+          {IOS ? '于「设置 → Apple ID → 订阅」中关闭自动续订' : '在「我的 → 会员订阅」中关闭自动续订'}
+          。取消后本订阅期内权益仍可使用，到期不再扣费。
+        </Text>
       </ScrollView>
 
-      {/* 底部固定按钮 */}
-      <SafeAreaView style={styles.footerSafe}>
-        <TouchableOpacity style={styles.purchaseOuter} activeOpacity={0.88} onPress={onPurchase}>
-          <LinearGradient
-            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0.5, y: 0}}
-            end={{x: 0.5, y: 1}}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <Text style={styles.purchaseBtnText}>
-            {busy ? '请稍候…' : `开通${curName} ${curPrice}/${(PLAN_CN[selected] || {}).unit || '月'} 自动续费`}
-          </Text>
-        </TouchableOpacity>
-      </SafeAreaView>
+      <LanhuCTA
+        title={busy ? '请稍候…' : IOS ? `开通${curName} ${curPrice}/${(PLAN_CN[selected] || {}).unit || '月'}` : '立即开通'}
+        loading={busy}
+        onPress={onPurchase}
+      />
     </View>
   );
 };
 
 const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    root: {flex: 1, backgroundColor: colors.bg},
-    topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
-    // 贴图底沿是 #0E0A23，页底是蓝湖 #020014，iOS 会在 VIP→权益空隙里切出一条硬边。
-    // 安卓同一张图在空隙里仍带着紫光；这里把最后一段溶进页底，只深色。
-    // 浅色不另铺白雾：安卓也没有 overlay。右白来自蓝湖「背景」白底 + 圆形 2
-    // (188,-85,187×187, #FFE1E8, blur 92) 已烤进 sub_top_light，以及 VIP 卡
-    // 矩形 14 对角渐变 #FFE5EA → #FFFFFF。
-    topBgFade: {
-      position: 'absolute',
-      top: px(168),
-      left: 0,
-      right: 0,
-      height: px(92),
-    },
-    // 安卓：match_parent × 220dp、gravity=top、scaleType=fitXY。
-    // 宽按屏宽、高按 375 稿 220 等比（px(220)），stretch=fitXY，从根视图 top:0 铺（与 topBg 同起点）。
-    cornerLines: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: SCREEN_W,
-      height: px(220),
-    },
-    headerSafe: {},
-    header: {
-      height: 44,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 8,
-    },
-    backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
-    backHitWide: {width: 72, alignItems: 'flex-start', paddingLeft: 10},
-    restoreHit: {width: 72, height: 44, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 6},
-    restoreText: {fontSize: 14, color: colors.primary},
-    backChevron: {fontSize: 30, fontWeight: '400', color: colors.textPrimary, marginTop: -4},
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: colors.textPrimary,
-      ...(dark ? {lineHeight: 25} : null),
-    },
-    scroll: {flex: 1, backgroundColor: 'transparent'},
-    // 蓝湖 t1/t2：内容左右 15；导航底 y=88 → VIP y=111 → paddingTop 23
-    scrollContent: {
-      paddingHorizontal: 15,
-      paddingTop: px(23),
-      paddingBottom: px(110),
-    },
-    // VIP 卡片 345×80 @ y=111；下沿 191 → 会员权益 y=240 → 49
-    // 安卓 vipCard：clipChildren=false，贴图 ImageView fitXY、无 cornerRadius。
-    // PNG 自带右上切口、1px 白边、矩形 14 左粉右白对角渐变；圆角会裁掉右面白纱。
-    vipCard: {height: px(80), marginBottom: px(49), overflow: 'visible'},
-    vipCardBg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: px(80)},
-    vipDiamond: {position: 'absolute', right: px(18), top: 0, width: px(64), height: px(64)},
-    vipSvip: {position: 'absolute', left: px(16), top: px(19), width: px(47), height: px(13), tintColor: colors.textPrimary},
+    root: {flex: 1, backgroundColor: dark ? '#020014' : '#FFFFFF'},
+    topBg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: px(220)},
+    restoreText: {fontSize: px(14), color: dark ? '#B595FF' : '#FF355F', paddingHorizontal: px(10)},
+    scroll: {flex: 1},
+    scrollContent: {paddingTop: px(23), paddingBottom: px(24)},
+    vipCard: {marginLeft: px(16), width: px(345), height: px(80)},
+    vipCardBg: {position: 'absolute', top: 0, left: 0, width: px(345), height: px(80)},
+    vipDiamond: {position: 'absolute', left: px(263), top: 0, width: px(64), height: px(64)},
+    vipSvip: {position: 'absolute', left: px(15), top: px(19), width: px(47), height: px(13)},
     vipBadge: {
       position: 'absolute',
-      left: px(75),
+      left: px(67),
       top: px(16),
+      height: px(20),
+      paddingHorizontal: px(7),
+      borderRadius: px(4),
       backgroundColor: '#FFFFFF',
-      paddingHorizontal: px(8),
-      paddingVertical: px(2),
-      borderRadius: px(9),
+      justifyContent: 'center',
     },
-    vipBadgeText: {fontSize: 11, color: '#261216'},
-    vipDate: {position: 'absolute', left: px(16), top: px(44), fontSize: 12, color: colors.textPrimary},
-    // 会员权益 17 高 @ y=240（星 18）；权益卡 y=273 → 行下 15
-    sectionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: px(15),
-    },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.textPrimary,
-      marginBottom: 0,
-      ...(dark ? {lineHeight: 17} : null),
-    },
-    sectionStar: {
-      width: 18,
-      height: 18,
-      marginLeft: 3,
-      marginBottom: 0,
-    },
-    // 选择套餐 y=363；权益卡下沿 343 → 上 20；套餐卡 y=395 → 标题下 15
-    plansTitle: {marginBottom: px(15)},
+    vipBadgeText: {fontSize: px(11), lineHeight: px(17), color: '#261216'},
+    vipDate: {position: 'absolute', left: px(15), top: px(46), fontSize: px(12), lineHeight: px(17)},
+    sectionRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(49), marginLeft: px(15), height: px(18)},
+    sectionTitle: {fontSize: px(16), lineHeight: px(17), fontWeight: '600'},
+    sectionStar: {width: px(18), height: px(18), marginLeft: px(3)},
     benefitCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: dark ? colors.card : '#FFF5F7',
-      borderRadius: 16,
-      paddingVertical: 13,
-      paddingHorizontal: 15,
-      marginBottom: px(20),
+      marginTop: px(15),
+      marginLeft: px(13),
+      width: px(345),
       height: px(70),
-      borderWidth: dark ? 1 : 0,
-      borderColor: colors.cardBorder,
+      borderRadius: px(10),
+      backgroundColor: dark ? '#131444' : '#FFF5F7',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingLeft: px(15),
+      paddingTop: px(13),
     },
-    benefitIcon: {width: 44, height: 44, marginRight: 12},
-    benefitTextCol: {flex: 1},
-    benefitTitle: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
-    benefitSub: {fontSize: 11, color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(38,18,22,0.6)', marginTop: 4},
-    plansRow: {flexDirection: 'row', gap: 15},
-    planCard: {
-      flex: 1,
-      height: px(100),
-      backgroundColor: dark ? colors.card : '#FFFFFF',
-      borderRadius: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 8,
-      borderWidth: 1.5,
-      borderColor: dark ? colors.cardBorder : '#EEE',
+    benefitIcon: {width: px(44), height: px(44), marginRight: px(11)},
+    benefitTitle: {fontSize: px(14), lineHeight: px(24), fontWeight: '500', marginTop: -px(2)},
+    benefitSub: {
+      fontSize: px(11),
+      lineHeight: px(24),
+      color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(38,18,22,0.6)',
+      marginTop: -px(2),
     },
-    planCardSelected: {
-      borderColor: colors.primary,
+    plansTitle: {marginTop: px(20), marginLeft: px(15)},
+    plansRow: {flexDirection: 'row', marginTop: px(15), marginLeft: px(15)},
+    planHit: {width: px(105), height: px(100), marginRight: px(15)},
+    planBorderGrad: {flex: 1, borderRadius: px(8), padding: 2},
+    planInner: {flex: 1, borderRadius: px(8), paddingLeft: px(10) - 2, paddingTop: px(10) - 2},
+    planInnerOn: {borderRadius: px(6), backgroundColor: dark ? '#131444' : '#FFF5F7'},
+    planOff: {
       borderWidth: 2,
-      backgroundColor: dark ? colors.cardAlt : '#FFF5F7',
+      borderColor: dark ? 'rgba(255,255,255,0.1)' : '#F7F7F7',
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
     },
-    planName: {fontSize: 14, fontWeight: '500', color: colors.textPrimary},
-    originalPrice: {fontSize: 12, color: '#A6A6A6', textDecorationLine: 'line-through', marginTop: 4},
-    priceRow: {flexDirection: 'row', alignItems: 'flex-end', marginTop: 4},
-    priceCurrency: {fontSize: 15, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216', marginBottom: 3},
-    priceValue: {fontSize: 22, fontWeight: '600', color: dark ? '#A6A6A6' : '#261216'},
-    priceOn: {color: colors.primary},
-    priceStore: {fontSize: 19, marginTop: 14},
-    planCycle: {fontSize: 10.5, color: colors.textSecondary, marginTop: 4},
-    renewCard: {
-      marginTop: px(14),
-      padding: 12,
-      borderRadius: 12,
-      backgroundColor: dark ? '#221C24' : '#FFF6F9',
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-    },
-    renewTitle: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
-    renewText: {fontSize: 12, lineHeight: 19, color: colors.textSecondary, marginTop: 6},
-    renewStrong: {color: colors.primary, fontWeight: '700'},
-    agreementRow: {flexDirection: 'row', alignItems: 'flex-start', marginTop: px(15)},
+    planName: {fontSize: px(14), lineHeight: px(20), fontWeight: '500'},
+    planSub: {fontSize: px(12), lineHeight: px(17), color: '#A6A6A6', marginTop: px(2)},
+    planStrike: {textDecorationLine: 'line-through'},
+    priceRow: {flexDirection: 'row', alignItems: 'flex-end', marginTop: px(8)},
+    priceCurrency: {fontSize: px(16), lineHeight: px(22), fontWeight: '600', marginBottom: px(3), marginRight: px(2)},
+    priceValue: {fontSize: px(24), lineHeight: px(34), fontWeight: '600'},
+    priceStore: {fontSize: px(22), lineHeight: px(34), fontWeight: '600', marginTop: px(8), marginRight: px(8)},
+    agreementRow: {flexDirection: 'row', alignItems: 'flex-start', marginTop: px(15), marginHorizontal: px(15)},
     checkbox: {
-      width: 18,
-      height: 18,
-      borderRadius: 4,
-      borderWidth: 1.5,
-      borderColor: colors.primary,
-      backgroundColor: colors.card,
+      width: px(16),
+      height: px(16),
+      borderRadius: px(3),
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.1)',
+      backgroundColor: '#FFFFFF',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 8,
+      marginTop: px(4),
+      marginRight: px(5),
     },
-    checkboxChecked: {backgroundColor: colors.primary, borderColor: colors.primary},
-    checkboxMark: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
-    agreementText: {flex: 1, fontSize: 12, color: colors.textPrimary},
-    agreementLink: {color: colors.primary},
-    footerSafe: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      paddingHorizontal: 16,
-      paddingBottom: 8,
+    checkboxMark: {color: '#FFFFFF', fontSize: px(11), fontWeight: '800'},
+    agreementText: {flex: 1, fontSize: px(12), lineHeight: px(24)},
+    renewText: {
+      marginTop: px(10),
+      marginHorizontal: px(15),
+      fontSize: px(11),
+      lineHeight: px(17),
+      color: '#979797',
     },
-    purchaseOuter: {height: px(44), borderRadius: px(22), overflow: 'hidden', justifyContent: 'center', alignItems: 'center'},
-    purchaseBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   });
 
 export default SubscriptionScreen;

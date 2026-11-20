@@ -31,6 +31,7 @@ import RechargeScreen from './src/screens/RechargeScreen';
 import RechargeSuccessScreen from './src/screens/RechargeSuccessScreen';
 import LedgerHistoryScreen from './src/screens/LedgerHistoryScreen';
 import WithdrawScreen from './src/screens/WithdrawScreen';
+import MyGuangbiScreen from './src/screens/MyGuangbiScreen';
 import WithdrawHistoryScreen from './src/screens/WithdrawHistoryScreen';
 import IncomeDetailScreen from './src/screens/IncomeDetailScreen';
 import LessonDetailScreen from './src/screens/LessonDetailScreen';
@@ -212,7 +213,7 @@ function AppInner(): React.JSX.Element {
         }
         setBootParams(params);
         setInitialRoute('ScoreEditor');
-      } else if (boot === 'ScoreViewer') {
+      } else if (boot === 'ScoreViewer' || boot === 'LessonDetail') {
         const raw = (await getItem('verify_boot_params')) || '';
         let params: Record<string, unknown> = {};
         if (raw) {
@@ -224,7 +225,7 @@ function AppInner(): React.JSX.Element {
           await setItem('verify_boot_params', '');
         }
         setBootParams(params);
-        setInitialRoute('ScoreViewer');
+        setInitialRoute(boot);
       } else if (
         boot &&
         [
@@ -248,6 +249,7 @@ function AppInner(): React.JSX.Element {
           'RechargeSuccess',
           'LedgerHistory',
           'Withdraw',
+          'MyGuangbi',
           'WithdrawHistory',
           'IncomeDetail',
         ].includes(boot)
@@ -315,11 +317,16 @@ function AppInner(): React.JSX.Element {
         <Stack.Screen name="LessonPlan" component={LessonPlanGated} />
         <Stack.Screen name="LessonCapture" component={LessonCaptureGated} />
         <Stack.Screen name="LessonHistory" component={LessonHistoryScreen} />
-        <Stack.Screen name="LessonDetail" component={LessonDetailScreen} />
+        <Stack.Screen
+          name="LessonDetail"
+          component={LessonDetailScreen}
+          initialParams={initialRoute === 'LessonDetail' ? bootParams : undefined}
+        />
         <Stack.Screen name="Recharge" component={RechargeScreen} />
         <Stack.Screen name="RechargeSuccess" component={RechargeSuccessScreen} />
         <Stack.Screen name="LedgerHistory" component={LedgerHistoryScreen} />
         <Stack.Screen name="Withdraw" component={WithdrawScreen} />
+        <Stack.Screen name="MyGuangbi" component={MyGuangbiScreen} />
         <Stack.Screen name="WithdrawHistory" component={WithdrawHistoryScreen} />
         <Stack.Screen name="IncomeDetail" component={IncomeDetailScreen} />
         <Stack.Screen name="Legal" component={LegalScreen} />

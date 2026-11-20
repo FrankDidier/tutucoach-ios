@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Images} from '../assets/images';
 import RabbitMascot from '../components/RabbitMascot';
 import {useTheme} from '../theme/ThemeContext';
@@ -41,6 +42,7 @@ const CARD_H = 305;
 const PracticeScreen = ({navigation}) => {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   // 蓝湖 练琴_t1 矩形965：rgba(181,149,255,0.1)；t2 为浅紫→白渐变（见下方 LinearGradient）
   const companionRowBg = dark ? 'rgba(181,149,255,0.1)' : 'transparent';
@@ -76,9 +78,8 @@ const PracticeScreen = ({navigation}) => {
           pointerEvents="none">
           <Image
             source={Images.practiceBgDark}
-            // 背景里烘焙的星星原落在屏幕 0.154，安卓同款星星在 0.135。整图上移 15(设计px≈0.019 屏高)，
-            // 让 iOS 星星与安卓对齐到 0.135，从而「兔耳=星星」与安卓绝对位置同时成立。顶部被裁的是暗边，无碍。
-            style={{position: 'absolute', top: -px(15), left: 0, width: '100%', height: px(812)}}
+            // 蓝湖背景 375×812 含 44 状态栏；与内容同一坐标系：top = 安全区顶 − 44
+            style={{position: 'absolute', top: insets.top - px(44), left: 0, width: '100%', height: px(812)}}
             resizeMode="cover"
           />
         </View>
@@ -205,11 +206,11 @@ const PracticeScreen = ({navigation}) => {
                 resizeMode={dark ? 'contain' : 'stretch'}
               />
               <Text style={styles.companionTitle}>AI陪练模式</Text>
-              <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 光币解锁角色</Text>
+              <Text style={styles.companionSub}>AI分身语音陪伴 + 对话 · 会员专属</Text>
             </TouchableOpacity>
           </View>
 
-          {/* 蓝湖 练琴：主卡下方 课程重点 / 上课录音 两个磁贴 */}
+          {/* 蓝湖 练琴：主卡下方 课程重点 / 上课录音 两个磁贴 (15,588)/(195,588) 165×70 r10 */}
           <View style={styles.lessonRow}>
             <TouchableOpacity
               style={styles.lessonTile}
@@ -217,13 +218,12 @@ const PracticeScreen = ({navigation}) => {
               accessibilityRole="button"
               accessibilityLabel="课程重点"
               onPress={() => openLessonHistory(navigation)}>
-              <View style={{flex: 1}}>
-                <Text style={styles.lessonTileTitle}>课程重点</Text>
-                <Text style={styles.lessonTileSub}>点击查看</Text>
-              </View>
-              <View style={styles.lessonIcon}>
-                <Text style={styles.lessonNote}>♪</Text>
-              </View>
+              <Text style={[styles.lessonTileTitle, {top: px(12)}]}>课程重点</Text>
+              <Text style={[styles.lessonTileSub, {top: px(38)}]}>点击查看</Text>
+              <Image
+                source={dark ? Images.pracLessonKeyDark : Images.pracLessonKeyLight}
+                style={styles.lessonIcon}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.lessonTile}
@@ -231,13 +231,12 @@ const PracticeScreen = ({navigation}) => {
               accessibilityRole="button"
               accessibilityLabel="上课录音"
               onPress={() => navigation.navigate('LessonCapture')}>
-              <View style={{flex: 1}}>
-                <Text style={styles.lessonTileTitle}>上课录音</Text>
-                <Text style={styles.lessonTileSub}>点击使用</Text>
-              </View>
-              <View style={styles.lessonIcon}>
-                <Image source={Images.companionMic} style={styles.lessonMic} resizeMode="contain" />
-              </View>
+              <Text style={[styles.lessonTileTitle, {top: px(11)}, !dark && {color: '#3D3D3D'}]}>上课录音</Text>
+              <Text style={[styles.lessonTileSub, {top: px(37)}]}>点击使用</Text>
+              <Image
+                source={dark ? Images.pracLessonRecDark : Images.pracLessonRecLight}
+                style={styles.lessonIcon}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -254,31 +253,20 @@ const makeStyles = (colors, dark) =>
       fontSize: 18,
       fontWeight: '600',
       color: colors.textPrimary,
-      marginTop: px(8),
+      marginTop: px(10),
       marginLeft: px(15),
-      marginBottom: px(4),
       lineHeight: px(25),
     },
-    // 兔子 216x217 在 (159,89)；hero 高度决定其后卡片的起点。蓝湖卡顶 y=268（状态栏下 224），
-    // 原 height=200 让卡顶落在 237（偏低 13），与兔子(压顶)间出现空档；改 187 让卡顶回到 224，
-    // 兔子下沿(262)与卡顶重叠 38，1:1 蓝湖。
+    // 蓝湖坐标均为「状态栏下 y−44」：标题 10，HI~ 97，卡顶 224。
     hero: {
       position: 'relative',
-      // iOS 刘海安全区把整块内容下移，主卡「选择您的模型」原落在 0.36（安卓 0.315）。收紧 hero 高度
-      // 把主卡上提到安卓同款 0.315（用户确认对齐安卓）。HI~/教练(heroCopy marginTop 60) 与兔子
-      // (mascot 绝对 top) 均相对 hero 顶定位、不随高度变化，故只上移主卡。187→150（≈上提 37 设计px）。
-      // 用户高亮：iOS 主卡比安卓略高（0.3162 vs 0.3217），需把卡下压 ~5px 到安卓同款高度，
-      // 使「教练↔主卡」间距与安卓一致（略拉长）。150→156。
-      height: px(156),
+      height: px(189),
       paddingLeft: px(24),
       // 兔子在卡片之后（对齐安卓：imgPracticeRabbit 画在主卡之前、无 elevation）。
       // 卡顶右侧有缺口，兔子上半身从缺口/卡顶之上露出，下半身（裙摆/脚）被主卡盖住，1:1 蓝湖。
       zIndex: 0,
     },
-    // 蓝湖 HI~ y=141。iOS 刘海把 HI~/教练 整体压低约 0.04 屏高，主卡已上提到安卓位；若不动文案，
-    // 「教练↔主卡」间距会被压得过窄(实测 iOS 0.052 vs 安卓 0.092)。故把文案块上移 32（60→28），
-    // 使该 padding 与安卓 1:1（用户高亮项）。兔子/主卡不动。
-    heroCopy: {marginTop: px(28), maxWidth: px(200)},
+    heroCopy: {marginTop: px(62), maxWidth: px(200)},
     heroLine1Row: {flexDirection: 'row', alignItems: 'center'},
     heroLine1: {
       fontSize: 24,
@@ -294,53 +282,46 @@ const makeStyles = (colors, dark) =>
       color: colors.textPrimary,
       marginTop: 0,
     },
-    // 兔子盒与安卓 1:1：安卓 imgPracticeRabbit 为 216×217、top|end、scaleType=fitCenter，
-    // 播放 rabbit-stand.webp(480×552)。iOS 原生 TutuRabbitView 用 kCAGravityResizeAspect
-    // (=fitCenter)，且 APNG 与安卓 webp 逐帧完全一致(480×552、同留白)。故只要盒尺寸取安卓同款
-    // 216×217，两端「等比内嵌」出的可见兔子尺寸/位置像素级一致（此前用 230×265 恰好等于帧比例，
-    // 无 letterbox，兔子被整体放大、偏大）。
-    // 定位（蓝湖 练琴_t1）：盒 (159,89)216×217，右缘齐屏右(right:0)；盒底(hero 内 8+217=225)压到
-    // 卡顶(hero 内 187)之后 38，兔子裙摆/脚被主卡盖住、只露上半身与琴谱，1:1 蓝湖/安卓。
+    // 兔子：rabbit-stand 帧 480×552，内容 y107–549 / x82–398。盒 228×262（与帧同比例），
+    // 使耳尖/身宽落在蓝湖 image(159,89) 的可见范围：耳尖 y89.5、x210–325。
     mascot: {
       position: 'absolute',
-      // 兔子移入 cardOuter：原在 hero 内 top:-23；cardOuter 顶=hero 底(hero 高 156)，
-      // 故等价屏幕位置 top = -23 - 156 = -179。right:0 对齐屏右不变。
-      // zIndex 1 → 位于 MUSIC 水印(0) 之上、主卡(2) 之下（用户要求：MUSIC < 兔子 < 卡片）。
-      top: px(-179),
-      right: px(0),
-      width: px(216),
-      height: px(217),
+      // 相对卡顶(268)：38.7 − 268；zIndex 1 → MUSIC(0) < 兔子 < 主卡(2)
+      top: px(-229),
+      left: px(154),
+      width: px(228),
+      height: px(262),
       zIndex: 1,
     },
     lessonRow: {
       width: px(345),
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: px(14),
+      marginTop: px(15),
       zIndex: 2,
     },
     lessonTile: {
       width: px(165),
-      height: px(68),
-      borderRadius: px(14),
-      paddingLeft: px(14),
-      paddingRight: px(12),
-      flexDirection: 'row',
-      alignItems: 'center',
+      height: px(70),
+      borderRadius: px(10),
       backgroundColor: dark ? '#040428' : '#FFFFFF',
     },
-    lessonTileTitle: {fontSize: 16, fontWeight: '700', color: colors.textPrimary},
-    lessonTileSub: {fontSize: 12, marginTop: 4, color: colors.textSecondary},
-    lessonIcon: {
-      width: px(44),
-      height: px(44),
-      borderRadius: px(22),
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primary,
+    lessonTileTitle: {
+      position: 'absolute',
+      left: px(11),
+      fontSize: px(15),
+      fontWeight: '600',
+      lineHeight: px(21),
+      color: colors.textPrimary,
     },
-    lessonNote: {fontSize: 22, fontWeight: '700', color: '#FFFFFF'},
-    lessonMic: {width: px(22), height: px(22), tintColor: '#FFFFFF'},
+    lessonTileSub: {
+      position: 'absolute',
+      left: px(11),
+      fontSize: px(12),
+      lineHeight: px(17),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
+    },
+    lessonIcon: {position: 'absolute', left: px(106), top: px(13), width: px(44), height: px(44)},
     cardOuter: {position: 'relative', alignItems: 'center', zIndex: 1},
     // MUSIC 贴图：蓝湖 x16 y245（相对 cardOuter，卡片顶在 y268 → 仅露上沿）。
     // 母图 1x=362x81（含描边留白），glyph 宽≈352；left 微调到 px(12) 让字身对齐 x16。

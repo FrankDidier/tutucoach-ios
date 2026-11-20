@@ -21,7 +21,7 @@ export const lightColors = {
   statusBarStyle: 'dark-content',
 
   // 背景（蓝湖 t2）：底色/渐隐终点 #FCF8FA（rgba 252,248,250），顶粉 #FFE5EB
-  bg: '#FCF8FA',
+  bg: '#FAFAFA',
   bgGradientTop: '#FFE5EB',
   bgGradientBottom: '#FCF8FA',
   // 蓝湖 ai设置_t2 / ai分身设置_t2 页底 #FAFAFA

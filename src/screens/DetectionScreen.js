@@ -4,7 +4,7 @@ import {
   Text,
   Image,
   StyleSheet,
-  SafeAreaView,
+  Dimensions,
   TouchableOpacity,
   StatusBar,
   Alert,
@@ -13,7 +13,6 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
@@ -44,6 +43,10 @@ import {pick} from '../utils/rabbitMessages';
 import {createActiveTimer} from '../utils/activeTimer';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import MetronomeCard from '../components/MetronomeCard';
+import LanhuCTA from '../components/LanhuCTA';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 import TutuDetector, {TutuDetectorView} from 'tutu-detector';
 
 const SPEAK_COOLDOWN_MS = 3000; // 对应 AICoach.speakCooldownMs 默认 3000
@@ -732,7 +735,7 @@ const DetectionScreen = ({navigation, route}) => {
         resizeMode="cover"
         pointerEvents="none"
       />
-      <SafeAreaView style={styles.safe}>
+      <View style={styles.safe}>
       <ScreenHeader
         title={premium ? '智能AI陪练' : '手型检测'}
         onBack={handleBack}
@@ -748,7 +751,10 @@ const DetectionScreen = ({navigation, route}) => {
         }
       />
 
-      <View style={styles.body}>
+      <ScrollView
+        style={styles.bodyScroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}>
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.actionCard}
@@ -877,26 +883,14 @@ const DetectionScreen = ({navigation, route}) => {
               正确 30s｜不正确 10s｜占比 20%。实时统计走结束后的总结弹窗，不占此行。 */}
           <Text style={styles.statsPink}>正确：30s｜不正确：10s｜占比：20%</Text>
         </View>
-        <MetronomeCard variant="detect" style={styles.metroDetect} />
-      </View>
+        <MetronomeCard variant="detect" />
+      </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          activeOpacity={0.88}
-          style={styles.ctaOuter}
-          onPress={onToggleDetect}>
-          <LinearGradient
-            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0.5, y: 0}}
-            end={{x: 0.5, y: 1}}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={styles.ctaLabelWrap} pointerEvents="none">
-            <Text style={styles.ctaLabel}>{detecting ? '停止' : '启动'}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <LanhuCTA
+        title={detecting ? '停止' : '启动'}
+        fontSize={mode === 'dark' ? 15 : 16}
+        onPress={onToggleDetect}
+      />
 
       <Modal
         visible={showSummary}
@@ -1147,7 +1141,7 @@ const DetectionScreen = ({navigation, route}) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-      </SafeAreaView>
+      </View>
     </View>
   );
 };
@@ -1205,57 +1199,58 @@ const makeStyles = (colors, mode) =>
   headerSpacer: {
     width: 40,
   },
+  bodyScroll: {flex: 1},
+  // 蓝湖 手型检测：内容 y98 起，左右 15；卡 165×70 r10 → 相机 345×345 r10 → 模版 345×70 → 节拍器 345×100，间距 10
   body: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingHorizontal: px(15),
+    paddingTop: px(10),
+    paddingBottom: px(5),
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: px(10),
   },
   actionCard: {
-    flex: 1,
+    width: px(165),
+    height: px(70),
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-    elevation: 2,
+    alignItems: 'flex-start',
+    backgroundColor: mode === 'dark' ? '#131444' : '#FFFFFF',
+    borderRadius: px(10),
+    paddingLeft: px(10),
+    paddingTop: px(13),
   },
   actionIcon: {
-    width: 44,
-    height: 44,
-    marginRight: 10,
+    width: px(44),
+    height: px(44),
+    marginRight: px(10),
   },
   actionTextCol: {
     flex: 1,
   },
   actionTitle: {
-    fontSize: 15,
+    fontSize: px(15),
+    lineHeight: px(21),
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: mode === 'dark' ? '#FFFFFF' : '#261216',
+    marginTop: px(1),
   },
   actionHint: {
-    fontSize: 12,
+    fontSize: px(12),
+    lineHeight: px(17),
     color: '#979797',
-    marginTop: 2,
+    marginTop: px(3),
   },
   cameraWrap: {
-    flex: 1,
-    minHeight: 220,
-    marginBottom: 14,
+    width: px(345),
+    height: px(345),
+    marginBottom: px(10),
   },
   cameraBox: {
     flex: 1,
     backgroundColor: mode === 'dark' ? '#0A0818' : '#D8D8D8',
-    borderRadius: 12,
+    borderRadius: px(10),
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -1265,16 +1260,15 @@ const makeStyles = (colors, mode) =>
     color: colors.textSecondary,
   },
   camFlipBtn: {
-    // 蓝湖「切换前置」：仅图标，无「后置⇄」文字胶囊
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    top: px(15),
+    right: px(15),
+    width: px(40),
+    height: px(40),
+    borderRadius: px(20),
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   camFlipText: {
     fontSize: 12.5,
@@ -1314,42 +1308,39 @@ const makeStyles = (colors, mode) =>
   },
   rabbitOverlay: {
     position: 'absolute',
-    right: 8,
-    bottom: 8,
-    flexDirection: 'column',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
+    right: px(2),
+    bottom: px(8),
     zIndex: 5,
   },
   rabbitAvatar: {
-    width: 66,
-    height: 105,
+    width: px(66),
+    height: px(105),
   },
-  camFlipIcon: {width: 24, height: 24},
+  camFlipIcon: {width: px(24), height: px(24)},
   statsCard: {
     backgroundColor: mode === 'dark' ? '#131444' : '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: mode === 'dark' ? 0 : 1,
-    borderColor: 'rgba(240,59,97,0.08)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
+    borderRadius: px(10),
+    height: px(70),
+    paddingHorizontal: px(15),
+    paddingTop: px(12),
+    marginBottom: px(10),
   },
   templateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 8,
+    marginBottom: px(7),
   },
   templateText: {
-    fontSize: 14,
+    fontSize: px(14),
+    lineHeight: px(20),
     fontWeight: '600',
-    color: colors.textPrimary,
+    color: mode === 'dark' ? '#FFFFFF' : '#261216',
   },
   templateMuted: {
-    fontSize: 14,
-    color: colors.textSecondary,
+    fontSize: px(14),
+    lineHeight: px(20),
+    color: '#979797',
   },
   templateSet: {
     fontSize: 14,
@@ -1389,10 +1380,10 @@ const makeStyles = (colors, mode) =>
     lineHeight: 20,
   },
   statsPink: {
-    fontSize: 14,
+    fontSize: px(14),
+    lineHeight: px(20),
     fontWeight: '600',
     color: mode === 'dark' ? '#B595FF' : '#FF355F',
-    marginBottom: 0,
   },
   metroRow: {
     flexDirection: 'row',

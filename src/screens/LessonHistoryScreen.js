@@ -5,8 +5,9 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
+  Image,
+  Dimensions,
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
@@ -17,6 +18,10 @@ import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {fetchLessonHistory, markLessonRecap} from '../services/companionChat';
 import {getJson} from '../services/api';
+import {Images} from '../assets/images';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 
 function fmt(ts) {
   if (!ts) return '';
@@ -78,13 +83,20 @@ export default function LessonHistoryScreen({navigation}) {
                 style={styles.card}
                 activeOpacity={0.88}
                 onPress={() => navigation.navigate('LessonDetail', {lesson: les})}>
+                <Image source={dark ? Images.keyHistDark : Images.keyHistLight} style={styles.icon} />
                 <View style={styles.mid}>
-                  <Text style={styles.title}>
+                  <Text style={styles.title} numberOfLines={1}>
                     课堂重点·{pieces || 0}首曲目
                   </Text>
                   <Text style={styles.when}>{fmt(les.at)}</Text>
                 </View>
-                <Text style={styles.link}>查看记录</Text>
+                <View style={styles.linkRow}>
+                  <Text style={styles.link}>查看记录</Text>
+                  <Image
+                    source={dark ? Images.icRowArrowDark : Images.icRowArrowLight}
+                    style={styles.arrow}
+                  />
+                </View>
               </TouchableOpacity>
             );
           })
@@ -96,22 +108,27 @@ export default function LessonHistoryScreen({navigation}) {
 
 function makeStyles(colors, dark) {
   return StyleSheet.create({
-    root: {flex: 1, backgroundColor: colors.bg},
-    body: {padding: 15, paddingBottom: 40},
-    empty: {color: colors.textSecondary, fontSize: 14, marginTop: 24, textAlign: 'center'},
+    root: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
+    // 蓝湖 课堂重点 卡 345×80 r10，间距 15：图标 44 (17,18)；标题 16/600 (71,20)；时间 12 (72,45)；查看记录 12 + 箭头 16（右 10，y23）
+    body: {paddingHorizontal: px(15), paddingTop: px(10), paddingBottom: px(40)},
+    empty: {color: colors.textSecondary, fontSize: px(14), marginTop: px(24), textAlign: 'center'},
     card: {
       flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: dark ? '#040428' : colors.card,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 16,
-      marginBottom: 12,
-      minHeight: 70,
+      alignItems: 'flex-start',
+      height: px(80),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      paddingLeft: px(17),
+      paddingTop: px(18),
+      paddingRight: px(10),
+      marginBottom: px(15),
     },
-    mid: {flex: 1, marginRight: 10},
-    title: {color: colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 6},
-    when: {color: colors.textSecondary, fontSize: 12},
-    link: {color: colors.primary, fontSize: 13, fontWeight: '600'},
+    icon: {width: px(44), height: px(44), marginRight: px(10)},
+    mid: {flex: 1, marginRight: px(8), marginTop: px(2)},
+    title: {color: dark ? '#FFFFFF' : '#261216', fontSize: px(16), lineHeight: px(22), fontWeight: '600'},
+    when: {color: dark ? '#A1A1B4' : '#A6A6A6', fontSize: px(12), lineHeight: px(17), marginTop: px(3)},
+    linkRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(5)},
+    link: {color: dark ? '#A1A1B4' : '#A6A6A6', fontSize: px(12), lineHeight: px(17)},
+    arrow: {width: px(16), height: px(16), marginLeft: px(2)},
   });
 }

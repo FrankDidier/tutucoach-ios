@@ -5,14 +5,14 @@ import {
   Text,
   Image,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   StatusBar,
   Dimensions,
   Alert,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import ScreenHeader from '../components/ScreenHeader';
+import LanhuCTA from '../components/LanhuCTA';
 import {builtInProfiles} from '../utils/coachProfiles';
 import {fetchCoaches} from '../services/coach';
 import {getSelectedCoachId, setSelectedCoachId, setCachedCoachAvatarUri} from '../services/coachPrefs';
@@ -238,24 +238,14 @@ const AISelectScreen = ({navigation, route}) => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor="transparent" translucent />
-      {/* 顶部背景（蓝湖 375x220），深/浅两版 */}
-      <Image
-        source={dark ? Images.aiselectTopDark : Images.aiselectTopLight}
-        style={styles.topBg}
-        resizeMode="cover"
-        pointerEvents="none"
+      <ScreenHeader
+        title="AI选择"
+        onBack={() => navigation?.goBack?.()}
+        right={<Text style={styles.walletHint}>{wallet.balance || 0} 光币</Text>}
       />
-      <SafeAreaView>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backHit} onPress={() => navigation?.goBack?.()}>
-            <Text style={styles.backChevron}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>AI选择</Text>
-          <Text style={styles.walletHint}>{wallet.balance || 0} 光币</Text>
-        </View>
-      </SafeAreaView>
 
       <ScrollView
+        style={styles.flex}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
         <View style={styles.grid}>
@@ -271,16 +261,10 @@ const AISelectScreen = ({navigation, route}) => {
                   style={styles.cell}
                   onPress={() => setSelected(item.id)}>
                   <View style={styles.cardImgWrap}>
-                    <Image
-                      source={item.avatar}
-                      style={styles.cardImg}
-                      resizeMode="cover"
-                    />
+                    <Image source={item.avatar} style={styles.cardImg} resizeMode="cover" />
                   </View>
                   <View style={styles.cardTextPanel}>
-                    <Text
-                      style={[styles.cellName, active && styles.cellNameSelected]}
-                      numberOfLines={1}>
+                    <Text style={styles.cellName} numberOfLines={1}>
                       {item.name}
                     </Text>
                     <Text style={styles.cellSubtitle} numberOfLines={1}>
@@ -299,64 +283,32 @@ const AISelectScreen = ({navigation, route}) => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          activeOpacity={0.88}
-          style={styles.confirmOuter}
-          onPress={onConfirm}>
-          <LinearGradient
-            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0.5, y: 0}}
-            end={{x: 0.5, y: 1}}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={styles.confirmLabelWrap} pointerEvents="none">
-            <Text style={styles.confirmLabel}>确认</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <LanhuCTA title="确认" fontSize={dark ? 15 : 16} onPress={onConfirm} />
     </View>
   );
 };
 
+// 蓝湖「ai选择」：卡 165×165 r10（列/行距 15），立绘 159×159 r8 内缩 3，底部 165×50 文字面板。
 const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
-    topBg: {position: 'absolute', top: 0, left: 0, right: 0, height: px(220)},
-    header: {
-      height: 44,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 8,
-    },
-    backHit: {width: 44, height: 44, justifyContent: 'center', alignItems: 'center'},
-    backChevron: {fontSize: 30, color: colors.textPrimary, marginTop: -4},
-    headerTitle: {fontSize: 18, fontWeight: '600', color: colors.textPrimary},
-    walletHint: {width: 72, textAlign: 'right', fontSize: 12, color: colors.textMuted, paddingRight: 8},
-    // 蓝湖卡片区从 y≈98；顶栏后 padTop 约 10
-    scroll: {paddingHorizontal: px(15), paddingTop: px(22), paddingBottom: 130},
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
+    flex: {flex: 1},
+    walletHint: {fontSize: px(12), color: '#979797', paddingRight: px(10)},
+    scroll: {paddingHorizontal: px(15), paddingTop: px(22), paddingBottom: px(5)},
     emptyHint: {
       width: '100%',
       textAlign: 'center',
       color: colors.textMuted,
-      fontSize: 14,
+      fontSize: px(14),
       paddingVertical: px(40),
     },
-    grid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'space-between',
-    },
-    // 蓝湖 AI选择：卡片 165×165（列间距 15、行间距 15）；上部 159×159 立绘（内缩 3），
-    // 底部 165×50 文字面板（名称 15/600 + 副标题 12 #A1A1B4）。
+    grid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between'},
     cell: {
       width: px(165),
       height: px(165),
       marginBottom: px(15),
-      backgroundColor: colors.card,
-      borderRadius: px(16),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
       overflow: 'hidden',
     },
     cardImgWrap: {
@@ -365,9 +317,8 @@ const makeStyles = (colors, dark) =>
       left: px(3),
       width: px(159),
       height: px(159),
-      borderRadius: px(13),
+      borderRadius: px(8),
       overflow: 'hidden',
-      backgroundColor: dark ? '#2A1A5E' : '#FFEDF1',
     },
     cardImg: {width: '100%', height: '100%'},
     cardTextPanel: {
@@ -377,46 +328,27 @@ const makeStyles = (colors, dark) =>
       bottom: 0,
       height: px(50),
       paddingLeft: px(10),
+      paddingRight: px(10),
       paddingTop: px(5),
-      backgroundColor: colors.card,
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
     },
-    // t1 选中：边 #B595FF；t2 选中：粉边（矩形 1182）
     cardBorder: {
       ...StyleSheet.absoluteFillObject,
-      borderRadius: px(16),
-      borderWidth: 1.5,
-      borderColor: dark ? '#B595FF' : colors.primary,
+      borderRadius: px(10),
+      borderWidth: 1,
+      borderColor: dark ? '#B595FF' : '#FF355F',
     },
-    cellName: {fontSize: 15, fontWeight: '600', color: colors.textPrimary, lineHeight: px(20)},
-    cellNameSelected: {color: colors.textPrimary},
-    cellSubtitle: {fontSize: 12, color: '#A1A1B4', marginTop: px(2), lineHeight: px(17)},
-    // 蓝湖：底部整条面板（卡片色，高 60）+ 确认按钮 343×44（边距 16 / 上 8）
-    footer: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      paddingHorizontal: px(16),
-      paddingBottom: 30,
-      paddingTop: 8,
-      backgroundColor: colors.card,
-    },
-    // 蓝湖确认 343×44
-    confirmOuter: {
-      height: px(44),
-      borderRadius: px(22),
-      overflow: 'hidden',
-      justifyContent: 'center',
-    },
-    confirmLabelWrap: {
-      ...StyleSheet.absoluteFillObject,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    confirmLabel: {
-      color: '#FFFFFF',
-      fontSize: 16,
+    cellName: {
+      fontSize: px(14),
+      lineHeight: px(20),
       fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    cellSubtitle: {
+      fontSize: px(11),
+      lineHeight: px(17),
+      marginTop: px(2),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
     },
   });
 

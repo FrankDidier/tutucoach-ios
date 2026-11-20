@@ -12,10 +12,15 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 import {Images} from '../assets/images';
 import ScreenHeader from '../components/ScreenHeader';
+import LinearGradient from 'react-native-linear-gradient';
 import {useTheme} from '../theme/ThemeContext';
 import {getDeviceId} from '../services/device';
 import {registerAccount, bindTeacher, unbindTeacher} from '../services/account';
@@ -59,8 +64,9 @@ function fmtMinutes(min) {
 }
 
 const ClassManageScreen = ({navigation}) => {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [students, setStudents] = useState([]);
   const [query, setQuery] = useState('');
 
@@ -422,7 +428,7 @@ const ClassManageScreen = ({navigation}) => {
       onLongPress={() => removeFromClass(item)}>
       <View style={styles.cardTopRow}>
         <Image
-          source={Images.avatarRabbit}
+          source={dark ? Images.classAvatarDark : Images.classAvatarLight}
           style={styles.avatar}
           resizeMode="cover"
         />
@@ -431,9 +437,7 @@ const ClassManageScreen = ({navigation}) => {
             <Text style={styles.studentName}>{item.name}</Text>
             {item.isVip ? (
               <Image
-                source={
-                  colors.mode === 'dark' ? Images.classVipDark : Images.classVipLight
-                }
+                source={dark ? Images.classVipDark : Images.classVipLight}
                 style={styles.vipIcon}
                 resizeMode="contain"
               />
@@ -468,22 +472,30 @@ const ClassManageScreen = ({navigation}) => {
   );
 
   return (
-    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
+    <EdgeSafeArea edges={['left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       <ScreenHeader title="班级管理" onBack={() => navigation?.goBack?.()} />
 
       {/* 蓝湖 组2491 搜索框 345×44 @ (15,98)：内含 search-2-line 图标(20×20)+「搜索学生」 */}
       <View style={styles.searchBar}>
+        {dark ? (
+          <LinearGradient
+            colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0)']}
+            start={{x: 0, y: 0.5}}
+            end={{x: 1, y: 0.5}}
+            style={styles.searchBorder}
+          />
+        ) : null}
         <View style={styles.searchShell}>
-          <View style={styles.searchIcon}>
-            <View style={styles.searchRing} />
-            <View style={styles.searchHandle} />
-          </View>
+          <Image
+            source={Images.icSearch}
+            style={[styles.searchIcon, {tintColor: dark ? '#FFFFFF' : '#A6A6A6'}]}
+          />
           <TextInput
             style={styles.searchInput}
             placeholder="搜索学生"
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={dark ? '#FFFFFF' : '#A6A6A6'}
             value={query}
             onChangeText={setQuery}
           />
@@ -492,7 +504,7 @@ const ClassManageScreen = ({navigation}) => {
 
       <View style={styles.listHeaderRow}>
         <Image
-          source={Images.studentListCap}
+          source={dark ? Images.classCapDark : Images.classCapLight}
           style={styles.listHeaderIcon}
           resizeMode="contain"
         />
@@ -515,80 +527,44 @@ const ClassManageScreen = ({navigation}) => {
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.bg,
-    },
-    searchBar: {
-      paddingHorizontal: 15,
-      paddingTop: 12,
-      paddingBottom: 8,
-    },
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
+    // 蓝湖 搜索 345×44 r6 (15,98)；暗色 1px 渐变描边（左 0.2 白 → 右透明）
+    searchBar: {marginHorizontal: px(15), marginTop: px(10), height: px(44)},
+    searchBorder: {...StyleSheet.absoluteFillObject, borderRadius: px(6)},
     searchShell: {
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.inputBg,
-      paddingHorizontal: 12,
+      position: 'absolute',
+      left: dark ? 1 : 0,
+      right: dark ? 1 : 0,
+      top: dark ? 1 : 0,
+      bottom: dark ? 1 : 0,
+      borderRadius: px(6),
+      backgroundColor: dark ? '#131444' : '#FFFFFF',
+      paddingLeft: px(10),
       flexDirection: 'row',
       alignItems: 'center',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.cardAlt,
     },
     // 蓝湖 search-2-line 20×20：用两枚 View 画描边放大镜（环 + 手柄），随主题取色、任意密度清晰。
-    searchIcon: {
-      width: 18,
-      height: 18,
-      marginRight: 8,
-    },
-    searchRing: {
-      position: 'absolute',
-      top: 1,
-      left: 1,
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-      borderWidth: 1.6,
-      borderColor: colors.textMuted,
-    },
-    searchHandle: {
-      position: 'absolute',
-      right: 1.5,
-      bottom: 2,
-      width: 6,
-      height: 1.6,
-      borderRadius: 1,
-      backgroundColor: colors.textMuted,
-      transform: [{rotate: '45deg'}],
-    },
+    searchIcon: {width: px(20), height: px(20), marginRight: px(10)},
+    
     searchInput: {
       flex: 1,
-      height: 44,
-      fontSize: 15,
+      height: px(42),
+      fontSize: px(15),
       color: colors.textPrimary,
       paddingVertical: 0,
     },
     listHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingBottom: 10,
+      marginTop: px(20),
+      marginBottom: px(10),
+      paddingHorizontal: px(15),
     },
-    listHeaderIcon: {
-      width: 24,
-      height: 24,
-      marginRight: 6,
-    },
-    listHeader: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.textPrimary,
-    },
-    list: {
-      paddingHorizontal: 15,
-      paddingBottom: 24,
-    },
+    listHeaderIcon: {width: px(22), height: px(22), marginRight: px(8)},
+    listHeader: {fontSize: px(16), lineHeight: px(22), fontWeight: '600', color: dark ? '#FFFFFF' : '#261216'},
+    list: {paddingHorizontal: px(15), paddingBottom: px(24)},
     emptyHint: {
       textAlign: 'center',
       color: colors.textSecondary,
@@ -597,49 +573,24 @@ const makeStyles = colors =>
       paddingTop: 40,
       lineHeight: 20,
     },
+    // 蓝湖 卡 345×120 r10：头像 44 (15,15)；名 (69,15)；ID (69,39)；时长条 315×30 r4 (15,74)
     card: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 14,
-      marginBottom: 10,
-      minHeight: 120,
-      borderWidth: colors.mode === 'dark' ? 1 : 0,
-      borderColor: colors.cardBorder,
-      shadowColor: '#000',
-      shadowOpacity: colors.mode === 'dark' ? 0.25 : 0.05,
-      shadowRadius: 8,
-      shadowOffset: {width: 0, height: 2},
-      elevation: 2,
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      paddingHorizontal: px(15),
+      paddingTop: px(15),
+      paddingBottom: px(16),
+      marginBottom: px(15),
     },
-    cardTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    avatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.cardAlt,
-    },
+    cardTopRow: {flexDirection: 'row', alignItems: 'flex-start'},
+    avatar: {width: px(44), height: px(44), borderRadius: px(22), marginRight: px(10)},
     nameBlock: {
       flex: 1,
       minWidth: 0,
     },
-    nameRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    studentName: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.textPrimary,
-    },
-    vipIcon: {
-      width: 18,
-      height: 18,
-    },
+    nameRow: {flexDirection: 'row', alignItems: 'center', height: px(22)},
+    studentName: {fontSize: px(15), lineHeight: px(22), fontWeight: '600', color: dark ? '#FFFFFF' : '#191919'},
+    vipIcon: {width: px(18), height: px(18), marginLeft: px(5)},
     badge: {
       width: 20,
       height: 20,
@@ -654,6 +605,7 @@ const makeStyles = colors =>
       fontWeight: '800',
     },
     pendingBadge: {
+      marginLeft: px(5),
       paddingHorizontal: 8,
       height: 20,
       borderRadius: 10,
@@ -671,33 +623,18 @@ const makeStyles = colors =>
       color: colors.textSecondary,
       lineHeight: 18,
     },
-    studentId: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginTop: 4,
-    },
+    studentId: {fontSize: px(12), lineHeight: px(17), color: '#979797', marginTop: px(2)},
     practiceBar: {
-      marginTop: 12,
-      backgroundColor: colors.inputBg,
-      borderRadius: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
+      marginTop: px(15),
+      height: px(30),
+      justifyContent: 'center',
+      backgroundColor: dark ? '#131444' : '#FFF5F7',
+      borderRadius: px(4),
+      paddingHorizontal: px(11),
     },
-    practiceLine: {
-      fontSize: 13,
-    },
-    practiceLabel: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: colors.textPrimary,
-    },
-    practiceValue: {
-      // 蓝湖 班级管理 时长值实测 ≈ #B090F8 淡紫（非主色 #7F47FE 深紫）。用 accent(#B595FF) 对齐蓝湖，
-      // 与安卓 practiceSpan 值色 #B595FF 保持两端一致。
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.accent,
-    },
+    practiceLine: {fontSize: px(13), lineHeight: px(22)},
+    practiceLabel: {fontSize: px(13), fontWeight: '500', color: dark ? '#FFFFFF' : '#191919'},
+    practiceValue: {fontSize: px(13), fontWeight: '500', color: dark ? '#B595FF' : '#FF355F'},
   });
 
 export default ClassManageScreen;

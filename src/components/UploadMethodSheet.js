@@ -1,19 +1,23 @@
 // 蓝湖「选择上传方式弹窗」— 半屏底栏：拍照拍谱 / 本地相册 / 上传PDF
 import React, {useMemo} from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
+import {Text, TouchableOpacity, StyleSheet, Dimensions} from 'react-native';
 import {useTheme} from '../theme/ThemeContext';
+import {Images} from '../assets/images';
+import LanhuSheet from './LanhuSheet';
 
-export default function UploadMethodSheet({visible, onClose, onCamera, onGallery, onPdf}) {
-  const {colors, mode} = useTheme();
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
+
+export default function UploadMethodSheet({
+  visible,
+  onClose,
+  onCamera,
+  onGallery,
+  onPdf,
+}) {
+  const {mode} = useTheme();
   const dark = mode === 'dark';
-  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const styles = useMemo(() => makeStyles(dark), [dark]);
 
   const pick = fn => {
     onClose?.();
@@ -21,81 +25,48 @@ export default function UploadMethodSheet({visible, onClose, onCamera, onGallery
     setTimeout(() => fn?.(), 80);
   };
 
+  const row = (label, fn) => (
+    <TouchableOpacity
+      style={styles.row}
+      activeOpacity={0.85}
+      onPress={() => pick(fn)}>
+      <Text style={styles.rowText}>{label}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <Modal visible={!!visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.mask} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-          <Text style={styles.title}>添加乐谱</Text>
-          <Text style={styles.sub}>请选择上传方式</Text>
-
-          <TouchableOpacity style={styles.row} activeOpacity={0.85} onPress={() => pick(onCamera)}>
-            <Text style={styles.rowText}>拍照拍谱</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} activeOpacity={0.85} onPress={() => pick(onGallery)}>
-            <Text style={styles.rowText}>本地相册</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} activeOpacity={0.85} onPress={() => pick(onPdf)}>
-            <Text style={styles.rowText}>上传PDF</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.cancel} activeOpacity={0.85} onPress={onClose}>
-            <Text style={styles.cancelText}>取消</Text>
-          </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <LanhuSheet
+      visible={visible}
+      onClose={onClose}
+      title="添加乐谱"
+      subtitle="请选择上传方式"
+      subtitleStrong
+      headGap={30}
+      cornerImage={Images.uploadCamera}
+      border>
+      {row('拍照拍谱', onCamera)}
+      {row('本地相册', onGallery)}
+      {row('上传PDF', onPdf)}
+    </LanhuSheet>
   );
 }
 
-function makeStyles(colors, dark) {
+// 蓝湖：行 335×50 r10，间距 15；文字 16/500 居中
+function makeStyles(dark) {
   return StyleSheet.create({
-    mask: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.4)',
-      justifyContent: 'flex-end',
-    },
-    sheet: {
-      backgroundColor: dark ? '#040428' : '#FFFFFF',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingHorizontal: 20,
-      paddingTop: 30,
-      paddingBottom: 34,
-    },
-    title: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginBottom: 6,
-    },
-    sub: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      marginBottom: 20,
-    },
     row: {
-      height: 50,
-      borderRadius: 12,
-      backgroundColor: dark ? 'rgba(19,20,68,1)' : '#F7F7F7',
+      height: px(50),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 15,
+      marginBottom: px(15),
     },
     rowText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.textPrimary,
-    },
-    cancel: {
-      height: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 4,
-    },
-    cancelText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: '#F45454',
+      fontSize: px(16),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: dark ? '#FFFFFF' : '#212122',
     },
   });
 }

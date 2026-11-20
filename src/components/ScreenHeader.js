@@ -1,10 +1,13 @@
 import React, {useMemo} from 'react';
-import {View, Text, Image, TouchableOpacity, StyleSheet} from 'react-native';
+import {View, Text, Image, TouchableOpacity, StyleSheet, Dimensions} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
 
-// 与蓝湖二级页头部 1:1：375×220 柔光底裁顶栏 + 返回 + 居中标题（t1/t2）。
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
+
+// 蓝湖二级页头部 1:1：375×220 柔光底自屏顶铺开（压在内容卡片之下）+ 返回 9×18 (17,57) + 标题 18/600 (y54)。
 const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
   const {colors, mode} = useTheme();
   const insets = useSafeAreaInsets();
@@ -13,27 +16,20 @@ const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
   const headerBg = detect
     ? null
     : mode === 'light'
-      ? Images.lanhuPageHeaderLight || Images.cardHeaderGradient
+      ? Images.lanhuPageHeaderLight
       : Images.lanhuPageHeaderDark;
 
   return (
-    <View style={[styles.wrap, detect && styles.wrapDetect, {paddingTop: Math.max(insets.top, 0)}]}>
+    <View style={[styles.wrap, {paddingTop: insets.top}]}>
       {headerBg ? (
         <Image
           source={headerBg}
-          style={styles.bg}
-          resizeMode="cover"
+          style={[styles.bg, {height: px(220) + Math.max(0, insets.top - px(44))}]}
+          resizeMode="stretch"
+          pointerEvents="none"
         />
       ) : null}
       <View style={styles.bar}>
-        <TouchableOpacity
-          style={styles.side}
-          onPress={onBack}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-          accessibilityRole="button"
-          accessibilityLabel="返回">
-          <Text style={styles.backText}>‹</Text>
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.titleHit}
           activeOpacity={onTitleLongPress ? 0.7 : 1}
@@ -43,7 +39,15 @@ const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
             {title}
           </Text>
         </TouchableOpacity>
-        <View style={styles.side}>{right}</View>
+        <TouchableOpacity
+          style={styles.back}
+          onPress={onBack}
+          hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+          accessibilityRole="button"
+          accessibilityLabel="返回">
+          <Image source={Images.navBack} style={styles.backIcon} />
+        </TouchableOpacity>
+        {right ? <View style={styles.right}>{right}</View> : null}
       </View>
     </View>
   );
@@ -51,45 +55,34 @@ const ScreenHeader = ({title, onBack, right, onTitleLongPress, variant}) => {
 
 const makeStyles = colors =>
   StyleSheet.create({
-    wrap: {
-      overflow: 'hidden',
-      backgroundColor: 'transparent',
+    wrap: {backgroundColor: 'transparent', zIndex: 0},
+    bg: {position: 'absolute', left: 0, top: 0, width: SCREEN_W},
+    bar: {height: px(44)},
+    back: {position: 'absolute', left: 0, top: 0, width: px(44), height: px(44)},
+    backIcon: {
+      position: 'absolute',
+      left: px(17),
+      top: px(13),
+      width: px(9),
+      height: px(18),
+      tintColor: colors.textPrimary,
     },
-    wrapDetect: {
-      minHeight: 56,
-      backgroundColor: 'transparent',
-    },
-    bg: {
-      ...StyleSheet.absoluteFillObject,
-      // 蓝湖 375×220 顶柔光：只露出导航带高度
-      height: 220,
-    },
-    bar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      minHeight: 44,
-    },
-    side: {
-      width: 40,
-      height: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    backText: {
-      fontSize: 30,
-      color: colors.textPrimary,
-      fontWeight: '400',
-      marginTop: -4,
-    },
-    titleHit: {flex: 1, justifyContent: 'center'},
+    titleHit: {position: 'absolute', left: px(60), right: px(60), top: px(10)},
     title: {
       textAlign: 'center',
-      fontSize: 18,
+      fontSize: px(18),
+      lineHeight: px(25),
       fontWeight: '600',
       color: colors.textPrimary,
+    },
+    right: {
+      position: 'absolute',
+      right: px(5),
+      top: 0,
+      height: px(44),
+      minWidth: px(40),
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 

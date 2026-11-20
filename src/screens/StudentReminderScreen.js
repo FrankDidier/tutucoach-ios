@@ -16,7 +16,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import {Images} from '../assets/images';
+import LanhuCTA from '../components/LanhuCTA';
+import LanhuSheet from '../components/LanhuSheet';
+import {lastLessonText} from '../utils/lastLesson';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {getItem, setItem} from '../services/storage';
 import {useTheme} from '../theme/ThemeContext';
@@ -25,7 +32,14 @@ import {getDeviceId} from '../services/device';
 import {registerAccount} from '../services/account';
 import {fetchStudents} from '../services/teacher';
 import {listStudents, syncRosterFromServer} from '../services/students';
-import {fetchReminders, savePieces} from '../services/companionChat';
+import {
+  fetchReminders,
+  savePieces,
+  fetchLessonStudents,
+} from '../services/companionChat';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 
 const FREQ_MIN = 10;
 const FREQ_MAX = 600;
@@ -35,8 +49,11 @@ const FREQ_MAX = 600;
 const remarksKey = tid => `student_remarks:${tid}`;
 
 export default function StudentReminderScreen({navigation}) {
-  const {colors} = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  // 蓝湖只画了「选学生」这一步：pick → 点「开始设置」进入该生的频率 / 曲目重点编辑（edit）
+  const [step, setStep] = useState('pick');
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [sel, setSel] = useState(null); // {id, name}
@@ -69,7 +86,9 @@ export default function StudentReminderScreen({navigation}) {
     let n = tryMaps(id);
     if (!n && id.length > 6) {
       // 学生码可能是尾号形式
-      const keys = Object.keys(rosterRef.current).concat(Object.keys(remarksRef.current));
+      const keys = Object.keys(rosterRef.current).concat(
+        Object.keys(remarksRef.current),
+      );
       for (const k of keys) {
         if (k && (id.endsWith(k) || k.endsWith(id.slice(-6)))) {
           n = tryMaps(k);
@@ -86,13 +105,14 @@ export default function StudentReminderScreen({navigation}) {
       const {getPreviousUserId} = require('../services/device');
       const prev = (await getPreviousUserId()) || '';
       // 常见旧 UUID（微信登录前）也尝试迁一次；无本地键则无副作用。
-      const candidates = [
-        prev,
-        '732343f2-9a5c-4a2d-afcd-3694a5aa4d09',
-      ].filter(Boolean);
+      const candidates = [prev, '732343f2-9a5c-4a2d-afcd-3694a5aa4d09'].filter(
+        Boolean,
+      );
       let cur = {};
       try {
-        cur = JSON.parse((await AsyncStorage.getItem(remarksKey(tid))) || '{}') || {};
+        cur =
+          JSON.parse((await AsyncStorage.getItem(remarksKey(tid))) || '{}') ||
+          {};
       } catch (e) {
         cur = {};
       }
@@ -119,7 +139,6 @@ export default function StudentReminderScreen({navigation}) {
     }
   };
 
-  
   // QA audit: one-shot open roster picker (verify_open_roster=1)
   useEffect(() => {
     (async () => {
@@ -199,9 +218,13 @@ export default function StudentReminderScreen({navigation}) {
             }
             if (!byId[uid]) {
               byId[uid] = {id: uid, name: displayName(s)};
-            } else if (nick && (!byId[uid].name || byId[uid].name === uid.slice(-6))) {
+            } else if (
+              nick &&
+              (!byId[uid].name || byId[uid].name === uid.slice(-6))
+            ) {
               byId[uid] = {...byId[uid], name: displayName(s)};
             }
+            if (s.last_lesson_at) byId[uid].last_lesson_at = s.last_lesson_at;
           });
           try {
             await AsyncStorage.setItem(
@@ -210,6 +233,15 @@ export default function StudentReminderScreen({navigation}) {
             );
           } catch (e) {}
         }
+      } catch (e) {}
+
+      // 学生格副标题「今天上过课 / 昨天 / M月D日」：最近一次上课时间来自上课录音
+      try {
+        const ls = (await fetchLessonStudents(getDeviceId())) || [];
+        ls.forEach(x => {
+          if (x && x.id && x.last_lesson_at && byId[x.id])
+            byId[x.id].last_lesson_at = x.last_lesson_at;
+        });
       } catch (e) {}
 
       if (alive) {
@@ -231,12 +263,18 @@ export default function StudentReminderScreen({navigation}) {
     if (clean) map[studentId] = clean;
     else delete map[studentId];
     remarksRef.current = map;
-    AsyncStorage.setItem(remarksKey(getDeviceId()), JSON.stringify(map)).catch(() => {});
+    AsyncStorage.setItem(remarksKey(getDeviceId()), JSON.stringify(map)).catch(
+      () => {},
+    );
     setStudents(prev =>
-      prev.map(s => (s.id === studentId ? {...s, name: clean || s.id.slice(-6)} : s)),
+      prev.map(s =>
+        s.id === studentId ? {...s, name: clean || s.id.slice(-6)} : s,
+      ),
     );
     setSel(prev =>
-      prev && prev.id === studentId ? {...prev, name: clean || prev.id.slice(-6)} : prev,
+      prev && prev.id === studentId
+        ? {...prev, name: clean || prev.id.slice(-6)}
+        : prev,
     );
     // 写回服务端：保留已有曲目/频率，只更新 student_name（安卓同步时才能看到备注）
     (async () => {
@@ -273,6 +311,7 @@ export default function StudentReminderScreen({navigation}) {
 
   const selectStudent = async stu => {
     setSel(stu);
+    setStep('edit');
     setLoadingStudent(true);
     try {
       const r = await fetchReminders(stu.id, getDeviceId());
@@ -349,19 +388,23 @@ export default function StudentReminderScreen({navigation}) {
       Alert.alert('提示', '当前没有通用重点可清空。');
       return;
     }
-    Alert.alert('重置通用重点？', `清空「${name}」里已写的 ${n} 条通用重点？清空后记得点「保存设置」。`, [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '重置',
-        style: 'destructive',
-        onPress: () =>
-          setPieces(prev => {
-            const next = [...prev];
-            next[idx] = {...next[idx], lines: []};
-            return next;
-          }),
-      },
-    ]);
+    Alert.alert(
+      '重置通用重点？',
+      `清空「${name}」里已写的 ${n} 条通用重点？清空后记得点「保存设置」。`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '重置',
+          style: 'destructive',
+          onPress: () =>
+            setPieces(prev => {
+              const next = [...prev];
+              next[idx] = {...next[idx], lines: []};
+              return next;
+            }),
+        },
+      ],
+    );
   };
 
   const onSave = async () => {
@@ -370,7 +413,10 @@ export default function StudentReminderScreen({navigation}) {
       return;
     }
     const clean = pieces
-      .map(p => ({name: (p.name || '').trim(), lines: (p.lines || []).filter(Boolean)}))
+      .map(p => ({
+        name: (p.name || '').trim(),
+        lines: (p.lines || []).filter(Boolean),
+      }))
       .filter(p => p.name);
     setSaving(true);
     try {
@@ -411,14 +457,19 @@ export default function StudentReminderScreen({navigation}) {
   );
 
   return (
-    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.container}>
+    <EdgeSafeArea edges={['left', 'right']} style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader
         title="陪练提示设置"
-        onBack={() => navigation?.goBack?.()}
+        onBack={() =>
+          step === 'edit' ? setStep('pick') : navigation?.goBack?.()
+        }
         right={
-          sel ? (
-            <TouchableOpacity onPress={onSave} disabled={saving} activeOpacity={0.7}>
+          step === 'edit' && sel ? (
+            <TouchableOpacity
+              onPress={onSave}
+              disabled={saving}
+              activeOpacity={0.7}>
               <Text style={styles.saveHeader}>{saving ? '...' : '保存'}</Text>
             </TouchableOpacity>
           ) : null
@@ -437,71 +488,109 @@ export default function StudentReminderScreen({navigation}) {
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            {/* 说明：与安卓陪练提示页一致（去掉图标） */}
-            <View style={styles.tipCard}>
-              <Text style={styles.tipTitle}>每个学生单独设置</Text>
-              <Text style={styles.tipBody}>
-                陪练模式里，AI 分身会按你设置的「频率」不定时把这些重点念给学生听，并结合个性主动陪聊。可从班级名册直接选学生；需要学生在陪练模式点「学生码」发给你。
-              </Text>
-            </View>
+            {step === 'pick' ? (
+              <>
+                {/* 蓝湖 345×95 说明卡 (15,98) */}
+                <View style={styles.tipCard}>
+                  <Text style={styles.tipTitle}>每个学生单独设置</Text>
+                  <Text style={styles.tipBody}>
+                    为学生设置专属的陪练频率和提醒内容，AI
+                    分身将根据设置进行个性化陪练。
+                  </Text>
+                </View>
 
-            {/* 选择学生 */}
-            <Text style={styles.sectionLabel}>选择学生</Text>
-            <TouchableOpacity
-              style={styles.rosterPickBtn}
-              activeOpacity={0.88}
-              onPress={() => {
-                // 名册 = 本地录入 ∪ 服务端入班；以前只看 rosterList，服务端有人时按钮会误报「空」
-                const pool = (rosterList && rosterList.length
-                  ? rosterList
-                  : students) || [];
-                if (!pool.length) {
-                  Alert.alert(
-                    '班级名册为空',
-                    '请先到「我的 → 学生信息录入」添加学生（姓名 + 学号），或等班级管理同步后再来。',
-                  );
-                  return;
-                }
-                setRosterPickerOpen(true);
-              }}>
-              <Text style={styles.rosterPickBtnText}>从班级名册一键选择</Text>
-            </TouchableOpacity>
-            <View style={styles.chipWrap}>
-              {students.map(s => {
-                const active = sel && sel.id === s.id;
-                return (
-                  <TouchableOpacity
-                    key={s.id}
-                    style={[styles.stuChip, active && styles.stuChipActive]}
-                    onPress={() => selectStudent(s)}
-                    activeOpacity={0.85}>
-                    <Text
-                      style={[styles.stuChipText, active && styles.stuChipTextActive]}
-                      numberOfLines={1}>
-                      {s.name}
+                {/* 蓝湖 选择上课学生 345 宽 r10 (15,208) */}
+                <View style={styles.pickCard}>
+                  <View style={styles.pickHead}>
+                    <Text style={styles.pickTitle}>选择上课学生</Text>
+                    <TouchableOpacity
+                      style={styles.rosterPill}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        // 名册 = 本地录入 ∪ 服务端入班；以前只看 rosterList，服务端有人时按钮会误报「空」
+                        const pool =
+                          (rosterList && rosterList.length
+                            ? rosterList
+                            : students) || [];
+                        if (!pool.length) {
+                          Alert.alert(
+                            '班级名册为空',
+                            '请先到「我的 → 学生信息录入」添加学生（姓名 + 学号），或等班级管理同步后再来。',
+                          );
+                          return;
+                        }
+                        setRosterPickerOpen(true);
+                      }}>
+                      <Image
+                        source={Images.capAdd}
+                        style={styles.rosterPillIcon}
+                      />
+                      <Text style={styles.rosterPillText}>从班级名册选择</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {students.length ? (
+                    <View style={styles.stuGrid}>
+                      {students.map(s => {
+                        const on = sel && sel.id === s.id;
+                        return (
+                          <TouchableOpacity
+                            key={s.id}
+                            style={[styles.stuTile, on && styles.stuTileOn]}
+                            activeOpacity={0.85}
+                            onPress={() => setSel(s)}
+                            onLongPress={() => renameStudent(s)}>
+                            <Image
+                              source={
+                                dark
+                                  ? Images.remindAvatarDark
+                                  : Images.remindAvatarLight
+                              }
+                              style={styles.stuAvatar}
+                            />
+                            <View style={styles.stuTexts}>
+                              <Text style={styles.stuName} numberOfLines={1}>
+                                {s.name}
+                              </Text>
+                              <Text style={styles.stuSub} numberOfLines={1}>
+                                {lastLessonText(s.last_lesson_at)}
+                              </Text>
+                            </View>
+                            {on ? (
+                              <View style={styles.stuTick}>
+                                <Image
+                                  source={Images.icCheckLine}
+                                  style={styles.stuTickIcon}
+                                />
+                              </View>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyHint}>
+                      还没有学生。点「从班级名册选择」，或让学生在「AI
+                      陪练模式」复制学生码后点「添加学生」录入。
                     </Text>
+                  )}
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => setManualOpen(true)}>
+                    <LinearGradient
+                      colors={
+                        dark ? ['#B595FF', '#7F47FE'] : ['#FF7A9A', '#FF355F']
+                      }
+                      start={{x: 0.5, y: 0}}
+                      end={{x: 0.5, y: 1}}
+                      style={styles.addStuBtn}>
+                      <Text style={styles.addStuText}>添加学生</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={[styles.stuChip, styles.stuChipAdd]}
-                onPress={() => setManualOpen(true)}
-                activeOpacity={0.85}>
-                <Text style={styles.stuChipAddText}>＋ 学生码</Text>
-              </TouchableOpacity>
-            </View>
-            {students.length === 0 ? (
-              <Text style={styles.emptyHint}>
-                还没有学生。点上方「从班级名册一键选择」，或到「学生信息录入」添加后再来；
-                也可让学生在「AI 陪练模式」复制学生码，用「＋ 学生码」录入。
-              </Text>
-            ) : (
-              <Text style={styles.emptyHint}>
-                点上方按钮可一键从班级名册选人；也可直接点下方姓名芯片。看到 id 尾号的可点「备注名」起名。
-              </Text>
-            )}
+                </View>
+              </>
+            ) : null}
 
-            {sel ? (
+            {step === 'edit' && sel ? (
               loadingStudent ? (
                 <View style={styles.center}>
                   <ActivityIndicator color={colors.primary} />
@@ -513,7 +602,9 @@ export default function StudentReminderScreen({navigation}) {
                     <Text style={styles.selName} numberOfLines={1}>
                       当前学生：{sel.name}
                     </Text>
-                    <TouchableOpacity onPress={() => renameStudent(sel)} activeOpacity={0.8}>
+                    <TouchableOpacity
+                      onPress={() => renameStudent(sel)}
+                      activeOpacity={0.8}>
                       <Text style={styles.renameBtn}>备注名</Text>
                     </TouchableOpacity>
                   </View>
@@ -524,7 +615,9 @@ export default function StudentReminderScreen({navigation}) {
 
                   {/* 播报频率 */}
                   <View style={styles.freqCard}>
-                    <Text style={styles.freqLabel}>播报频率（每 {freq} 秒左右一次）</Text>
+                    <Text style={styles.freqLabel}>
+                      播报频率（每 {freq} 秒左右一次）
+                    </Text>
                     <View style={styles.freqRow}>
                       <TouchableOpacity
                         style={styles.freqBtn}
@@ -545,14 +638,17 @@ export default function StudentReminderScreen({navigation}) {
                     <Text style={styles.sectionLabel}>
                       曲目重点（{pieces.length} 个曲目 · {totalLines} 条）
                     </Text>
-                    <TouchableOpacity onPress={() => openEditor(-1)} activeOpacity={0.8}>
+                    <TouchableOpacity
+                      onPress={() => openEditor(-1)}
+                      activeOpacity={0.8}>
                       <Text style={styles.addPiece}>＋ 添加曲目</Text>
                     </TouchableOpacity>
                   </View>
 
                   {pieces.length === 0 ? (
                     <Text style={styles.emptyHint}>
-                      还没有曲目。点「＋ 添加曲目」，为不同曲子分别设置要反复强调的重点。
+                      还没有曲目。点「＋
+                      添加曲目」，为不同曲子分别设置要反复强调的重点。
                     </Text>
                   ) : (
                     pieces.map((p, idx) => (
@@ -576,7 +672,8 @@ export default function StudentReminderScreen({navigation}) {
                               }>
                               <Text style={styles.pieceEdit}>乐谱</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => resetPieceLines(idx)}>
+                            <TouchableOpacity
+                              onPress={() => resetPieceLines(idx)}>
                               <Text style={styles.pieceEdit}>重置</Text>
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => deletePiece(idx)}>
@@ -591,7 +688,9 @@ export default function StudentReminderScreen({navigation}) {
                             </Text>
                           ))
                         ) : (
-                          <Text style={styles.pieceEmpty}>（暂无重点内容）</Text>
+                          <Text style={styles.pieceEmpty}>
+                            （暂无重点内容）
+                          </Text>
                         )}
                       </View>
                     ))
@@ -612,6 +711,19 @@ export default function StudentReminderScreen({navigation}) {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+      {!loading && step === 'pick' ? (
+        <LanhuCTA
+          title="开始设置"
+          fontSize={dark ? 15 : 16}
+          onPress={() => {
+            if (!sel) {
+              Alert.alert('提示', '请先选择一个学生');
+              return;
+            }
+            selectStudent(sel);
+          }}
+        />
+      ) : null}
 
       {/* 曲目编辑弹窗 */}
       <Modal
@@ -634,7 +746,12 @@ export default function StudentReminderScreen({navigation}) {
               placeholder="如：小星星 / 拜厄第 5 条"
               placeholderTextColor={colors.textSecondary}
             />
-            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
               <Text style={styles.modalFieldLabel}>重点内容（每行一条）</Text>
               <TouchableOpacity
                 onPress={() => {
@@ -642,20 +759,36 @@ export default function StudentReminderScreen({navigation}) {
                     Alert.alert('提示', '当前没有重点可清空。');
                     return;
                   }
-                  Alert.alert('重置通用重点？', '清空输入框里已写的重点内容？', [
-                    {text: '取消', style: 'cancel'},
-                    {text: '重置', style: 'destructive', onPress: () => setEditLines('')},
-                  ]);
+                  Alert.alert(
+                    '重置通用重点？',
+                    '清空输入框里已写的重点内容？',
+                    [
+                      {text: '取消', style: 'cancel'},
+                      {
+                        text: '重置',
+                        style: 'destructive',
+                        onPress: () => setEditLines(''),
+                      },
+                    ],
+                  );
                 }}
                 hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                <Text style={[styles.pieceEdit, {color: colors.danger || '#D14343'}]}>重置</Text>
+                <Text
+                  style={[
+                    styles.pieceEdit,
+                    {color: colors.danger || '#D14343'},
+                  ]}>
+                  重置
+                </Text>
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.modalMultiline}
               value={editLines}
               onChangeText={setEditLines}
-              placeholder={'手腕放松，不要塌下去\n注意第二小节的节奏\n手指立起来，指尖发力'}
+              placeholder={
+                '手腕放松，不要塌下去\n注意第二小节的节奏\n手指立起来，指尖发力'
+              }
               placeholderTextColor={colors.textSecondary}
               multiline
             />
@@ -686,7 +819,9 @@ export default function StudentReminderScreen({navigation}) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>录入学生码</Text>
-            <Text style={styles.modalFieldLabel}>学生码（学生在陪练模式里复制）</Text>
+            <Text style={styles.modalFieldLabel}>
+              学生码（学生在陪练模式里复制）
+            </Text>
             <TextInput
               style={styles.modalInput}
               value={manualCode}
@@ -719,91 +854,79 @@ export default function StudentReminderScreen({navigation}) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 从班级名册一键选择（对齐安卓 pickFromRoster） */}
-      <Modal
+      {/* 蓝湖「班级名册弹窗」：点学生即添加并进入该生的陪练重点设置 */}
+      <LanhuSheet
         visible={rosterPickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRosterPickerOpen(false)}>
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setRosterPickerOpen(false)}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => {}}
-            style={[styles.modalCard, styles.rosterModalCard]}>
-            <View style={styles.rosterModalHeader}>
-              <Text style={styles.modalTitle}>从班级名册选择</Text>
-              <TouchableOpacity
-                onPress={() => setRosterPickerOpen(false)}
-                hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
-                accessibilityLabel="关闭">
-                <Text style={styles.rosterModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalFieldLabel}>
-              点学生姓名即可添加并开始设置陪练重点；也可点「取消」或空白处返回
-            </Text>
-            <ScrollView
-              style={styles.rosterModalList}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator>
-              {(rosterList.length ? rosterList : students).map(s => (
-                <TouchableOpacity
-                  key={s.id}
-                  style={styles.rosterRow}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    setRosterPickerOpen(false);
-                    setStudents(prev =>
-                      prev.find(x => x.id === s.id) ? prev : [s, ...prev],
-                    );
-                    selectStudent(s);
-                  }}>
-                  <Text style={styles.rosterRowName} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                  <Text style={styles.rosterRowId} numberOfLines={1}>
-                    {s.id.length > 12 ? '…' + s.id.slice(-8) : s.id}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+        onClose={() => setRosterPickerOpen(false)}
+        title="从班级名册选择"
+        subtitle="点击选择学生后进入该学生的陪练重点设置">
+        <ScrollView
+          style={styles.rosterList}
+          showsVerticalScrollIndicator={false}>
+          {(rosterList.length ? rosterList : students).map(s => (
             <TouchableOpacity
-              style={[styles.rosterModalCancelBtn]}
-              onPress={() => setRosterPickerOpen(false)}>
-              <Text style={[styles.modalBtnGhostText, {textAlign: 'center'}]}>取消</Text>
+              key={s.id}
+              style={styles.rosterRow}
+              activeOpacity={0.85}
+              onPress={() => {
+                setRosterPickerOpen(false);
+                setStudents(prev =>
+                  prev.find(x => x.id === s.id) ? prev : [s, ...prev],
+                );
+                selectStudent(s);
+              }}>
+              <Image
+                source={
+                  dark ? Images.remindAvatarDark : Images.remindAvatarLight
+                }
+                style={styles.stuAvatar}
+              />
+              <View style={styles.stuTexts}>
+                <Text style={styles.stuName} numberOfLines={1}>
+                  {s.name}
+                </Text>
+                <Text style={styles.stuSub} numberOfLines={1}>
+                  {s.id}
+                </Text>
+              </View>
             </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+          ))}
+        </ScrollView>
+      </LanhuSheet>
     </EdgeSafeArea>
   );
 }
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.aiPageBg || colors.bg},
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
     flex: {flex: 1},
-    center: {paddingVertical: 40, alignItems: 'center', justifyContent: 'center'},
-    scroll: {padding: 16, paddingBottom: 40},
+    center: {
+      paddingVertical: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scroll: {padding: px(15), paddingTop: px(10), paddingBottom: px(40)},
+    // 蓝湖 说明卡 345×95 r10：标题 16/600 (15,14)，正文 12 lh20 (15,41)
     tipCard: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      padding: 16,
-      marginBottom: 16,
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      paddingHorizontal: px(15),
+      paddingTop: px(14),
+      paddingBottom: px(14),
+      marginBottom: px(15),
     },
     tipTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.textPrimary,
-      marginBottom: 6,
+      fontSize: px(16),
+      lineHeight: px(22),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
     },
     tipBody: {
-      fontSize: 13,
-      lineHeight: 20,
-      color: colors.textSecondary,
+      fontSize: px(12),
+      lineHeight: px(20),
+      marginTop: px(5),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
     },
     sectionLabel: {
       fontSize: 13,
@@ -811,41 +934,128 @@ const makeStyles = colors =>
       color: colors.textSecondary,
       marginBottom: 8,
     },
-    rosterPickBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
+    // 蓝湖 选择上课学生 345 宽 r10：标题 14/600 (15,15)；名册 120×24 r4 (210,13)；学生格 150×60 r6 间距 15；添加学生 315×44 r10
+    pickCard: {
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
+      paddingHorizontal: px(15),
+      paddingTop: px(13),
+      paddingBottom: px(19),
+    },
+    pickHead: {
+      flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      justifyContent: 'space-between',
+      height: px(24),
     },
-    rosterPickBtnText: {fontSize: 15, fontWeight: '700', color: '#fff'},
+    pickTitle: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    rosterPill: {
+      width: px(120),
+      height: px(24),
+      borderRadius: px(4),
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: px(8),
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : 'rgba(255,53,95,0.1)',
+    },
+    rosterPillIcon: {
+      width: px(16),
+      height: px(16),
+      marginRight: px(5),
+      tintColor: dark ? '#B595FF' : '#FF355F',
+    },
+    rosterPillText: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      fontWeight: '500',
+      color: dark ? '#B595FF' : '#FF355F',
+    },
+    stuGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      marginTop: px(15),
+    },
+    stuTile: {
+      width: px(150),
+      height: px(60),
+      borderRadius: px(6),
+      marginBottom: px(15),
+      paddingLeft: px(11),
+      backgroundColor: dark ? '#131443' : '#FAFAFA',
+      borderWidth: 1,
+      borderColor: 'transparent',
+      flexDirection: 'row',
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    stuTileOn: {
+      borderColor: dark ? '#B595FF' : '#FF355F',
+      backgroundColor: dark ? '#131443' : '#FFF5F7',
+    },
+    stuAvatar: {width: px(36), height: px(36), borderRadius: px(18)},
+    stuTexts: {flex: 1, marginLeft: px(5), marginRight: px(6)},
+    stuName: {
+      fontSize: px(14),
+      lineHeight: px(17),
+      fontWeight: '500',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    stuSub: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      marginTop: px(1),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
+    },
+    stuTick: {
+      position: 'absolute',
+      right: -1,
+      bottom: -1,
+      width: px(20),
+      height: px(20),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? '#B595FF' : '#FF3660',
+    },
+    stuTickIcon: {
+      width: px(16),
+      height: px(16),
+      tintColor: dark ? '#040428' : '#FFFFFF',
+    },
+    addStuBtn: {
+      height: px(44),
+      borderRadius: px(10),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addStuText: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: '#FFFFFF',
+    },
+    // 蓝湖 班级名册弹窗：行 335×60 r6，间距 15；头像 36 (11,12)
+    rosterList: {maxHeight: px(300)},
     rosterRow: {
-      paddingVertical: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border || '#E5E5EA',
+      height: px(60),
+      borderRadius: px(6),
+      marginBottom: px(15),
+      paddingLeft: px(11),
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
     },
-    rosterRowName: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
-    rosterRowId: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
-    chipWrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8},
-    stuChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 18,
-      backgroundColor: colors.card,
-      maxWidth: 150,
-    },
-    stuChipActive: {backgroundColor: colors.primary},
-    stuChipText: {fontSize: 13, color: colors.textPrimary, fontWeight: '600'},
-    stuChipTextActive: {color: '#fff'},
-    stuChipAdd: {backgroundColor: colors.cardAlt},
-    stuChipAddText: {fontSize: 13, color: colors.primaryDark, fontWeight: '700'},
     emptyHint: {
-      fontSize: 12.5,
-      color: colors.textSecondary,
-      lineHeight: 19,
-      marginTop: 6,
-      marginBottom: 6,
+      fontSize: px(12),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
+      lineHeight: px(19),
+      marginTop: px(15),
+      marginBottom: px(15),
     },
     selRow: {
       flexDirection: 'row',
@@ -853,7 +1063,13 @@ const makeStyles = colors =>
       justifyContent: 'space-between',
       marginTop: 14,
     },
-    selName: {flex: 1, fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginRight: 10},
+    selName: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginRight: 10,
+    },
     renameBtn: {fontSize: 13, fontWeight: '700', color: colors.accent},
     stuCodeHint: {
       marginTop: 6,
@@ -886,14 +1102,25 @@ const makeStyles = colors =>
       justifyContent: 'center',
     },
     freqBtnText: {fontSize: 22, color: colors.accent, fontWeight: '700'},
-    freqValue: {fontSize: 20, fontWeight: '800', color: colors.textPrimary, minWidth: 60, textAlign: 'center'},
+    freqValue: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      minWidth: 60,
+      textAlign: 'center',
+    },
     piecesHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       marginTop: 16,
     },
-    addPiece: {fontSize: 14, fontWeight: '700', color: colors.accent, marginBottom: 8},
+    addPiece: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.accent,
+      marginBottom: 8,
+    },
     pieceCard: {
       backgroundColor: colors.card,
       borderRadius: 14,
@@ -906,7 +1133,12 @@ const makeStyles = colors =>
       justifyContent: 'space-between',
       marginBottom: 6,
     },
-    pieceName: {flex: 1, fontSize: 15, fontWeight: '700', color: colors.textPrimary},
+    pieceName: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
     pieceActions: {flexDirection: 'row', gap: 14, marginLeft: 8},
     pieceEdit: {fontSize: 13, color: colors.accent, fontWeight: '700'},
     pieceDelete: {fontSize: 13, color: '#E5484D', fontWeight: '700'},
@@ -934,39 +1166,6 @@ const makeStyles = colors =>
       backgroundColor: colors.card,
       borderRadius: 16,
       padding: 18,
-    },
-    rosterModalCard: {
-      maxHeight: '72%',
-    },
-    rosterModalHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 4,
-    },
-    rosterModalClose: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: colors.textSecondary,
-      paddingHorizontal: 4,
-    },
-    rosterModalList: {
-      maxHeight: 280,
-      marginTop: 4,
-    },
-    // 单独一列里不要用 modalBtn 的 flex:1，否则高度被压成 0，取消键看不见
-    rosterModalCancelBtn: {
-      marginTop: 12,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-      alignSelf: 'stretch',
-      backgroundColor: colors.bg,
-    },
-    rosterModalCancel: {
-      marginTop: 12,
-      alignSelf: 'stretch',
     },
     modalTitle: {
       fontSize: 17,
@@ -1000,9 +1199,19 @@ const makeStyles = colors =>
       textAlignVertical: 'top',
     },
     modalBtnRow: {flexDirection: 'row', gap: 12, marginTop: 18},
-    modalBtn: {flex: 1, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center'},
+    modalBtn: {
+      flex: 1,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     modalBtnGhost: {backgroundColor: colors.bg},
-    modalBtnGhostText: {fontSize: 15, fontWeight: '700', color: colors.textSecondary},
+    modalBtnGhostText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
     modalBtnPrimary: {backgroundColor: colors.primary},
     modalBtnPrimaryText: {fontSize: 15, fontWeight: '700', color: '#fff'},
   });

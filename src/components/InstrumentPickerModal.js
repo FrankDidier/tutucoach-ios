@@ -1,62 +1,74 @@
-// 蓝湖「选择乐器弹窗」— 钢琴 / 小提琴 / 古筝 / 二胡
+// 蓝湖「选择乐器弹窗」— 底部弹层：钢琴 / 小提琴 / 古筝 / 二胡（坐标取自稿面，sheet 顶 y472）
 import React, {useMemo} from 'react';
 import {
   Modal,
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   Pressable,
+  Dimensions,
 } from 'react-native';
+import {SheetBackdrop} from './LanhuSheet';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '../theme/ThemeContext';
-import {INSTRUMENTS, instrumentName} from '../services/instrument';
+import {Images} from '../assets/images';
+import {INSTRUMENTS} from '../services/instrument';
 
-export default function InstrumentPickerModal({
-  visible,
-  currentId,
-  onClose,
-  onSelect,
-}) {
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
+
+export const instrumentIcon = (id, dark) =>
+  Images[`inst_${id}_${dark ? 'dark' : 'light'}`] ||
+  Images[`inst_piano_${dark ? 'dark' : 'light'}`];
+
+export default function InstrumentPickerModal({visible, onClose, onSelect}) {
   const {colors, mode} = useTheme();
   const dark = mode === 'dark';
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
-  const curName = instrumentName(currentId);
 
   return (
-    <Modal visible={!!visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={!!visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}>
       <Pressable style={styles.mask} onPress={onClose}>
-        <Pressable style={styles.card} onPress={e => e.stopPropagation()}>
-          <View style={styles.head}>
-            <Text style={styles.title}>乐器选择</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={12}>
-              <Text style={styles.done}>选择</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.cur}>当前乐器：{curName}</Text>
-          <Text style={styles.hint}>切换后，曲目推荐和教案会按选择乐器出曲目</Text>
-
+        <Pressable
+          style={[
+            styles.sheet,
+            {paddingBottom: Math.max(insets.bottom, px(34))},
+          ]}
+          onPress={e => e.stopPropagation()}>
+          <SheetBackdrop dark={dark} border washEnd={0.22} />
+          <Text style={styles.title}>乐器选择</Text>
           <View style={styles.grid}>
-            {INSTRUMENTS.map(it => {
-              const on = currentId === it.id;
-              return (
-                <TouchableOpacity
-                  key={it.id}
-                  style={[styles.cell, on && styles.cellOn]}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    onSelect?.(it.id);
-                    onClose?.();
-                  }}>
-                  <Text style={[styles.cellName, on && styles.cellNameOn]}>{it.name}</Text>
-                  <Text style={[styles.cellSub, on && styles.cellNameOn]}>
-                    {on ? '已选择' : '点击选择'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            {INSTRUMENTS.map(it => (
+              <TouchableOpacity
+                key={it.id}
+                style={styles.cell}
+                activeOpacity={0.85}
+                onPress={() => {
+                  onSelect?.(it.id);
+                  onClose?.();
+                }}>
+                <View style={styles.iconTile}>
+                  <Image
+                    source={instrumentIcon(it.id, dark)}
+                    style={styles.icon}
+                  />
+                </View>
+                <Text style={styles.cellName}>{it.name}</Text>
+                <Text style={styles.cellSub}>点击选择</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-
-          <TouchableOpacity style={styles.cancel} onPress={onClose}>
+          <TouchableOpacity
+            style={styles.cancel}
+            onPress={onClose}
+            activeOpacity={0.7}>
             <Text style={styles.cancelText}>取消</Text>
           </TouchableOpacity>
         </Pressable>
@@ -65,48 +77,76 @@ export default function InstrumentPickerModal({
   );
 }
 
-function makeStyles(colors, dark) {
-  return StyleSheet.create({
+const makeStyles = (colors, dark) =>
+  StyleSheet.create({
     mask: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-      justifyContent: 'center',
-      paddingHorizontal: 20,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.4)',
     },
-    card: {
+    sheet: {
       backgroundColor: dark ? '#040428' : '#FFFFFF',
-      borderRadius: 16,
-      padding: 18,
+      borderTopLeftRadius: px(20),
+      borderTopRightRadius: px(20),
+      overflow: 'hidden',
+      paddingTop: px(20),
     },
-    head: {
+    title: {
+      marginLeft: px(20),
+      fontSize: px(18),
+      lineHeight: px(20),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#212122',
+    },
+    grid: {
+      marginTop: px(20),
+      paddingHorizontal: px(20),
       flexDirection: 'row',
-      alignItems: 'center',
+      flexWrap: 'wrap',
       justifyContent: 'space-between',
-      marginBottom: 10,
+      rowGap: px(15),
     },
-    title: {fontSize: 17, fontWeight: '700', color: colors.textPrimary},
-    done: {fontSize: 15, fontWeight: '600', color: colors.primary},
-    cur: {fontSize: 14, color: colors.textPrimary, marginBottom: 4},
-    hint: {fontSize: 12, color: colors.textSecondary, marginBottom: 16, lineHeight: 18},
-    grid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between'},
     cell: {
-      width: '48%',
-      borderRadius: 12,
-      paddingVertical: 16,
-      paddingHorizontal: 12,
-      marginBottom: 12,
-      backgroundColor: dark ? 'rgba(19,20,68,1)' : '#F7F7F7',
-      borderWidth: 1,
-      borderColor: 'transparent',
+      width: px(160),
+      height: px(80),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#272153' : '#FFF5F7',
     },
-    cellOn: {
-      borderColor: colors.primary,
-      backgroundColor: dark ? 'rgba(127,71,254,0.18)' : 'rgba(255,53,95,0.08)',
+    iconTile: {
+      position: 'absolute',
+      left: px(10),
+      top: px(10),
+      width: px(60),
+      height: px(60),
     },
-    cellName: {fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 4},
-    cellNameOn: {color: colors.primary},
-    cellSub: {fontSize: 12, color: colors.textSecondary},
-    cancel: {alignItems: 'center', paddingVertical: 10, marginTop: 4},
-    cancelText: {fontSize: 15, color: '#F45454', fontWeight: '600'},
+    icon: {width: px(60), height: px(60)},
+    cellName: {
+      position: 'absolute',
+      left: px(80),
+      top: px(18),
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    cellSub: {
+      position: 'absolute',
+      left: px(80),
+      top: px(45),
+      fontSize: px(12),
+      lineHeight: px(17),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
+    },
+    cancel: {
+      marginTop: px(29),
+      height: px(24),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cancelText: {
+      fontSize: px(16),
+      lineHeight: px(24),
+      fontWeight: '600',
+      color: '#FF355F',
+    },
   });
-}

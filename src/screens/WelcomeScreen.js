@@ -302,8 +302,8 @@ const makeStyles = (colors, mode, safeTop) =>
     bgRabbitShadow: {
       position: 'absolute',
       left: px(120),
-      // 脚底随 translateY -12 下移后，阴影同步下移 13（蓝湖 477−44+13=446）
-      top: safeTop + px(446),
+      // 蓝湖 圆形29 y489（含模糊外扩 12）→ 477 − 44 = 433
+      top: safeTop + px(433),
       width: px(132),
       height: px(34),
     },
@@ -406,9 +406,9 @@ const makeStyles = (colors, mode, safeTop) =>
       height: px(343),
       zIndex: 1,
       alignSelf: 'center',
-      // 蓝湖框 342×343；APNG/待机图偏瘦高。scale 拉近稿面宽度；
-      // translateY 使脚底落在阴影（y≈489）上，并贴近文案间距。
-      transform: [{translateY: px(-12)}, {scale: 1.117}],
+      // 蓝湖兔子可见范围 y163.5–495（耳尖到脚底）。APNG 待机帧内容占 480×552 的
+      // y107–549，fitCenter 后经 scale/translateY 使耳尖与脚底落在同一范围。
+      transform: [{translateY: px(-44)}, {scale: 1.207}],
     },
     welcomeCaption: {
       // 蓝湖文案 y537 − 兔框底 506 = 31；脚底因 scale 略探出框，收 5 贴近稿面观感

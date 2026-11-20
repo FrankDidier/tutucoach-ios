@@ -5,11 +5,20 @@ const CN_DIGITS = '零一二三四五六七八九';
 export function cnNum(n) {
   if (n <= 10) return n === 10 ? '十' : CN_DIGITS[n];
   if (n < 20) return '十' + CN_DIGITS[n - 10];
-  return CN_DIGITS[Math.floor(n / 10)] + '十' + (n % 10 ? CN_DIGITS[n % 10] : '');
+  return (
+    CN_DIGITS[Math.floor(n / 10)] + '十' + (n % 10 ? CN_DIGITS[n % 10] : '')
+  );
 }
 
-// 每一段一个颜色，谱面、重点列表、陪练里都一样。相邻两段颜色差得开。
-export const SECTION_COLORS = ['#E08A1E', '#1F9E8F', '#7A5AD6', '#E0604A', '#2F80D1', '#5E9E3A'];
+// 每一段一个颜色，谱面、重点列表、陪练里都一样（蓝湖 乐谱重点 前五色）。相邻两段颜色差得开。
+export const SECTION_COLORS = [
+  '#E6A23C',
+  '#25A99A',
+  '#9A78E8',
+  '#E87968',
+  '#4D9DE0',
+  '#5E9E3A',
+];
 
 export function sectionColor(n) {
   const i = Math.max(0, (Number(n) || 1) - 1) % SECTION_COLORS.length;
@@ -24,17 +33,34 @@ export function tint(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// 第N段在谱上的位置：「第1页 · 3行」「第1页 → 第2页」，学生对着谱好找。
-export function sectionSpan(sec) {
+// 段首在这一页是第几行：这一页所有段落框按行归并（高度差不到半个框算同一行）后的序号。
+function rowOnPage(head, all) {
+  const page = head.page || 0;
+  const rows = [];
+  (all || []).forEach(sec =>
+    ((sec && sec.rects) || []).forEach(r => {
+      if ((r.page || 0) !== page) return;
+      const half = (r.h || 0.1) / 2;
+      if (!rows.some(y => Math.abs(y - (r.y || 0)) <= half))
+        rows.push(r.y || 0);
+    }),
+  );
+  const half = (head.h || 0.1) / 2;
+  return rows.filter(y => y < (head.y || 0) - half).length + 1;
+}
+
+// 第N段在谱上的位置（蓝湖）：「第1页 · 第4行」「第3页 → 第4页」，学生对着谱好找。
+// all 为全部段落，用来算段首在这一页的行号；不给就只写页。
+export function sectionSpan(sec, all) {
   const rects = (sec && sec.rects) || [];
   if (!rects.length) return '';
   const a = rects[0];
   const b = rects[rects.length - 1];
   const pa = (a.page || 0) + 1;
   const pb = (b.page || 0) + 1;
-  if (rects.length === 1) return `第${pa}页`;
-  if (pa === pb) return `第${pa}页 · ${rects.length}行`;
-  return `第${pa}页 → 第${pb}页`;
+  if (pa !== pb) return `第${pa}页 → 第${pb}页`;
+  if (!all || !all.length) return `第${pa}页`;
+  return `第${pa}页 · 第${rowOnPage(a, all)}行`;
 }
 
 function firstLine(text) {
@@ -57,7 +83,8 @@ export function readingCompare(a, b) {
 export function sectionLine(box) {
   const label = firstLine(box.label || box.text || '');
   const note = firstLine(box.note || '');
-  if (/^第\d+页·第\d+段$/.test(label) && note && note !== '本段演奏重点') return note;
+  if (/^第\d+页·第\d+段$/.test(label) && note && note !== '本段演奏重点')
+    return note;
   return label;
 }
 
@@ -74,8 +101,16 @@ export function readingSections(annotations) {
   const out = [];
   groups.forEach(rects => {
     const head = rects.find(r => !r.cont) || rects[0];
-    const note = String(head.note || (rects.find(r => r.note) || {}).note || '').trim();
-    out.push({head, line: sectionLine(head), note, end: rects[rects.length - 1], rects});
+    const note = String(
+      head.note || (rects.find(r => r.note) || {}).note || '',
+    ).trim();
+    out.push({
+      head,
+      line: sectionLine(head),
+      note,
+      end: rects[rects.length - 1],
+      rects,
+    });
   });
   out.sort((a, b) => readingCompare(a.head, b.head));
   return out.map((s, i) => ({...s, n: i + 1}));

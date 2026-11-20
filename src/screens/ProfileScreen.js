@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 
 const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
 import {useFocusEffect} from '@react-navigation/native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Images} from '../assets/images';
 import {pickFromGallery} from '../services/imagePicker';
 import {
@@ -31,15 +33,14 @@ import {getDeviceId, resetLocalIdentity} from '../services/device';
 import {registerAccount, getMembership, deleteAccount} from '../services/account';
 import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
 import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
-import {askAiConsent, getAiConsent, setAiConsent} from '../services/aiConsent';
 import {useTheme} from '../theme/ThemeContext';
 import {
   currentInstrument,
-  instrumentName,
   loadInstrument,
   setInstrument,
 } from '../services/instrument';
 import InstrumentPickerModal from '../components/InstrumentPickerModal';
+import InstrumentCard from '../components/InstrumentCard';
 import TextPromptModal from '../components/TextPromptModal';
 
 let Clipboard = null;
@@ -54,6 +55,7 @@ const ProfileScreen = ({navigation}) => {
   const {colors, mode, toggle} = useTheme();
   const dark = mode === 'dark';
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const insets = useSafeAreaInsets();
 
   const [userId, setUserId] = useState('');
   const [vip, setVip] = useState(null);
@@ -172,14 +174,9 @@ const ProfileScreen = ({navigation}) => {
     }
   };
 
-  const [wechatPrivacyChecked, setWechatPrivacyChecked] = useState(false);
   const [namePromptOpen, setNamePromptOpen] = useState(false);
 
-  const onWeChatLogin = async () => {
-    if (!wechatPrivacyChecked) {
-      Alert.alert('提示', '请先勾选同意《用户协议》和《隐私政策》');
-      return;
-    }
+  const doWeChatLogin = async () => {
     try {
       const r = await loginWithWeChat(getDeviceId());
       if (r.ok) {
@@ -195,6 +192,15 @@ const ProfileScreen = ({navigation}) => {
     } catch (e) {
       Alert.alert('微信登录', '网络异常，请重试');
     }
+  };
+
+  // 登录前须明确同意协议：点「微信登录」先弹窗确认，不在页面上额外加勾选行（保持蓝湖行布局）。
+  const onWeChatLogin = () => {
+    Alert.alert('微信登录', '登录即表示你已阅读并同意《用户协议》和《隐私政策》。', [
+      {text: '查看协议', onPress: () => navigation.navigate('Legal')},
+      {text: '取消', style: 'cancel'},
+      {text: '同意并登录', onPress: doWeChatLogin},
+    ]);
   };
 
   const onAppleLogin = async () => {
@@ -213,22 +219,6 @@ const ProfileScreen = ({navigation}) => {
     } catch (e) {
       Alert.alert('通过 Apple 登录', '网络异常，请重试');
     }
-  };
-
-  const onAiConsent = async () => {
-    const now = await getAiConsent();
-    if (now !== 'yes') {
-      askAiConsent();
-      return;
-    }
-    Alert.alert(
-      'AI 数据授权',
-      '你已同意 AI 功能把对话内容、称呼/年龄等资料和练习记录发送给 DeepSeek、百度文心、MiniMax 和 Apple 处理。撤回后将不能使用 AI 陪练等 AI 功能。',
-      [
-        {text: '保持同意', style: 'cancel'},
-        {text: '撤回同意', style: 'destructive', onPress: () => setAiConsent(false)},
-      ],
-    );
   };
 
   const onDeleteAccount = () => {
@@ -281,41 +271,36 @@ const ProfileScreen = ({navigation}) => {
   // 蓝湖展示「ID:…」；列表只展示尾号，点复制仍复制完整 ID（老师入班必须用完整 ID）。
   const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
 
-  const MenuRow = ({icon, glyph, label, onPress, last}) => (
-    <TouchableOpacity
-      style={[styles.menuItem, last && styles.menuItemLast]}
-      activeOpacity={0.7}
-      onPress={onPress}>
+  const rowArrow = dark ? Images.icRowArrowDark : Images.icRowArrowLight;
+  const MenuRow = ({icon, glyph, label, onPress}) => (
+    <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
       {icon ? (
-        <Image source={icon} style={styles.menuIcon} resizeMode="contain" />
-      ) : glyph ? (
-        <Text style={[styles.menuIcon, styles.menuGlyph]}>{glyph}</Text>
+        <Image source={icon} style={styles.menuIcon} />
       ) : (
-        <View style={styles.menuIcon} />
+        <Text style={[styles.menuIcon, styles.menuGlyph]}>{glyph}</Text>
       )}
       <Text style={styles.menuLabel}>{label}</Text>
-      <Text style={styles.menuArrow}>›</Text>
+      <Image source={rowArrow} style={styles.menuArrow} />
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      {/* 背景：蓝湖导出（暗色整屏 / 浅色顶部渐变） */}
-      <Image
-        source={dark ? Images.profileBgDark : Images.profileBgLight}
-        style={
-          dark
-            ? StyleSheet.absoluteFill
-            : {position: 'absolute', top: 0, left: 0, right: 0, height: 400}
-        }
-        resizeMode="cover"
-        pointerEvents="none"
-      />
-      <SafeAreaView style={styles.safe}>
+      <View style={styles.safe}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, {paddingTop: insets.top}]}
         showsVerticalScrollIndicator={false}>
+        {/* 背景：蓝湖导出（暗色 375×1050 / 浅色顶部 375×400），随内容滚动，坐标与稿面一致 */}
+        <Image
+          source={dark ? Images.profileBgDark : Images.profileBgLight}
+          style={[
+            dark ? styles.bgDark : styles.bgLight,
+            {height: (dark ? px(1050) : px(400)) + insets.top - px(44)},
+          ]}
+          resizeMode="stretch"
+          pointerEvents="none"
+        />
         <Text style={styles.screenTitle}>我的</Text>
 
         <View style={styles.profileBlock}>
@@ -332,105 +317,52 @@ const ProfileScreen = ({navigation}) => {
           </TouchableOpacity>
           <TouchableOpacity activeOpacity={0.7} onPress={onCopyId} style={styles.idRow}>
             <Text style={styles.userId}>{idText}</Text>
-            <Image source={Images.pfCopy} style={styles.copyIcon} resizeMode="contain" />
+            <Image source={Images.pfCopy} style={styles.copyIcon} />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.pointsCardOuter}
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('Recharge')}>
+        {/* 积分卡 (15,260) 345×80：蓝湖切图 + 总积分/眼睛/数值/立即充值 */}
+        <View style={styles.pointsCard}>
           <Image
             source={dark ? Images.pointsCardDark : Images.pointsCardLight}
             style={styles.pointsCardImg}
             resizeMode="stretch"
             pointerEvents="none"
           />
-          <View style={styles.pointsCardInner}>
-            <View style={styles.pointsLabelRow}>
-              <Text style={styles.pointsLabel}>总光币</Text>
-              <Image source={Images.pfEye} style={styles.eyeIcon} resizeMode="contain" />
-            </View>
-            <Text style={styles.pointsValue}>{points}</Text>
-          </View>
-        </TouchableOpacity>
+          <Text style={styles.pointsLabel}>总积分</Text>
+          <Image source={Images.pfEye} style={styles.eyeIcon} />
+          <Text style={styles.pointsValue}>{points}</Text>
+          <TouchableOpacity
+            style={styles.rechargeBtn}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Recharge')}>
+            <Text style={styles.rechargeText}>立即充值</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 乐器选择 (15,355) 345×110 */}
+        <InstrumentCard
+          instrument={instrument}
+          onPick={() => setInstPicker(true)}
+          style={styles.instCard}
+        />
 
         <View style={styles.menuSection}>
-          <TouchableOpacity
-            style={{paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12}}
-            activeOpacity={0.8}
-            onPress={() => setInstPicker(true)}>
-            <Text style={{color: colors.textPrimary, fontWeight: '700', marginBottom: 6}}>
-              乐器模式
-            </Text>
-            <Text style={{color: colors.textSecondary, fontSize: 12, marginBottom: 4}}>
-              当前：{instrumentName(instrument)} · 点击选择乐器
-            </Text>
-            <Text style={{color: colors.textMuted, fontSize: 11}}>
-              切换后，曲目推荐和教案会按这个乐器出曲目
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfSub}
             label="会员订阅"
             onPress={() => navigation.navigate('Subscription')}
           />
-          <View style={styles.menuDivider} />
-          <MenuRow
-            icon={Images.pfSub}
-            label="充值光币"
-            onPress={() => navigation.navigate('Recharge')}
-          />
-          <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfCheckin}
             label="打卡统计"
             onPress={() => navigation.navigate('CheckinStats')}
-            last={!appleReady && !hasWeChat}
           />
-          {appleReady ? (
-            <>
-              <View style={styles.menuDivider} />
-              <MenuRow glyph={'\uF8FF'} label="通过 Apple 登录" onPress={onAppleLogin} last={!hasWeChat} />
-            </>
-          ) : null}
           {hasWeChat ? (
-            <>
-              <View style={styles.menuDivider} />
-              <TouchableOpacity
-                style={styles.privacyCheckRow}
-                onPress={() => setWechatPrivacyChecked(v => !v)}
-                activeOpacity={0.8}>
-                <View
-                  style={[
-                    styles.privacyBox,
-                    wechatPrivacyChecked && {
-                      backgroundColor: colors.primary,
-                      borderColor: colors.primary,
-                    },
-                  ]}>
-                  {wechatPrivacyChecked ? (
-                    <Text style={styles.privacyTick}>✓</Text>
-                  ) : null}
-                </View>
-                <Text style={[styles.privacyHint, {color: colors.textSecondary}]}>
-                  已阅读并同意
-                  <Text
-                    style={{color: '#2F6BFF'}}
-                    onPress={() => navigation.navigate('Legal')}>
-                    《用户协议》
-                  </Text>
-                  和
-                  <Text
-                    style={{color: '#2F6BFF'}}
-                    onPress={() => navigation.navigate('Legal')}>
-                    《隐私政策》
-                  </Text>
-                </Text>
-              </TouchableOpacity>
-              <MenuRow icon={Images.pfWechat} label="微信登录" onPress={onWeChatLogin} last />
-            </>
+            <MenuRow icon={Images.pfWechat} label="微信登录" onPress={onWeChatLogin} />
+          ) : null}
+          {appleReady ? (
+            <MenuRow glyph={'\uF8FF'} label="通过 Apple 登录" onPress={onAppleLogin} />
           ) : null}
         </View>
 
@@ -440,33 +372,21 @@ const ProfileScreen = ({navigation}) => {
             label="教师端"
             onPress={() => navigation.navigate('TeacherProfile')}
           />
-          <View style={styles.menuDivider} />
           <MenuRow
             icon={Images.pfHelp}
             label="使用帮助"
             onPress={() => navigation.navigate('Guide', {forceShow: true})}
           />
-          <View style={styles.menuDivider} />
+          <MenuRow icon={Images.pfTheme} label="切换主题" onPress={toggle} />
+        </View>
+
+        <View style={styles.menuSection}>
           <MenuRow
-            icon={Images.pfHelp}
+            icon={Images.pfPrivacy}
             label="隐私与用户协议"
             onPress={() => navigation.navigate('Legal')}
           />
-          <View style={styles.menuDivider} />
-          <MenuRow icon={Images.pfHelp} label="AI 数据授权" onPress={onAiConsent} />
-          <View style={styles.menuDivider} />
-          <MenuRow
-            icon={Images.pfTheme}
-            label="切换主题"
-            onPress={toggle}
-          />
-          <View style={styles.menuDivider} />
-          <MenuRow
-            icon={Images.pfHelp}
-            label="删除账号"
-            onPress={onDeleteAccount}
-            last
-          />
+          <MenuRow icon={Images.pfDelete} label="删除账号" onPress={onDeleteAccount} />
         </View>
 
         {/* 工信部要求：APP 内需展示 ICP 备案号，并链接至工信部备案系统。 */}
@@ -476,7 +396,7 @@ const ProfileScreen = ({navigation}) => {
           <Text style={styles.icpBeian}>ICP备案号：桂ICP备2026011230号-2A</Text>
         </TouchableOpacity>
       </ScrollView>
-      </SafeAreaView>
+      </View>
       <InstrumentPickerModal
         visible={instPicker}
         currentId={instrument}
@@ -500,129 +420,107 @@ const ProfileScreen = ({navigation}) => {
   );
 };
 
+// 坐标均取自蓝湖 我的学生端（状态栏下 y−44），按屏宽 px() 等比。
 const makeStyles = (colors, dark) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: colors.bg},
     safe: {flex: 1},
-    scroll: {
-      paddingBottom: 40,
-      paddingHorizontal: 15,
-      paddingTop: 8,
-    },
-    // 蓝湖「我的」@(15,54) 18/600 — 与 scroll paddingHorizontal:15 对齐，勿再加 marginLeft
+    scroll: {paddingBottom: px(30), paddingHorizontal: px(15)},
+    bgDark: {position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: px(1050)},
+    bgLight: {position: 'absolute', top: 0, left: 0, width: SCREEN_W, height: px(400)},
     screenTitle: {
-      fontSize: 18,
+      marginTop: px(10),
+      fontSize: px(18),
+      lineHeight: px(25),
       fontWeight: '600',
       color: colors.textPrimary,
       alignSelf: 'flex-start',
-      marginBottom: 16,
     },
     icpBeian: {
       textAlign: 'center',
       color: colors.textMuted,
       fontSize: 12,
-      marginTop: 24,
-      marginBottom: 8,
+      marginTop: px(24),
     },
-    profileBlock: {alignItems: 'center', marginBottom: 20},
-    // 头像 80x80 圆形，暗色白圈
+    profileBlock: {alignItems: 'center', marginTop: px(25)},
     avatar: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      marginBottom: 12,
+      width: px(80),
+      height: px(80),
+      borderRadius: px(40),
       backgroundColor: colors.cardAlt,
-      borderWidth: dark ? 2 : 0,
-      borderColor: 'rgba(255,255,255,0.9)',
     },
     userName: {
-      fontSize: 18,
+      marginTop: px(9),
+      fontSize: px(18),
+      lineHeight: px(25),
       fontWeight: '600',
       color: colors.textPrimary,
-      marginBottom: 6,
     },
-    idRow: {flexDirection: 'row', alignItems: 'center'},
-    userId: {fontSize: 12, color: '#979797'},
-    copyIcon: {width: 14, height: 14, marginLeft: 4, tintColor: '#979797'},
-    // 积分卡 345x80（贴图含渐变 + 钻石），叠加文字
-    pointsCardOuter: {
-      height: 80,
-      borderRadius: 16,
-      overflow: 'hidden',
-      marginBottom: 20,
+    idRow: {flexDirection: 'row', alignItems: 'center', marginTop: px(5)},
+    userId: {fontSize: px(12), lineHeight: px(17), color: '#979797'},
+    copyIcon: {width: px(14), height: px(14), marginLeft: px(5)},
+    pointsCard: {marginTop: px(20), width: px(345), height: px(80)},
+    pointsCardImg: {position: 'absolute', top: 0, left: 0, width: px(345), height: px(80)},
+    pointsLabel: {
+      position: 'absolute',
+      left: px(19),
+      top: px(15),
+      fontSize: px(13),
+      lineHeight: px(14),
+      color: '#FFFFFF',
+    },
+    eyeIcon: {position: 'absolute', left: px(63), top: px(14), width: px(16), height: px(16)},
+    pointsValue: {
+      position: 'absolute',
+      left: px(19),
+      top: px(34),
+      fontSize: px(24),
+      lineHeight: px(34),
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    rechargeBtn: {
+      position: 'absolute',
+      left: px(250),
+      top: px(26),
+      width: px(80),
+      height: px(28),
+      borderRadius: px(14),
+      backgroundColor: '#FFFFFF',
+      alignItems: 'center',
       justifyContent: 'center',
     },
-    pointsCardImg: {position: 'absolute', top: 0, left: 0, width: SCREEN_W - 30, height: 80},
-    pointsCardInner: {paddingHorizontal: 19},
-    pointsLabelRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 2},
-    pointsLabel: {fontSize: 13, fontWeight: '400', color: '#FFFFFF'},
-    eyeIcon: {width: 16, height: 16, marginLeft: 6, tintColor: '#FFFFFF'},
-    pointsValue: {fontSize: 24, fontWeight: '600', color: '#FFFFFF'},
+    rechargeText: {fontSize: px(11), lineHeight: px(15), color: dark ? '#7F47FE' : '#FF355F'},
+    instCard: {
+      marginTop: px(15),
+    },
     menuSection: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
+      marginTop: px(15),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      borderRadius: px(10),
       overflow: 'hidden',
-      marginBottom: 16,
-      borderWidth: dark ? 1 : 0,
-      borderColor: colors.cardBorder,
-      shadowColor: '#000',
-      shadowOpacity: dark ? 0.25 : 0.05,
-      shadowRadius: 12,
-      shadowOffset: {width: 0, height: 4},
-      elevation: 2,
     },
-    // 行高 55（设计稿行距），图标 28x28，左边距 15
-    menuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      height: 55,
-      paddingHorizontal: 15,
-    },
-    menuItemLast: {},
-    menuIcon: {width: 28, height: 28, marginRight: 10},
+    menuItem: {height: px(55)},
+    menuIcon: {position: 'absolute', left: px(15), top: px(14), width: px(28), height: px(28)},
     menuGlyph: {
-      fontSize: 19,
-      lineHeight: 28,
+      fontSize: px(19),
+      lineHeight: px(28),
       textAlign: 'center',
       color: '#FFFFFF',
       backgroundColor: '#000000',
-      borderRadius: 7,
+      borderRadius: px(8),
       overflow: 'hidden',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(255,255,255,0.35)',
     },
     menuLabel: {
-      flex: 1,
-      fontSize: 14,
+      position: 'absolute',
+      left: px(53),
+      top: px(18),
+      fontSize: px(14),
+      lineHeight: px(20),
       fontWeight: '600',
-      color: colors.textPrimary,
+      color: dark ? '#FFFFFF' : '#222222',
     },
-    menuArrow: {fontSize: 20, color: colors.textMuted, marginTop: -2},
-    menuDivider: {
-      height: StyleSheet.hairlineWidth,
-      marginLeft: 53,
-      backgroundColor: colors.divider,
-    },
-    privacyCheckRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      paddingHorizontal: 15,
-      paddingTop: 10,
-      paddingBottom: 6,
-    },
-    privacyBox: {
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      borderWidth: 1.5,
-      borderColor: '#999',
-      marginTop: 1,
-      marginRight: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    privacyTick: {color: '#fff', fontSize: 12, fontWeight: '700', lineHeight: 14},
-    privacyHint: {flex: 1, fontSize: 12, lineHeight: 18},
+    menuArrow: {position: 'absolute', left: px(314), top: px(20), width: px(16), height: px(16)},
   });
 
 export default ProfileScreen;

@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Dimensions,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {Images} from '../assets/images';
@@ -26,6 +27,11 @@ import {getDeviceId} from '../services/device';
 import {speak, isSpeaking, setKeepAwake, setScreenDim} from '../services/voice';
 import {getItem, setItem, getJson, setJson} from '../services/storage';
 import {listStudents} from '../services/students';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
+
+import {lastLessonText} from '../utils/lastLesson';
 import {fetchScore} from '../services/score';
 import {readingSections} from '../utils/sections';
 import {
@@ -696,9 +702,7 @@ export default function LessonCaptureScreen({navigation}) {
       {resumable ? (
         <View style={styles.resumeCard}>
           <View style={styles.resumeTop}>
-            <View style={styles.scoreTile}>
-              <Text style={styles.scoreTileGlyph}>♪</Text>
-            </View>
+            <Image source={dark ? Images.capCourseDark : Images.capCourseLight} style={styles.scoreTile} />
             <View style={styles.stuTexts}>
               <Text style={styles.stuTitle} numberOfLines={1}>
                 {resumeNames}·尚未确认
@@ -735,13 +739,13 @@ export default function LessonCaptureScreen({navigation}) {
       <View style={styles.pickCard}>
         <Text style={styles.pieceTitle}>选择上课学生</Text>
         <View style={styles.searchBox}>
-          <Text style={styles.searchGlyph}>⌕</Text>
+          <Image source={Images.icSearch} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             value={filter}
             onChangeText={setFilter}
             placeholder="名单里没有，搜索学生码"
-            placeholderTextColor="#A1A1B4"
+            placeholderTextColor={dark ? '#A1A1B4' : '#A6A6A6'}
             autoCapitalize="none"
           />
         </View>
@@ -762,12 +766,12 @@ export default function LessonCaptureScreen({navigation}) {
                     source={dark ? Images.avatarCapDark : Images.avatarCapLight}
                     style={styles.stuTileAvatar}
                   />
-                  <View style={styles.stuTexts}>
+                  <View style={styles.stuTileTexts}>
                     <Text style={styles.stuTileName} numberOfLines={1}>
                       {nameOf(sd)}
                     </Text>
                     <Text style={styles.stuTileSub} numberOfLines={1}>
-                      {sd.pieces && sd.pieces.length ? `${sd.pieces.length} 首曲目` : '点击上课'}
+                      {lastLessonText(sd.last_lesson_at)}
                     </Text>
                   </View>
                   {on ? (
@@ -845,13 +849,6 @@ export default function LessonCaptureScreen({navigation}) {
   const scoreAdded = Array.isArray(segNums) && segNums.length > 0;
   const charsNow = current && current.chars ? current.chars : 0;
   const PlayGlyph = () => <View style={styles.playTri} />;
-  const PauseGlyph = () => (
-    <View style={styles.pauseWrap}>
-      <View style={styles.pauseBar} />
-      <View style={styles.pauseBar} />
-    </View>
-  );
-
   const renderLive = () => (
     <>
       <View style={styles.stuCard}>
@@ -914,9 +911,7 @@ export default function LessonCaptureScreen({navigation}) {
         {pieces.length ? pieceChips(curIdx, curPiece) : null}
         <View style={styles.pieceLine} />
         <TouchableOpacity style={styles.scoreRow} activeOpacity={0.8} onPress={openScoreEditor}>
-          <View style={styles.scoreTile}>
-            <Text style={styles.scoreTileGlyph}>♪</Text>
-          </View>
+          <Image source={dark ? Images.capScoreDark : Images.capScoreLight} style={styles.scoreTile} />
           <View style={styles.stuTexts}>
             <Text style={styles.scoreTitle}>编辑和调整乐谱</Text>
             <Text style={styles.scoreSub} numberOfLines={1}>
@@ -974,7 +969,7 @@ export default function LessonCaptureScreen({navigation}) {
           activeOpacity={0.8}
           onPress={() => (dimmed ? undim() : dimOn())}>
           <View style={styles.panelPill}>
-            <Text style={styles.panelPillGlyph}>☾</Text>
+            <Image source={Images.capMoon} style={styles.panelPillIcon} />
           </View>
           <Text style={styles.panelLabel}>{dimmed ? '亮屏' : '息屏省电'}</Text>
         </TouchableOpacity>
@@ -983,13 +978,19 @@ export default function LessonCaptureScreen({navigation}) {
           disabled={starting}
           onPress={listening ? pause : startListening}
           style={styles.panelMain}>
-          <LinearGradient
-            colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-            start={{x: 0.5, y: 0}}
-            end={{x: 0.5, y: 1}}
-            style={StyleSheet.absoluteFill}
-          />
-          {listening ? <PauseGlyph /> : <PlayGlyph />}
+          {listening ? (
+            <Image source={dark ? Images.capPauseDark : Images.capPauseLight} style={StyleSheet.absoluteFill} />
+          ) : (
+            <>
+              <LinearGradient
+                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
+                start={{x: 0.5, y: 0}}
+                end={{x: 0.5, y: 1}}
+                style={StyleSheet.absoluteFill}
+              />
+              <PlayGlyph />
+            </>
+          )}
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.panelSide, nextPending && styles.btnDim]}
@@ -1000,7 +1001,7 @@ export default function LessonCaptureScreen({navigation}) {
             setNewPieceOpen(false);
           }}>
           <View style={styles.panelPill}>
-            <Text style={styles.panelPillGlyph}>⏭︎</Text>
+            <Image source={Images.capNext} style={styles.panelPillIcon} />
           </View>
           <Text style={styles.panelLabel}>{nextPending ? '切换中' : '下一首'}</Text>
         </TouchableOpacity>
@@ -1052,9 +1053,7 @@ export default function LessonCaptureScreen({navigation}) {
           return (
             <View key={g.idx} style={[styles.reviewCard, off && styles.cardOff]}>
               <View style={styles.scoreRowTop}>
-                <View style={styles.scoreTile}>
-                  <Text style={styles.scoreTileGlyph}>♪</Text>
-                </View>
+                <Image source={dark ? Images.capScoreDark : Images.capScoreLight} style={styles.scoreTile} />
                 <View style={styles.stuTexts}>
                   <Text style={styles.stuTitle} numberOfLines={1}>
                     第{zh[i] || i + 1}首·{chosen || '还没选曲目'}
@@ -1086,7 +1085,8 @@ export default function LessonCaptureScreen({navigation}) {
                         setEdits(prev => ({...prev, [g.idx]: arr}));
                         setPointTarget(g.idx, arr.length - 1, 'global');
                       }}>
-                      <Text style={styles.addPillText}>＋ 添加重点</Text>
+                      <Image source={Images.capAdd} style={[styles.pillIcon, dark && {tintColor: '#B595FF'}]} />
+                      <Text style={styles.addPillText}>添加重点</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.listLine} />
@@ -1114,7 +1114,8 @@ export default function LessonCaptureScreen({navigation}) {
                                 return {...prev, [g.idx]: arr};
                               })
                             }>
-                            <Text style={styles.delPillText}>🗑 删除</Text>
+                            <Image source={Images.capDel} style={styles.pillIcon} />
+                            <Text style={styles.delPillText}>删除</Text>
                           </TouchableOpacity>
                         </View>
                         <TouchableOpacity
@@ -1283,41 +1284,45 @@ function makeStyles(colors, dark) {
     resumeBtnGhost: {borderWidth: 1, borderColor: dark ? '#B595FF' : colors.primary},
     resumeBtnText: {fontSize: 14, fontWeight: '500', color: '#fff'},
     resumeBtnGhostText: {color: dark ? '#B595FF' : colors.primary},
+    // 蓝湖 选择上课学生 345 宽 r10：标题 (15,10)；搜索 315×44 r6 (15,45)；学生格 150×60 r6，间距 15
     pickCard: {
-      borderRadius: 12,
-      backgroundColor: colors.card,
-      padding: 15,
-      marginBottom: 15,
+      borderRadius: px(10),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(1),
+      marginBottom: px(15),
     },
     searchBox: {
-      marginTop: 15,
-      height: 44,
-      borderRadius: 8,
-      backgroundColor: dark ? '#131444' : '#F7F7F7',
+      marginTop: px(15),
+      height: px(44),
+      borderRadius: px(6),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
+      paddingLeft: px(10),
     },
-    searchGlyph: {fontSize: 20, color: '#A1A1B4', marginRight: 8},
-    searchInput: {flex: 1, fontSize: 14, color: colors.textPrimary, paddingVertical: 0},
-    stuGrid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 15},
+    searchIcon: {width: px(20), height: px(20), marginRight: px(10), tintColor: dark ? '#A1A1B4' : '#A6A6A6'},
+    searchInput: {flex: 1, fontSize: px(14), color: colors.textPrimary, paddingVertical: 0},
+    stuGrid: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: px(15)},
     stuTile: {
-      width: '48.5%',
-      height: 60,
-      borderRadius: 8,
-      marginBottom: 15,
-      paddingLeft: 11,
-      backgroundColor: dark ? '#131444' : '#F7F7F7',
+      width: px(150),
+      height: px(60),
+      borderRadius: px(6),
+      marginBottom: px(15),
+      paddingLeft: px(11),
+      backgroundColor: dark ? '#131444' : '#FAFAFA',
       borderWidth: 1,
       borderColor: 'transparent',
       flexDirection: 'row',
       alignItems: 'center',
       overflow: 'hidden',
     },
-    stuTileOn: {borderColor: dark ? '#B595FF' : colors.primary},
-    stuTileAvatar: {width: 36, height: 36, borderRadius: 18},
-    stuTileName: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
-    stuTileSub: {fontSize: 12, color: '#A1A1B4', marginTop: 1},
+    stuTileOn: {borderColor: dark ? '#B595FF' : '#FF355F', backgroundColor: dark ? '#131444' : '#FFF5F7'},
+    stuTileAvatar: {width: px(36), height: px(36), borderRadius: px(18)},
+    stuTileTexts: {flex: 1, marginLeft: px(5), marginRight: px(6)},
+    stuTileName: {fontSize: px(14), lineHeight: px(17), fontWeight: '500', color: colors.textPrimary},
+    stuTileSub: {fontSize: px(12), lineHeight: px(17), color: dark ? '#A1A1B4' : '#A6A6A6', marginTop: px(1)},
     stuTick: {
       position: 'absolute',
       right: 0,
@@ -1355,33 +1360,40 @@ function makeStyles(colors, dark) {
     scoreRowTop: {flexDirection: 'row', alignItems: 'center'},
     listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12},
     listTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    // 蓝湖 添加重点 80×24 r4：图标 16 (7,4) + 12/500；删除 59×24 r4：图标 16 (6,4) + 12/400
     addPill: {
-      height: 24,
-      paddingHorizontal: 10,
-      borderRadius: 6,
-      justifyContent: 'center',
-      backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
+      height: px(24),
+      paddingLeft: px(7),
+      paddingRight: px(7),
+      borderRadius: px(4),
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(255,53,95,0.1)',
     },
-    addPillText: {fontSize: 12, color: dark ? '#B595FF' : colors.primary},
+    pillIcon: {width: px(16), height: px(16), marginRight: px(2)},
+    addPillText: {fontSize: px(12), fontWeight: '500', color: dark ? '#B595FF' : '#FF355F'},
     listLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.3)', marginTop: 12},
     pointBlock: {marginTop: 15},
     pointHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
     pointBadge: {
-      height: 24,
-      paddingHorizontal: 10,
-      borderRadius: 6,
+      width: px(60),
+      height: px(24),
+      borderRadius: px(4),
+      alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primary,
+      backgroundColor: dark ? '#7F47FE' : '#FF355F',
     },
     pointBadgeText: {fontSize: 12, fontWeight: '500', color: '#fff'},
     delPill: {
-      height: 24,
-      paddingHorizontal: 10,
-      borderRadius: 6,
-      justifyContent: 'center',
-      backgroundColor: dark ? 'rgba(255,55,97,0.16)' : '#FFE9EE',
+      height: px(24),
+      paddingLeft: px(6),
+      paddingRight: px(8),
+      borderRadius: px(4),
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: dark ? 'rgba(255,53,95,0.2)' : '#FFEAEF',
     },
-    delPillText: {fontSize: 12, color: '#FF3761'},
+    delPillText: {fontSize: px(12), color: '#FF355F', marginLeft: px(3)},
     scopeRow: {
       marginTop: 10,
       height: 44,
@@ -1454,7 +1466,7 @@ function makeStyles(colors, dark) {
       marginBottom: 15,
     },
     pieceHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 24},
-    pieceTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
+    pieceTitle: {fontSize: px(14), lineHeight: px(20), fontWeight: '600', color: colors.textPrimary},
     pieceBadge: {
       height: 24,
       paddingHorizontal: 14,
@@ -1474,15 +1486,7 @@ function makeStyles(colors, dark) {
     },
     pieceLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.4)', marginTop: 15},
     scoreRow: {flexDirection: 'row', alignItems: 'center', marginTop: 15},
-    scoreTile: {
-      width: 44,
-      height: 44,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFE9EE',
-    },
-    scoreTileGlyph: {fontSize: 22, color: dark ? '#B595FF' : colors.primary},
+    scoreTile: {width: px(44), height: px(44)},
     scoreTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
     scoreSub: {fontSize: 12, color: '#A1A1B4', marginTop: 5},
     addPiece: {
@@ -1515,7 +1519,7 @@ function makeStyles(colors, dark) {
       justifyContent: 'center',
       backgroundColor: dark ? 'rgba(181,149,255,0.2)' : '#FFE9EE',
     },
-    panelPillGlyph: {fontSize: 17, color: dark ? '#B595FF' : colors.primary},
+    panelPillIcon: {width: px(24), height: px(24), tintColor: dark ? '#B595FF' : colors.primary},
     panelLabel: {fontSize: 12, color: '#A1A1B4', marginTop: 6},
     panelMain: {
       width: 60,

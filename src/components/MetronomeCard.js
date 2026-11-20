@@ -9,17 +9,21 @@ import {
   Animated,
   Image,
   Keyboard,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {Metronome} from '../services/metronome';
 import {Images} from '../assets/images';
 import {useTheme} from '../theme/ThemeContext';
 
+const {width: SCREEN_W} = Dimensions.get('window');
+const px = n => Math.round((n * SCREEN_W) / 375);
+
 // variant: 'companion' | 'detect'
 export default function MetronomeCard({style, variant = 'companion'}) {
-  const {colors, mode} = useTheme();
+  const {mode} = useTheme();
   const detect = variant === 'detect';
   const detectAccent = mode === 'dark' ? '#B595FF' : '#FF355F';
-  const detectBtn = colors.primary;
   const engineRef = useRef(null);
   const dot = useRef(new Animated.Value(0.25)).current;
   const holdTimer = useRef(null);
@@ -94,18 +98,10 @@ export default function MetronomeCard({style, variant = 'companion'}) {
   });
 
   const detectLight = detect && mode === 'light';
-  const cardTone = detectLight
-    ? {
-        backgroundColor: '#FFFFFF',
-        borderColor: 'rgba(240,59,97,0.2)',
-      }
-      : detect
-      ? {
-          backgroundColor: '#131444',
-          borderColor: 'transparent',
-        }
-      : null;
-  const titleColor = detectLight ? '#1A1A1A' : '#fff';
+  const cardTone = detect
+    ? [styles.cardDetect, {backgroundColor: detectLight ? '#FFFFFF' : '#131444'}]
+    : null;
+  const titleColor = detectLight ? '#261216' : '#fff';
   const unitColor = detect
     ? detectAccent
     : 'rgba(255,255,255,0.7)';
@@ -128,25 +124,34 @@ export default function MetronomeCard({style, variant = 'companion'}) {
       <View style={styles.row}>
         <Image
           source={Images.metroNote}
-          style={[styles.note, {tintColor: detect ? detectAccent : '#fff'}]}
+          style={[styles.note, detect && styles.noteDetect, {tintColor: detect ? detectAccent : '#fff'}]}
           resizeMode="contain"
         />
-        <Text style={[styles.title, {color: titleColor}]}>节拍器</Text>
+        <Text style={[styles.title, detect && styles.titleDetect, {color: titleColor}]}>节拍器</Text>
         <View style={{flex: 1}} />
-        <TouchableOpacity
-          onPress={toggle}
-          activeOpacity={0.85}
-          style={[styles.startBtn, detect && {backgroundColor: detectBtn}]}>
-          <Text style={[styles.startText, detect && styles.startTextDetect]}>
-            {running ? '停止' : '开始'}
-          </Text>
-        </TouchableOpacity>
+        {detect ? (
+          <TouchableOpacity onPress={toggle} activeOpacity={0.85}>
+            <LinearGradient
+              colors={detectLight ? ['#FF7A9A', '#FF355F'] : ['#B494FF', '#7F48FE']}
+              start={{x: 0.5, y: 0}}
+              end={{x: 0.5, y: 1}}
+              style={styles.startBtnDetect}>
+              <Text style={[styles.startText, styles.startTextDetect]}>
+                {running ? '停止' : '开始'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={toggle} activeOpacity={0.85} style={styles.startBtn}>
+            <Text style={styles.startText}>{running ? '停止' : '开始'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 蓝湖：± 与 BPM 嵌在连续轨道内 */}
-      <View style={[styles.track, trackTone]}>
+      <View style={[styles.track, detect && styles.trackDetect, trackTone]}>
         <TouchableOpacity
-          style={[styles.circle, circleTone]}
+          style={[styles.circle, detect && styles.circleDetect, circleTone]}
           onPress={() => step(-1)}
           onLongPress={() => startHold(-1)}
           onPressOut={endHold}
@@ -156,6 +161,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
             source={Images.metroMinus}
             style={[
               styles.stepIcon,
+              detect && styles.stepIconDetect,
               {tintColor: detect ? detectAccent : '#fff'},
             ]}
             resizeMode="contain"
@@ -184,15 +190,15 @@ export default function MetronomeCard({style, variant = 'companion'}) {
           />
         ) : (
           <TouchableOpacity onPress={beginEdit} activeOpacity={0.6}>
-            <Text style={[styles.bpm, {color: bpmColor}]}>{bpm}</Text>
+            <Text style={[styles.bpm, detect && styles.bpmDetect, {color: bpmColor}]}>{bpm}</Text>
           </TouchableOpacity>
         )}
-        <Text style={[styles.unit, {color: unitColor}]}>BPM</Text>
+        <Text style={[styles.unit, detect && styles.unitDetect, {color: unitColor}]}>BPM</Text>
 
         <View style={{flex: 1}} />
 
         <TouchableOpacity
-          style={[styles.circle, circleTone]}
+          style={[styles.circle, detect && styles.circleDetect, circleTone]}
           onPress={() => step(1)}
           onLongPress={() => startHold(1)}
           onPressOut={endHold}
@@ -202,6 +208,7 @@ export default function MetronomeCard({style, variant = 'companion'}) {
             source={Images.metroPlus}
             style={[
               styles.stepIcon,
+              detect && styles.stepIconDetect,
               {tintColor: detect ? detectAccent : '#fff'},
             ]}
             resizeMode="contain"
@@ -265,5 +272,28 @@ const styles = StyleSheet.create({
     minWidth: 52,
   },
   bpmInput: {padding: 0},
+  // 蓝湖 手型检测 节拍器 345×100 r10：音符 20 (15,15)；标题 14/600 (40,15)；开始 70×28 r14 (260,11)；
+  // 轨道 315×40 r20 (15,49)；± 圆 32 内缩 4，图标 24；90 20/600 + BPM 12/600 间距 2
+  cardDetect: {
+    borderRadius: px(10),
+    borderWidth: 0,
+    paddingHorizontal: px(15),
+    paddingTop: px(11),
+    paddingBottom: px(11),
+  },
+  noteDetect: {width: px(20), height: px(20)},
+  titleDetect: {fontSize: px(14), lineHeight: px(20), fontWeight: '600', marginLeft: px(5)},
+  startBtnDetect: {
+    width: px(70),
+    height: px(28),
+    borderRadius: px(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackDetect: {marginTop: px(10), height: px(40), borderRadius: px(20), paddingHorizontal: px(4)},
+  circleDetect: {width: px(32), height: px(32), borderRadius: px(16)},
+  stepIconDetect: {width: px(24), height: px(24)},
+  bpmDetect: {fontSize: px(20), lineHeight: px(20), minWidth: 0},
+  unitDetect: {fontSize: px(12), lineHeight: px(20), fontWeight: '600', marginLeft: px(2)},
   unit: {fontSize: 12, marginLeft: 2},
 });

@@ -31,7 +31,11 @@ import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
 import {peekCompanionTarot} from '../services/companionTarot';
 import SectionMarks from '../components/SectionMarks';
 import {SectionNoteList, SectionNoteSheet} from '../components/SectionNotes';
-import {readingSections} from '../utils/sections';
+import {cnNum, readingSections} from '../utils/sections';
+import {Images} from '../assets/images';
+import UploadMethodSheet from '../components/UploadMethodSheet';
+
+const px = n => Math.round((n * Dimensions.get('window').width) / 375);
 
 const SCORE_IMG_OPTS = {maxWidth: 1600, quality: 0.92, base64: true};
 
@@ -67,10 +71,12 @@ function pageFrameHeight(pageW, page, natural) {
 }
 
 export default function ScoreViewerScreen({navigation, route}) {
-  const {colors} = useTheme();
-  const ui = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const ui = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const [uploadSheet, setUploadSheet] = useState(false);
   const {width: winW} = useWindowDimensions();
-  const pageW = winW - 32;
+  const pageW = winW - 60;
   const [imgRetry, setImgRetry] = useState({});
   const {studentId = '', pieceName = ''} = route?.params || {};
   const sid = studentId || getDeviceId();
@@ -84,7 +90,10 @@ export default function ScoreViewerScreen({navigation, route}) {
   const [zoomPage, setZoomPage] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
   const marks = useMemo(
-    () => readingSections(manifest?.confirmed_annotations || manifest?.annotations || []),
+    () =>
+      readingSections(
+        manifest?.confirmed_annotations || manifest?.annotations || [],
+      ),
     [manifest],
   );
   // 点「第几段」看老师给这一段写的重点；点重点列表跳到谱上那一段，并闪一下。
@@ -123,13 +132,19 @@ export default function ScoreViewerScreen({navigation, route}) {
     const top = pageTops.current[head.page || 0];
     if (pg && top != null && scrollRef.current) {
       const pageH = pageFrameHeight(pageW, pg, naturalSizes[key]);
-      scrollRef.current.scrollTo({y: Math.max(0, top + (head.y || 0) * pageH - 90), animated: true});
+      scrollRef.current.scrollTo({
+        y: Math.max(0, top + (head.y || 0) * pageH - 90),
+        animated: true,
+      });
     }
     setFocusN(sec.n);
     if (focusTimer.current) clearTimeout(focusTimer.current);
     focusTimer.current = setTimeout(() => setFocusN(0), 2200);
   };
-  useEffect(() => () => focusTimer.current && clearTimeout(focusTimer.current), []);
+  useEffect(
+    () => () => focusTimer.current && clearTimeout(focusTimer.current),
+    [],
+  );
 
   // 学生也能像老师一样：点蓝条改错词，长按谱面空白处认没标出来的术语并记进术语库。
   const recognizeAtTap = async (pageIdx, x, y, typed = '', replaceId = '') => {
@@ -143,8 +158,10 @@ export default function ScoreViewerScreen({navigation, route}) {
         setManifest(prev => {
           if (!prev) return prev;
           const next = {...prev};
-          if (Array.isArray(r.term_overlays)) next.term_overlays = r.term_overlays;
-          if (Array.isArray(r.term_translations)) next.term_translations = r.term_translations;
+          if (Array.isArray(r.term_overlays))
+            next.term_overlays = r.term_overlays;
+          if (Array.isArray(r.term_translations))
+            next.term_translations = r.term_translations;
           return next;
         });
         if (r.needs_confirm && !typed) {
@@ -172,7 +189,10 @@ export default function ScoreViewerScreen({navigation, route}) {
             ],
           );
         } else {
-          Alert.alert('已识别', `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`);
+          Alert.alert(
+            '已识别',
+            `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`,
+          );
         }
       } else if (r?.error === 'not_recognized') {
         setAskText('');
@@ -199,11 +219,16 @@ export default function ScoreViewerScreen({navigation, route}) {
         setManifest(prev => {
           if (!prev) return prev;
           const next = {...prev};
-          if (Array.isArray(r.term_overlays)) next.term_overlays = r.term_overlays;
-          if (Array.isArray(r.term_translations)) next.term_translations = r.term_translations;
+          if (Array.isArray(r.term_overlays))
+            next.term_overlays = r.term_overlays;
+          if (Array.isArray(r.term_translations))
+            next.term_translations = r.term_translations;
           return next;
         });
-        Alert.alert('已记住', `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`);
+        Alert.alert(
+          '已记住',
+          `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`,
+        );
       } else {
         Alert.alert('保存失败', '请稍后重试。');
       }
@@ -217,26 +242,30 @@ export default function ScoreViewerScreen({navigation, route}) {
   const askFixOverlay = ov => {
     const cx = (ov.x || 0) + (ov.w || 0) / 2;
     const cy = (ov.y || 0) + (ov.h || 0) / 2;
-    Alert.alert('改成正确的术语', '改过的会记进术语库，以后别的曲子也按这个来。', [
-      {
-        text: '重新识别',
-        onPress: () => recognizeAtTap(ov.page || 0, cx, cy, '', ''),
-      },
-      {
-        text: '我来改',
-        onPress: () => {
-          setAskText(ov.term || '');
-          setAskTerm({
-            page: ov.page || 0,
-            x: cx,
-            y: cy,
-            ocr: '',
-            replaceId: ov.id || '',
-          });
+    Alert.alert(
+      '改成正确的术语',
+      '改过的会记进术语库，以后别的曲子也按这个来。',
+      [
+        {
+          text: '重新识别',
+          onPress: () => recognizeAtTap(ov.page || 0, cx, cy, '', ''),
         },
-      },
-      {text: '取消', style: 'cancel'},
-    ]);
+        {
+          text: '我来改',
+          onPress: () => {
+            setAskText(ov.term || '');
+            setAskTerm({
+              page: ov.page || 0,
+              x: cx,
+              y: cy,
+              ocr: '',
+              replaceId: ov.id || '',
+            });
+          },
+        },
+        {text: '取消', style: 'cancel'},
+      ],
+    );
   };
 
   const onPageLongPress = (pageIdx, frameW, frameH, evt) => {
@@ -265,7 +294,9 @@ export default function ScoreViewerScreen({navigation, route}) {
   }, [pieceName, studentId]);
 
   useEffect(() => {
-    const unsub = navigation.addListener('focus', () => setTarot(peekCompanionTarot()));
+    const unsub = navigation.addListener('focus', () =>
+      setTarot(peekCompanionTarot()),
+    );
     return unsub;
   }, [navigation]);
 
@@ -277,30 +308,19 @@ export default function ScoreViewerScreen({navigation, route}) {
     });
   };
 
-  const onStudentUpload = () => {
-    Alert.alert('上传乐谱', '请选择来源', [
-      {
-        text: '拍照拍谱（可连拍）',
-        onPress: () => doStudentCamera(false),
-      },
-      {
-        text: '从相册多选',
-        onPress: () => doStudentUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0})),
-      },
-      {
-        text: '上传 PDF',
-        onPress: () => doStudentPdf(),
-      },
-      {text: '取消', style: 'cancel'},
-    ]);
-  };
+  const onStudentUpload = () => setUploadSheet(true);
 
   const doStudentPdf = async () => {
     const {pickPdf} = require('../services/documentPicker');
     const file = await pickPdf();
     if (!file || file.cancelled) return;
     if (file.error || !file.uri) {
-      Alert.alert('上传失败', file.error === 'no_module' ? '当前版本暂不支持选 PDF，请更新 App。' : '未能读取 PDF。');
+      Alert.alert(
+        '上传失败',
+        file.error === 'no_module'
+          ? '当前版本暂不支持选 PDF，请更新 App。'
+          : '未能读取 PDF。',
+      );
       return;
     }
     setBusy(true);
@@ -311,7 +331,10 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        Alert.alert('谱面已上传', 'PDF 已加进乐谱。需要中文术语时再点「翻译术语」。');
+        Alert.alert(
+          '谱面已上传',
+          'PDF 已加进乐谱。需要中文术语时再点「翻译术语」。',
+        );
       } else {
         Alert.alert('上传失败', '请稍后重试。');
       }
@@ -346,7 +369,9 @@ export default function ScoreViewerScreen({navigation, route}) {
       const msg = String(e?.message || e || '');
       Alert.alert(
         '翻译失败',
-        msg.includes('timeout') ? '翻译超时了，页数多时可先少传几页再试。' : '网络异常，请稍后重试。',
+        msg.includes('timeout')
+          ? '翻译超时了，页数多时可先少传几页再试。'
+          : '网络异常，请稍后重试。',
       );
     } finally {
       setBusy(false);
@@ -357,7 +382,12 @@ export default function ScoreViewerScreen({navigation, route}) {
     const file = await captureFromCamera(SCORE_IMG_OPTS);
     if (!file || file.cancelled) return;
     if (file.error || !(file.uri || file.base64 || file.dataUri)) {
-      Alert.alert('上传失败', file.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
+      Alert.alert(
+        '上传失败',
+        file.error === 'permission'
+          ? '请在设置中允许相机/相册权限。'
+          : '未能读取照片。',
+      );
       return;
     }
     setBusy(true);
@@ -368,10 +398,14 @@ export default function ScoreViewerScreen({navigation, route}) {
       });
       if (r?.ok) {
         await load();
-        Alert.alert('继续拍下一页？', '谱面已上传。术语请稍后点「翻译术语」。', [
-          {text: '完成', style: 'cancel'},
-          {text: '继续拍', onPress: () => doStudentCamera(true)},
-        ]);
+        Alert.alert(
+          '继续拍下一页？',
+          '谱面已上传。术语请稍后点「翻译术语」。',
+          [
+            {text: '完成', style: 'cancel'},
+            {text: '继续拍', onPress: () => doStudentCamera(true)},
+          ],
+        );
       } else {
         Alert.alert('上传失败', '请稍后重试。');
       }
@@ -386,14 +420,19 @@ export default function ScoreViewerScreen({navigation, route}) {
     const picked = await picker();
     if (!picked || picked.cancelled) return;
     if (picked.error) {
-      Alert.alert('上传失败', picked.error === 'permission' ? '请在设置中允许相机/相册权限。' : '未能读取照片。');
+      Alert.alert(
+        '上传失败',
+        picked.error === 'permission'
+          ? '请在设置中允许相机/相册权限。'
+          : '未能读取照片。',
+      );
       return;
     }
     const files = picked.files?.length
       ? picked.files
       : picked.uri || picked.base64 || picked.dataUri
-        ? [picked]
-        : [];
+      ? [picked]
+      : [];
     if (!files.length) {
       Alert.alert('上传失败', '未能读取照片。');
       return;
@@ -488,66 +527,124 @@ export default function ScoreViewerScreen({navigation, route}) {
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       <ScreenHeader title="乐谱重点" onBack={() => navigation.goBack()} />
       <ScrollView ref={scrollRef} contentContainerStyle={ui.scroll}>
-        <Text style={ui.title}>{pieceName || '当前曲目'}</Text>
-        <Text style={ui.hint}>
-          先上传谱面，再点「翻译术语」出中文蓝条（含力度 mp/mf 等）。点蓝条可改错词；偶有漏标可长按补。要删旧谱：每页右边「删除本页」，或点下方「删除全部乐谱」。
-        </Text>
-        <TouchableOpacity style={ui.uploadBtn} onPress={onStudentUpload} disabled={busy}>
-          <Text style={ui.uploadText}>{busy ? '处理中…' : '拍照/选图/PDF 上传乐谱'}</Text>
-        </TouchableOpacity>
-        {(manifest?.pages || []).length ? (
+        {/* 蓝湖 曲目卡 345×80 r10：图标 44 (17,18)；曲名 16/600 (71,20)；统计 12 (72,45) */}
+        <View style={ui.headCard}>
+          <Image
+            source={dark ? Images.svHeadDark : Images.svHeadLight}
+            style={ui.headIcon}
+          />
+          <View style={{flex: 1}}>
+            <Text style={ui.headTitle} numberOfLines={1}>
+              {pieceName || '当前曲目'}
+            </Text>
+            <Text style={ui.headSub}>
+              已上传 {(manifest?.pages || []).length} 页 · 已标注{' '}
+              {marks.filter(m => m.note).length} 条重点
+            </Text>
+          </View>
+        </View>
+        {/* 蓝湖 上传乐谱卡 345×95：标题 14/400 (15,10)；按钮 315×44 r8 (15,37) */}
+        <View style={ui.uploadCard}>
+          <Text style={ui.uploadTitle}>上传乐谱</Text>
           <TouchableOpacity
-            style={[ui.uploadBtn, {marginTop: 8, backgroundColor: colors.card || '#2A2438'}]}
+            style={ui.uploadBtn}
+            onPress={onStudentUpload}
+            disabled={busy}
+            activeOpacity={0.85}>
+            <Image
+              source={dark ? Images.seAddDark : Images.seAddLight}
+              style={ui.uploadIcon}
+            />
+            <Text style={ui.uploadText}>{busy ? '处理中…' : '上传乐谱'}</Text>
+          </TouchableOpacity>
+        </View>
+        {/* 蓝湖 165×44 r8 ×2，间距 15 */}
+        <View style={ui.actRow}>
+          <TouchableOpacity
+            style={ui.actPrimary}
             onPress={onTranslateTerms}
-            disabled={busy}>
-            <Text style={ui.uploadText}>{busy ? '翻译中…' : '翻译术语'}</Text>
+            disabled={busy}
+            activeOpacity={0.85}>
+            <Text style={ui.actPrimaryText}>
+              {busy ? '翻译中…' : '翻译术语'}
+            </Text>
           </TouchableOpacity>
-        ) : null}
-        {(manifest?.pages || []).length ? (
-          <TouchableOpacity style={ui.dangerBtn} onPress={deleteAll} disabled={busy}>
-            <Text style={ui.dangerText}>删除全部乐谱</Text>
+          <TouchableOpacity
+            style={ui.actDanger}
+            onPress={deleteAll}
+            disabled={busy}
+            activeOpacity={0.85}>
+            <Text style={ui.actDangerText}>删除全部乐谱</Text>
           </TouchableOpacity>
+        </View>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={{marginTop: 24}} />
         ) : null}
-        {loading ? <ActivityIndicator color={colors.primary} style={{marginTop: 24}} /> : null}
         {!loading && !manifest?.pages?.length ? (
-          <Text style={ui.empty}>这首曲目还没有乐谱。先上传谱面，再点「翻译术语」。</Text>
+          <Text style={ui.empty}>
+            这首曲目还没有乐谱。先上传谱面，再点「翻译术语」。
+          </Text>
         ) : null}
-        {marks.length ? <SectionNoteList sections={marks} onPick={locate} /> : null}
-        {marks.length && !marks.some(s => s.note) ? (
-          <Text style={ui.hint}>谱上同一种颜色是同一段。陪练会按「第一段、第二段」带你练。</Text>
+        {marks.length ? (
+          <SectionNoteList sections={marks} onPick={locate} />
         ) : null}
         {(manifest?.pages || []).map(page => {
           const key = page.name || String(page.index);
           const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
-          const pageTerms = (manifest.term_overlays || []).filter(t => (t.page || 0) === page.index);
+          const pageTerms = (manifest.term_overlays || []).filter(
+            t => (t.page || 0) === page.index,
+          );
           return (
             <View
               key={key}
               style={ui.pageCard}
               onLayout={e => {
                 // 卡片顶部 + 页头一行，就是谱面图的顶部
-                pageTops.current[page.index] = e.nativeEvent.layout.y + 30;
+                pageTops.current[page.index] = e.nativeEvent.layout.y + px(38);
               }}>
               <View style={ui.pageHead}>
-                <Text style={ui.pageTitle}>第 {page.index + 1} 页</Text>
+                <Text style={ui.pageTitle}>第{cnNum(page.index + 1)}页</Text>
                 <View style={{flexDirection: 'row', gap: 14}}>
                   <TouchableOpacity
                     onPress={() => {
                       setZoomScale(1);
                       setZoomPage(page);
                     }}>
-                    <Text style={[ui.deleteLink, {color: colors.primary}]}>全屏放大</Text>
+                    <Text
+                      style={[
+                        ui.deleteLink,
+                        {color: dark ? '#B595FF' : '#FF355F'},
+                      ]}>
+                      全屏放大
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => deletePage(page.index)}>
                     <Text style={ui.deleteLink}>删除本页</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-              <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
+              <View
+                style={{
+                  width: pageW,
+                  height: pageH,
+                  backgroundColor: '#F4EFE6',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                }}>
                 <Image
                   key={`vimg-${key}-${imgRetry[key] || 0}`}
-                  source={{uri: scoreImageUri(page, imgRetry[key] || 0), cache: 'force-cache'}}
-                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH, borderRadius: 12}}
+                  source={{
+                    uri: scoreImageUri(page, imgRetry[key] || 0),
+                    cache: 'force-cache',
+                  }}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: pageW,
+                    height: pageH,
+                    borderRadius: 12,
+                  }}
                   resizeMode="contain"
                   onError={() => retryPage(key)}
                   onLoad={e => {
@@ -556,12 +653,16 @@ export default function ScoreViewerScreen({navigation, route}) {
                     const h = Number(src.height) || 0;
                     if (w > 0 && h > 0) {
                       setNaturalSizes(prev =>
-                        prev[key]?.w === w && prev[key]?.h === h ? prev : {...prev, [key]: {w, h}},
+                        prev[key]?.w === w && prev[key]?.h === h
+                          ? prev
+                          : {...prev, [key]: {w, h}},
                       );
                     }
                   }}
                 />
-                {tarot && tarot.piece === pieceName && (tarot.page || 0) === page.index ? (
+                {tarot &&
+                tarot.piece === pieceName &&
+                (tarot.page || 0) === page.index ? (
                   <View
                     pointerEvents="none"
                     style={{
@@ -582,21 +683,43 @@ export default function ScoreViewerScreen({navigation, route}) {
                             ? tarot.image
                             : `https://tutujiaolian.com${tarot.image}`,
                         }}
-                        style={{width: 72, height: 120, borderRadius: 6, marginBottom: 4}}
+                        style={{
+                          width: 72,
+                          height: 120,
+                          borderRadius: 6,
+                          marginBottom: 4,
+                        }}
                         resizeMode="cover"
                       />
                     ) : null}
-                    <Text style={{color: '#F3D48A', fontSize: 12, fontWeight: '700'}}>
+                    <Text
+                      style={{
+                        color: '#F3D48A',
+                        fontSize: 12,
+                        fontWeight: '700',
+                      }}>
                       {tarot.name}
                     </Text>
-                    <Text style={{color: '#FFFFFF', fontSize: 12}}>{tarot.line}</Text>
+                    <Text style={{color: '#FFFFFF', fontSize: 12}}>
+                      {tarot.line}
+                    </Text>
                   </View>
                 ) : null}
                 <Pressable
-                  onPress={e => (marks.length ? tapPage(page.index, pageW, pageH, e) : null)}
-                  onLongPress={e => onPageLongPress(page.index, pageW, pageH, e)}
+                  onPress={e =>
+                    marks.length ? tapPage(page.index, pageW, pageH, e) : null
+                  }
+                  onLongPress={e =>
+                    onPageLongPress(page.index, pageW, pageH, e)
+                  }
                   delayLongPress={420}
-                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: pageW,
+                    height: pageH,
+                  }}
                 />
                 <SectionMarks
                   sections={marks}
@@ -607,9 +730,17 @@ export default function ScoreViewerScreen({navigation, route}) {
                   focusN={focusN}
                 />
                 {pageTerms.map(ov => {
-                  const label = String(ov.short || ov.translation || ov.term || '');
-                  const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
-                  const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
+                  const label = String(
+                    ov.short || ov.translation || ov.term || '',
+                  );
+                  const fontSize = Math.max(
+                    10,
+                    Math.min(14, (ov.h || 0.025) * pageH * 0.85),
+                  );
+                  const minW = Math.max(
+                    36,
+                    label.length * (fontSize * 0.95) + 10,
+                  );
                   return (
                     <Pressable
                       key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
@@ -642,7 +773,9 @@ export default function ScoreViewerScreen({navigation, route}) {
         {(manifest?.term_translations || []).length ? (
           <View style={ui.termCard}>
             <Text style={ui.termTitle}>音乐术语（已标在谱面）</Text>
-            <Text style={ui.hint}>蓝色小条覆盖在原文位置；点蓝条可改错词，偶有漏标可长按补。下方为完整列表。</Text>
+            <Text style={ui.hint}>
+              蓝色小条覆盖在原文位置；点蓝条可改错词，偶有漏标可长按补。下方为完整列表。
+            </Text>
             {(manifest.term_translations || []).map((term, idx) => (
               <Text key={`${term.term}_${idx}`} style={ui.termLine}>
                 {term.term}：{term.translation}
@@ -670,84 +803,126 @@ export default function ScoreViewerScreen({navigation, route}) {
               第 {(zoomPage?.index || 0) + 1} 页
             </Text>
             <TouchableOpacity onPress={() => setZoomPage(null)}>
-              <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>关闭</Text>
+              <Text style={{color: '#fff', fontSize: 15, fontWeight: '700'}}>
+                关闭
+              </Text>
             </TouchableOpacity>
           </View>
-          <Text style={{color: 'rgba(255,255,255,0.72)', fontSize: 12, textAlign: 'center', paddingBottom: 8}}>
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: 12,
+              textAlign: 'center',
+              paddingBottom: 8,
+            }}>
             放大后可以上下左右拖动查看
           </Text>
-          {zoomPage ? (() => {
-            const win = Dimensions.get('window');
-            const zw = Math.max(320, win.width);
-            const key = zoomPage.name || String(zoomPage.index);
-            const baseH = pageFrameHeight(zw, zoomPage, naturalSizes[key]);
-            const zh = Math.max(baseH, win.height * 0.55);
-            const scale = zoomScale;
-            const pageTerms = (manifest?.term_overlays || []).filter(
-              t => (t.page || 0) === zoomPage.index,
-            );
-            const zoomKey = key;
-            const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
-            return (
-              <ScrollView
-                style={{flex: 1, backgroundColor: '#F4EFE6'}}
-                contentContainerStyle={{width: zw * scale, height: zh * scale}}
-                bounces
-                directionalLockEnabled={false}
-                showsVerticalScrollIndicator
-                showsHorizontalScrollIndicator>
-                <View style={{width: zw * scale, height: zh * scale, backgroundColor: '#F4EFE6'}}>
-                  {imgUri ? (
-                    <Image
-                      key={`vzoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
-                      source={{uri: imgUri, cache: 'force-cache'}}
-                      style={{width: zw * scale, height: zh * scale}}
-                      resizeMode="contain"
-                      onError={() => retryPage(zoomKey)}
-                    />
-                  ) : null}
-                  <Pressable
-                    onPress={e =>
-                      marks.length ? tapPage(zoomPage.index, zw * scale, zh * scale, e) : null
-                    }
-                    onLongPress={e => onPageLongPress(zoomPage.index, zw * scale, zh * scale, e)}
-                    delayLongPress={420}
-                    style={{position: 'absolute', left: 0, top: 0, width: zw * scale, height: zh * scale}}
-                  />
-                  <SectionMarks
-                    sections={marks}
-                    page={zoomPage.index}
-                    pageW={zw * scale}
-                    pageH={zh * scale}
-                    onOpen={showSection}
-                  />
-                  {pageTerms.map(ov => {
-                    const label = String(ov.short || ov.translation || ov.term || '');
-                    return (
+          {zoomPage
+            ? (() => {
+                const win = Dimensions.get('window');
+                const zw = Math.max(320, win.width);
+                const key = zoomPage.name || String(zoomPage.index);
+                const baseH = pageFrameHeight(zw, zoomPage, naturalSizes[key]);
+                const zh = Math.max(baseH, win.height * 0.55);
+                const scale = zoomScale;
+                const pageTerms = (manifest?.term_overlays || []).filter(
+                  t => (t.page || 0) === zoomPage.index,
+                );
+                const zoomKey = key;
+                const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
+                return (
+                  <ScrollView
+                    style={{flex: 1, backgroundColor: '#F4EFE6'}}
+                    contentContainerStyle={{
+                      width: zw * scale,
+                      height: zh * scale,
+                    }}
+                    bounces
+                    directionalLockEnabled={false}
+                    showsVerticalScrollIndicator
+                    showsHorizontalScrollIndicator>
+                    <View
+                      style={{
+                        width: zw * scale,
+                        height: zh * scale,
+                        backgroundColor: '#F4EFE6',
+                      }}>
+                      {imgUri ? (
+                        <Image
+                          key={`vzoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
+                          source={{uri: imgUri, cache: 'force-cache'}}
+                          style={{width: zw * scale, height: zh * scale}}
+                          resizeMode="contain"
+                          onError={() => retryPage(zoomKey)}
+                        />
+                      ) : null}
                       <Pressable
-                        key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                        onPress={() => askFixOverlay(ov)}
-                        style={[
-                          ui.termOv,
-                          {
-                            left: (ov.x || 0) * zw * scale,
-                            top: (ov.y || 0) * zh * scale,
-                            width: Math.max(40, (ov.w || 0.1) * zw * scale),
-                            height: Math.max(20, (ov.h || 0.022) * zh * scale),
-                          },
-                        ]}>
-                        <Text style={ui.termOvText} numberOfLines={1}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            );
-          })() : null}
+                        onPress={e =>
+                          marks.length
+                            ? tapPage(zoomPage.index, zw * scale, zh * scale, e)
+                            : null
+                        }
+                        onLongPress={e =>
+                          onPageLongPress(
+                            zoomPage.index,
+                            zw * scale,
+                            zh * scale,
+                            e,
+                          )
+                        }
+                        delayLongPress={420}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          width: zw * scale,
+                          height: zh * scale,
+                        }}
+                      />
+                      <SectionMarks
+                        sections={marks}
+                        page={zoomPage.index}
+                        pageW={zw * scale}
+                        pageH={zh * scale}
+                        onOpen={showSection}
+                      />
+                      {pageTerms.map(ov => {
+                        const label = String(
+                          ov.short || ov.translation || ov.term || '',
+                        );
+                        return (
+                          <Pressable
+                            key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                            onPress={() => askFixOverlay(ov)}
+                            style={[
+                              ui.termOv,
+                              {
+                                left: (ov.x || 0) * zw * scale,
+                                top: (ov.y || 0) * zh * scale,
+                                width: Math.max(40, (ov.w || 0.1) * zw * scale),
+                                height: Math.max(
+                                  20,
+                                  (ov.h || 0.022) * zh * scale,
+                                ),
+                              },
+                            ]}>
+                            <Text style={ui.termOvText} numberOfLines={1}>
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                );
+              })()
+            : null}
           {zoomPage && openSec ? (
-            <SectionNoteSheet section={openSec} onClose={() => setOpenSec(null)} />
+            <SectionNoteSheet
+              allSections={marks}
+              section={openSec}
+              onClose={() => setOpenSec(null)}
+            />
           ) : null}
           <View
             style={{
@@ -757,14 +932,24 @@ export default function ScoreViewerScreen({navigation, route}) {
               paddingBottom: 18,
               paddingTop: 10,
             }}>
-            <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))}>
-              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>缩小</Text>
+            <TouchableOpacity
+              onPress={() =>
+                setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))
+              }>
+              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>
+                缩小
+              </Text>
             </TouchableOpacity>
             <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>
               {Math.round(zoomScale * 100)}%
             </Text>
-            <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))}>
-              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>放大</Text>
+            <TouchableOpacity
+              onPress={() =>
+                setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))
+              }>
+              <Text style={{color: '#fff', fontWeight: '700', fontSize: 16}}>
+                放大
+              </Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -803,7 +988,13 @@ export default function ScoreViewerScreen({navigation, route}) {
                   const txt = askText.trim();
                   setAskTerm(null);
                   if (pack && txt) {
-                    confirmTerm(pack.page, pack.x, pack.y, txt, pack.replaceId || '');
+                    confirmTerm(
+                      pack.page,
+                      pack.x,
+                      pack.y,
+                      txt,
+                      pack.replaceId || '',
+                    );
                   }
                 }}>
                 <Text style={ui.modalBtnText}>记进术语库</Text>
@@ -814,45 +1005,141 @@ export default function ScoreViewerScreen({navigation, route}) {
       </Modal>
       {!zoomPage && openSec ? (
         <SectionNoteSheet
+          allSections={marks}
           section={openSec}
           onClose={() => setOpenSec(null)}
           onLocate={() => locate(openSec)}
         />
       ) : null}
+      <UploadMethodSheet
+        visible={uploadSheet}
+        onClose={() => setUploadSheet(false)}
+        onCamera={() => doStudentCamera(false)}
+        onGallery={() =>
+          doStudentUpload(() =>
+            pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}),
+          )
+        }
+        onPdf={() => doStudentPdf()}
+      />
     </EdgeSafeArea>
   );
 }
 
-const makeStyles = colors =>
+const makeStyles = (colors, dark) =>
   StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
-    scroll: {padding: 16, paddingBottom: 28},
-    title: {fontSize: 17, fontWeight: '800', color: colors.textPrimary, marginBottom: 8},
-    hint: {fontSize: 12.5, lineHeight: 18, color: colors.textSecondary, marginBottom: 10},
-    uploadBtn: {
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
+    scroll: {paddingHorizontal: 15, paddingTop: px(10), paddingBottom: 28},
+    hint: {
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: colors.textSecondary,
       marginBottom: 10,
     },
-    uploadText: {color: '#fff', fontSize: 14, fontWeight: '700'},
-    dangerBtn: {
-      height: 42,
-      borderRadius: 21,
-      borderWidth: 1,
-      borderColor: '#D14343',
+    headCard: {
+      height: px(80),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: px(17),
+      paddingRight: px(15),
+    },
+    headIcon: {width: px(44), height: px(44), marginRight: px(10)},
+    headTitle: {
+      fontSize: px(16),
+      lineHeight: px(22),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    headSub: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      marginTop: px(3),
+      color: dark ? '#A1A1B4' : '#A6A6A6',
+    },
+    uploadCard: {
+      marginTop: px(15),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(14),
+    },
+    uploadTitle: {
+      fontSize: px(14),
+      lineHeight: px(17),
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    uploadBtn: {
+      marginTop: px(10),
+      height: px(44),
+      borderRadius: px(8),
+      borderWidth: 0.5,
+      borderStyle: 'dashed',
+      borderColor: dark ? '#B595FF' : '#FF355F',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : 'rgba(255,53,95,0.1)',
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 14,
     },
-    dangerText: {color: '#D14343', fontSize: 14, fontWeight: '700'},
-    empty: {fontSize: 14, color: colors.textSecondary, marginTop: 18, lineHeight: 22},
-    pageCard: {marginBottom: 16},
-    pageHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8},
-    pageTitle: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-    deleteLink: {fontSize: 13, fontWeight: '700', color: '#D14343'},
+    uploadIcon: {width: px(16), height: px(16), marginRight: px(10)},
+    uploadText: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: dark ? '#B595FF' : '#FF355F',
+    },
+    actRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: px(15),
+      marginBottom: px(15),
+    },
+    actPrimary: {
+      width: px(165),
+      height: px(44),
+      borderRadius: px(8),
+      backgroundColor: dark ? '#7F47FE' : '#FF355F',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actPrimaryText: {fontSize: px(13), lineHeight: px(17), color: '#FFFFFF'},
+    actDanger: {
+      width: px(165),
+      height: px(44),
+      borderRadius: px(8),
+      backgroundColor: 'rgba(255,53,95,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    actDangerText: {fontSize: px(13), lineHeight: px(17), color: '#FF355F'},
+    empty: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 18,
+      lineHeight: 22,
+    },
+    pageCard: {
+      marginBottom: px(15),
+      borderRadius: px(10),
+      backgroundColor: dark ? '#040428' : '#FFFFFF',
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(15),
+    },
+    pageHead: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: px(10),
+    },
+    pageTitle: {
+      fontSize: px(14),
+      lineHeight: px(17),
+      color: dark ? '#FFFFFF' : '#261216',
+    },
+    deleteLink: {fontSize: 13, fontWeight: '700', color: '#FF355F'},
     box: {
       position: 'absolute',
       borderWidth: 1.5,
@@ -891,9 +1178,24 @@ const makeStyles = colors =>
       textShadowOffset: {width: 0, height: 0.5},
       textShadowRadius: 1,
     },
-    termCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16, marginTop: 6},
-    termTitle: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 6},
-    termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},
+    termCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 6,
+    },
+    termTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    termLine: {
+      fontSize: 13.5,
+      lineHeight: 20,
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
     modalMask: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.45)',
@@ -905,7 +1207,12 @@ const makeStyles = colors =>
       borderRadius: 16,
       padding: 18,
     },
-    modalTitle: {fontSize: 16, fontWeight: '800', color: colors.textPrimary, marginBottom: 8},
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      marginBottom: 8,
+    },
     input: {
       marginTop: 10,
       borderWidth: 1,
@@ -916,7 +1223,12 @@ const makeStyles = colors =>
       color: colors.textPrimary,
       fontSize: 15,
     },
-    modalRow: {flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16},
+    modalRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 10,
+      marginTop: 16,
+    },
     modalBtn: {
       backgroundColor: colors.primary,
       borderRadius: 10,

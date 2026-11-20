@@ -2,7 +2,6 @@
 import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
 import {
-  View,
   Text,
   StyleSheet,
   SafeAreaView,
@@ -15,15 +14,7 @@ import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import {getDeviceId} from '../services/device';
 import {fetchTeacherIncome} from '../services/guangbi';
-
-function fmt(ts) {
-  if (!ts) return '';
-  const d = new Date(ts * (ts > 1e12 ? 1 : 1000));
-  const p = n => (n < 10 ? `0${n}` : `${n}`);
-  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(
-    d.getMinutes(),
-  )}:${p(d.getSeconds())}`;
-}
+import WalletRecordRow, {fmtTime} from '../components/WalletRecordRow';
 
 export default function IncomeDetailScreen({navigation}) {
   const {colors, mode} = useTheme();
@@ -67,15 +58,16 @@ export default function IncomeDetailScreen({navigation}) {
               }}
             />
           }
-          ListEmptyComponent={<Text style={styles.empty}>还没有收入明细。</Text>}
+          ListEmptyComponent={
+            <Text style={styles.empty}>还没有收入明细。</Text>
+          }
           renderItem={({item}) => (
-            <View style={styles.row}>
-              <View style={styles.mid}>
-                <Text style={styles.name}>{item.title || '课时费'}</Text>
-                <Text style={styles.time}>{fmt(item.createdAt)}</Text>
-              </View>
-              <Text style={styles.amt}>+{item.delta}</Text>
-            </View>
+            <WalletRecordRow
+              dark={dark}
+              title={item.title || '课时费'}
+              time={fmtTime(item.createdAt)}
+              amount={`+${item.delta}`}
+            />
           )}
         />
       )}
@@ -85,21 +77,8 @@ export default function IncomeDetailScreen({navigation}) {
 
 function makeStyles(colors, dark) {
   return StyleSheet.create({
-    root: {flex: 1, backgroundColor: colors.bg},
+    root: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
     list: {paddingHorizontal: 15, paddingTop: 10, paddingBottom: 40},
     empty: {textAlign: 'center', color: colors.textSecondary, marginTop: 40},
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: dark ? '#040428' : colors.card,
-      borderRadius: 12,
-      padding: 15,
-      marginBottom: 12,
-      minHeight: 70,
-    },
-    mid: {flex: 1},
-    name: {color: colors.textPrimary, fontSize: 16, fontWeight: '600', marginBottom: 4},
-    time: {color: colors.textMuted, fontSize: 12},
-    amt: {color: colors.textPrimary, fontSize: 16, fontWeight: '700'},
   });
 }

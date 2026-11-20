@@ -1,4 +1,7 @@
-import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
+import {
+  SafeAreaView as EdgeSafeArea,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   View,
@@ -20,7 +23,11 @@ import {
 import {useTheme} from '../theme/ThemeContext';
 import ScreenHeader from '../components/ScreenHeader';
 import SectionMarks from '../components/SectionMarks';
-import {SectionNoteList, SectionNoteSheet, NOTE_MAX} from '../components/SectionNotes';
+import {
+  SectionNoteList,
+  SectionNoteSheet,
+  NOTE_MAX,
+} from '../components/SectionNotes';
 import {cnNum, readingSections} from '../utils/sections';
 import {getDeviceId} from '../services/device';
 import {pickFromGallery, captureFromCamera} from '../services/imagePicker';
@@ -37,6 +44,9 @@ import {
 } from '../services/score';
 import {fetchPieceLessonTips} from '../services/companionChat';
 import UploadMethodSheet from '../components/UploadMethodSheet';
+import {Images} from '../assets/images';
+
+const px = n => Math.round((n * Dimensions.get('window').width) / 375);
 
 const SCORE_IMG_OPTS = {
   // 相册 ph:// 不带 base64 时 FormData 会挂死；压到 1600 + base64 保证立刻能传。
@@ -148,21 +158,31 @@ function normDividers(arr) {
 }
 
 export default function ScoreEditorScreen({navigation, route}) {
-  const {colors} = useTheme();
-  const ui = useMemo(() => makeStyles(colors), [colors]);
+  const {colors, mode} = useTheme();
+  const dark = mode === 'dark';
+  const ui = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+  const insets = useSafeAreaInsets();
   const {width: winW} = useWindowDimensions();
-  const pageW = winW - 32;
+  const pageW = winW - 60;
   // 只在某一页加载失败时 +1，最多两次。不要在退出重进或转屏时改图片地址。
   const [imgRetry, setImgRetry] = useState({});
 
-  const {studentId = '', studentName = '', pieceName = '', lines = []} = route?.params || {};
+  const {
+    studentId = '',
+    studentName = '',
+    pieceName = '',
+    lines = [],
+  } = route?.params || {};
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [manifest, setManifest] = useState(null);
   const [terms, setTerms] = useState([]);
   const [termOverlays, setTermOverlays] = useState([]);
   const [dividers, setDividers] = useState([]);
-  const marks = useMemo(() => readingSections(manifest?.annotations || []), [manifest]);
+  const marks = useMemo(
+    () => readingSections(manifest?.annotations || []),
+    [manifest],
+  );
   const [naturalSizes, setNaturalSizes] = useState({});
   const [pendingFiles, setPendingFiles] = useState(null);
   const [termOpen, setTermOpen] = useState(false);
@@ -181,13 +201,23 @@ export default function ScoreEditorScreen({navigation, route}) {
   const [zoomPage, setZoomPage] = useState(null);
   const [zoomScale, setZoomScale] = useState(1);
   const [uploadSheet, setUploadSheet] = useState(false);
+  // 蓝湖：缩略图选中哪一页，下面就编辑哪一页
+  const [curIdx, setCurIdx] = useState(0);
 
   const load = async () => {
     if (route?.params?.preview) {
       setManifest({
         pages: [{index: 0, name: 'preview', url: '', width: 800, height: 1400}],
         annotations: [
-          {id: 'preview_box', page: 0, x: 0.06, y: 0.22, w: 0.7, h: 0.28, label: ''},
+          {
+            id: 'preview_box',
+            page: 0,
+            x: 0.06,
+            y: 0.22,
+            w: 0.7,
+            h: 0.28,
+            label: '',
+          },
         ],
       });
       setTerms([]);
@@ -198,7 +228,12 @@ export default function ScoreEditorScreen({navigation, route}) {
     }
     setLoading(true);
     try {
-      const r = await fetchScore(studentId, pieceName, getDeviceId(), 'teacher');
+      const r = await fetchScore(
+        studentId,
+        pieceName,
+        getDeviceId(),
+        'teacher',
+      );
       const m = r?.manifest || null;
       setManifest(m);
       setTerms(Array.isArray(m?.term_translations) ? m.term_translations : []);
@@ -242,8 +277,8 @@ export default function ScoreEditorScreen({navigation, route}) {
     const files = picked.files?.length
       ? picked.files
       : picked.uri
-        ? [picked]
-        : [];
+      ? [picked]
+      : [];
     if (!files.length) {
       Alert.alert('上传失败', '未能读取文件，请重试。');
       return;
@@ -261,7 +296,11 @@ export default function ScoreEditorScreen({navigation, route}) {
     if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
     if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
     if (r.manifest) {
-      setManifest(prev => ({...(prev || {}), ...r.manifest, terms_pending: false}));
+      setManifest(prev => ({
+        ...(prev || {}),
+        ...r.manifest,
+        terms_pending: false,
+      }));
     } else if (r.term_overlays || r.term_translations) {
       setManifest(prev =>
         prev
@@ -281,7 +320,7 @@ export default function ScoreEditorScreen({navigation, route}) {
     setBusy(true);
     let uploaded = 0;
     try {
-      const hadPages = !forceReplace && !!(manifest?.pages?.length);
+      const hadPages = !forceReplace && !!manifest?.pages?.length;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const useMode = i === 0 && !hadPages ? 'replace' : 'append';
@@ -311,7 +350,9 @@ export default function ScoreEditorScreen({navigation, route}) {
       const msg = String(e?.message || e || '');
       Alert.alert(
         '上传失败',
-        msg.includes('timeout') ? '上传超时，请检查网络后重试；大谱可先清空再分批上传。' : '网络异常，请稍后重试。',
+        msg.includes('timeout')
+          ? '上传超时，请检查网络后重试；大谱可先清空再分批上传。'
+          : '网络异常，请稍后重试。',
       );
     } finally {
       setBusy(false);
@@ -348,7 +389,12 @@ export default function ScoreEditorScreen({navigation, route}) {
           setTerms([]);
           setTermOverlays([]);
           try {
-            const r = await deleteScore(getDeviceId(), studentId, pieceName, null);
+            const r = await deleteScore(
+              getDeviceId(),
+              studentId,
+              pieceName,
+              null,
+            );
             if (r?.ok) {
               Alert.alert('已清空', '可以重新拍照或从相册上传。');
             } else {
@@ -376,7 +422,9 @@ export default function ScoreEditorScreen({navigation, route}) {
         style: 'destructive',
         onPress: async () => {
           const prev = manifest;
-          const pages = (manifest?.pages || []).filter((_, i) => i !== pageIndex);
+          const pages = (manifest?.pages || []).filter(
+            (_, i) => i !== pageIndex,
+          );
           if (!pages.length) {
             setManifest(null);
             setTerms([]);
@@ -385,7 +433,12 @@ export default function ScoreEditorScreen({navigation, route}) {
             setManifest({...manifest, pages, page_count: pages.length});
           }
           try {
-            const r = await deleteScore(getDeviceId(), studentId, pieceName, pageIndex);
+            const r = await deleteScore(
+              getDeviceId(),
+              studentId,
+              pieceName,
+              pageIndex,
+            );
             if (r?.ok) {
               if (r.manifest) {
                 setManifest(r.manifest);
@@ -427,10 +480,14 @@ export default function ScoreEditorScreen({navigation, route}) {
           setManifest(r.manifest);
           setTerms(r.manifest.term_translations || []);
           setTermOverlays(r.manifest.term_overlays || []);
-          Alert.alert('继续拍下一页？', '谱面已上传。术语请稍后点「翻译术语」。', [
-            {text: '完成', style: 'cancel'},
-            {text: '继续拍', onPress: () => shoot(true)},
-          ]);
+          Alert.alert(
+            '继续拍下一页？',
+            '谱面已上传。术语请稍后点「翻译术语」。',
+            [
+              {text: '完成', style: 'cancel'},
+              {text: '继续拍', onPress: () => shoot(true)},
+            ],
+          );
         } else {
           Alert.alert('上传失败', '服务端未接受该文件。');
         }
@@ -485,7 +542,12 @@ export default function ScoreEditorScreen({navigation, route}) {
     setBusy(true);
     try {
       const r = await boxesFromDividers(
-        getDeviceId(), studentId, pieceName, dividers, lines, manifest?.annotations || [],
+        getDeviceId(),
+        studentId,
+        pieceName,
+        dividers,
+        lines,
+        manifest?.annotations || [],
       );
       if (r?.ok) {
         setManifest(prev => ({
@@ -514,14 +576,18 @@ export default function ScoreEditorScreen({navigation, route}) {
   };
 
   const removeDivider = id => {
-    Alert.alert('删除这条分段线？', '点「删除」移除；想换位置请删掉后重新点谱面。', [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: () => setDividers(prev => prev.filter(d => d.id !== id)),
-      },
-    ]);
+    Alert.alert(
+      '删除这条分段线？',
+      '点「删除」移除；想换位置请删掉后重新点谱面。',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => setDividers(prev => prev.filter(d => d.id !== id)),
+        },
+      ],
+    );
   };
 
   const addDividerAt = (pageIdx, geom) => {
@@ -597,7 +663,13 @@ export default function ScoreEditorScreen({navigation, route}) {
     setBusy(true);
     try {
       const r = await recognizeTermAt(
-        getDeviceId(), studentId, pieceName, pageIdx, x, y, {term: typed},
+        getDeviceId(),
+        studentId,
+        pieceName,
+        pageIdx,
+        x,
+        y,
+        {term: typed},
       );
       if (r?.ok) {
         if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
@@ -607,18 +679,30 @@ export default function ScoreEditorScreen({navigation, route}) {
             '认出来了，对吗？',
             `${r.term}：${r.translation}\n不对的话点「我来改」，改过的会记进术语库。`,
             [
-              {text: '就是它', onPress: () => confirmTerm(pageIdx, x, y, r.term)},
+              {
+                text: '就是它',
+                onPress: () => confirmTerm(pageIdx, x, y, r.term),
+              },
               {
                 text: '我来改',
                 onPress: () => {
                   setAskText(r.term || '');
-                  setAskTerm({page: pageIdx, x, y, ocr: r.ocr || '', replaceId: r.overlay?.id || ''});
+                  setAskTerm({
+                    page: pageIdx,
+                    x,
+                    y,
+                    ocr: r.ocr || '',
+                    replaceId: r.overlay?.id || '',
+                  });
                 },
               },
             ],
           );
         } else {
-          Alert.alert('已识别', `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`);
+          Alert.alert(
+            '已识别',
+            `${r.term}：${r.translation}\n已记进术语库，以后别的曲子也认得。`,
+          );
         }
       } else if (r?.error === 'not_recognized') {
         setAskText('');
@@ -639,12 +723,21 @@ export default function ScoreEditorScreen({navigation, route}) {
     setBusy(true);
     try {
       const r = await recognizeTermAt(
-        getDeviceId(), studentId, pieceName, pageIdx, x, y, {term, replaceId},
+        getDeviceId(),
+        studentId,
+        pieceName,
+        pageIdx,
+        x,
+        y,
+        {term, replaceId},
       );
       if (r?.ok) {
         if (Array.isArray(r.term_overlays)) setTermOverlays(r.term_overlays);
         if (Array.isArray(r.term_translations)) setTerms(r.term_translations);
-        Alert.alert('已记住', `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`);
+        Alert.alert(
+          '已记住',
+          `${r.term}：${r.translation}\n以后别的曲子出现这个词会自动认出来。`,
+        );
       } else {
         Alert.alert('保存失败', '请稍后重试。');
       }
@@ -698,7 +791,11 @@ export default function ScoreEditorScreen({navigation, route}) {
       setLessonTips([]);
       setEditSec(s);
       try {
-        const tips = await fetchPieceLessonTips(getDeviceId(), studentId, pieceName);
+        const tips = await fetchPieceLessonTips(
+          getDeviceId(),
+          studentId,
+          pieceName,
+        );
         setLessonTips(tips || []);
       } catch (e) {
         setLessonTips([]);
@@ -720,7 +817,10 @@ export default function ScoreEditorScreen({navigation, route}) {
     const ids = new Set((sec.rects || []).map(r => r.id));
     const nextAnn = (manifest?.annotations || []).map(b => {
       if (!ids.has(b.id)) return b;
-      return {...b, note: b.id === headId ? String(text || '').slice(0, NOTE_MAX) : ''};
+      return {
+        ...b,
+        note: b.id === headId ? String(text || '').slice(0, NOTE_MAX) : '',
+      };
     });
     setManifest(prev => ({...(prev || {}), annotations: nextAnn}));
     // 写完就存，学生端马上能看到；不用再记着点「保存确认」。
@@ -731,20 +831,26 @@ export default function ScoreEditorScreen({navigation, route}) {
     const sec = editSec;
     if (!sec) return;
     const ids = new Set((sec.rects || [sec.head]).map(r => r.id));
-    Alert.alert(`删除第${cnNum(sec.n)}段？`, '这一段的颜色和写的重点都会去掉。要重新分段，删掉段尾线再点「生成重点框」。', [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: () => {
-          setEditSec(null);
-          setManifest(prev => ({
-            ...(prev || {}),
-            annotations: (prev?.annotations || []).filter(b => !ids.has(b.id)),
-          }));
+    Alert.alert(
+      `删除第${cnNum(sec.n)}段？`,
+      '这一段的颜色和写的重点都会去掉。要重新分段，删掉段尾线再点「生成重点框」。',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            setEditSec(null);
+            setManifest(prev => ({
+              ...(prev || {}),
+              annotations: (prev?.annotations || []).filter(
+                b => !ids.has(b.id),
+              ),
+            }));
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   /** 一键清空所有分段重点文字（保留分段框/颜色）。 */
@@ -763,7 +869,10 @@ export default function ScoreEditorScreen({navigation, route}) {
           text: '重置',
           style: 'destructive',
           onPress: () => {
-            const nextAnn = (manifest?.annotations || []).map(b => ({...b, note: ''}));
+            const nextAnn = (manifest?.annotations || []).map(b => ({
+              ...b,
+              note: '',
+            }));
             setManifest(prev => ({...(prev || {}), annotations: nextAnn}));
             saveAll(false, {quiet: true, annotations: nextAnn});
           },
@@ -800,17 +909,30 @@ export default function ScoreEditorScreen({navigation, route}) {
     if (route?.params?.preview) return;
     if (!quiet) setBusy(true);
     try {
-      const annotations = (opts.annotations || manifest.annotations || []).map(b => ({
-        ...b,
-        label: String(b.label || '').trim().slice(0, 18),
-        note: String(b.note || '').trim().slice(0, NOTE_MAX),
-        status: 'confirmed',
-      }));
-      const r = await saveScore(getDeviceId(), studentId, pieceName, annotations, terms, {
-        approvePending,
-        termOverlays,
-        dividers,
-      });
+      const annotations = (opts.annotations || manifest.annotations || []).map(
+        b => ({
+          ...b,
+          label: String(b.label || '')
+            .trim()
+            .slice(0, 18),
+          note: String(b.note || '')
+            .trim()
+            .slice(0, NOTE_MAX),
+          status: 'confirmed',
+        }),
+      );
+      const r = await saveScore(
+        getDeviceId(),
+        studentId,
+        pieceName,
+        annotations,
+        terms,
+        {
+          approvePending,
+          termOverlays,
+          dividers,
+        },
+      );
       if (r?.ok) {
         setManifest(r.manifest || {...manifest, annotations});
         if (Array.isArray(r.manifest?.dividers)) {
@@ -824,7 +946,10 @@ export default function ScoreEditorScreen({navigation, route}) {
             : '学生端进入该曲目后即可查看乐谱和重点框。',
         );
       } else {
-        Alert.alert('保存失败', quiet ? '重点没存上，请点「保存确认」再试一次。' : '请稍后重试。');
+        Alert.alert(
+          '保存失败',
+          quiet ? '重点没存上，请点「保存确认」再试一次。' : '请稍后重试。',
+        );
       }
     } catch (e) {
       Alert.alert('保存失败', '网络异常，请稍后重试。');
@@ -857,88 +982,337 @@ export default function ScoreEditorScreen({navigation, route}) {
     setTermOpen(false);
   };
 
-  const hasPending = !!(manifest?.has_pending_review || (manifest?.pages || []).some(p => p.pending_review));
+  const pages = manifest?.pages || [];
+  const curPage = pages.find(p => p.index === curIdx) || pages[0] || null;
+  const hasPending = !!(
+    manifest?.has_pending_review ||
+    (manifest?.pages || []).some(p => p.pending_review)
+  );
 
   return (
-    <EdgeSafeArea edges={['bottom', 'left', 'right']} style={ui.container}>
+    <EdgeSafeArea edges={['left', 'right']} style={ui.container}>
       <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
-      <ScreenHeader title="乐谱上传及重点框" onBack={() => navigation.goBack()} />
+      <ScreenHeader
+        title="乐谱上传及重点框"
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView contentContainerStyle={ui.scroll}>
-        <View style={ui.card}>
-          <Text style={ui.title}>{pieceName || '未命名曲目'}</Text>
-          <Text style={ui.sub}>学生：{studentName || studentId.slice(-6)}</Text>
-          <Text style={ui.help}>
-            三步：①「加分段线」：在每一段的结尾点一下，立一条竖线（点线可删）。②点「按分段线生成重点框」，每段一个颜色。③「写重点」：点谱上某一段，写给学生看的重点，写完自动保存。
-          </Text>
-          <Text style={[ui.help, {fontWeight: '700', color: colors.textPrimary}]}>点谱面时：</Text>
-          <View style={ui.modeRow}>
-            {[
-              ['note', '写重点'],
-              ['divider', '加分段线'],
-              ['term', '认术语'],
-            ].map(([m, label]) => (
-              <TouchableOpacity
-                key={m}
-                style={[ui.modeBtn, tapMode === m && ui.modeBtnOn]}
-                onPress={() => {
-                  modeChosen.current = true;
-                  setTapMode(m);
-                }}>
-                <Text style={[ui.modeText, tapMode === m && ui.modeTextOn]}>{label}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* 蓝湖 曲目卡 345×70：图标 44 (15,13)；曲名 16/600 (69,15)；学生 12 (69,40) */}
+        <View style={ui.headCard}>
+          <Image
+            source={dark ? Images.seHeadDark : Images.seHeadLight}
+            style={ui.headIcon}
+          />
+          <View style={{flex: 1}}>
+            <Text style={ui.headTitle} numberOfLines={1}>
+              {pieceName || '未命名曲目'}
+            </Text>
+            <Text style={ui.headSub} numberOfLines={1}>
+              学生：{studentName || studentId.slice(-6)}
+            </Text>
           </View>
-          <Text style={ui.help}>
-            {tapMode === 'term'
-              ? '哪个术语没认出来，就用手指点在那串字上。认出来会直接标在谱上，并记进术语库——以后别的曲子出现同一个词，不用再点。'
-              : tapMode === 'note'
-                ? '点谱上有颜色的一段，就能写这一段的重点。学生点「第几段」就能看到，陪练也会照着念。'
-                : '在一段的结尾点一下就是一条段尾线。点线可以删掉。分好以后点「按分段线生成重点框」。'}
-          </Text>
-          <Text style={ui.help}>
-            要删旧谱：每页标题右边有「删除本页」，整套删掉点下面红色的「删除全部乐谱」。
-          </Text>
-          {hasPending ? (
-            <Text style={ui.pending}>学生有待审乐谱页，确认后点「通过并发布」。</Text>
+        </View>
+
+        {/* 蓝湖 上传乐谱卡：标题 14/400 (15,10)；页缩略 100×125 r10 间距 10 (15,37)；添加乐谱 315×44 r8 */}
+        <View style={ui.uploadCard}>
+          <Text style={ui.cardTitle}>上传乐谱</Text>
+          {pages.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={ui.thumbRow}>
+              {pages.map(page => {
+                const key = page.name || String(page.index);
+                const on = page.index === curPage?.index;
+                const tag = page.pending_review
+                  ? '·待审'
+                  : page.uploaded_by === 'student'
+                  ? '·学生补传'
+                  : '';
+                return (
+                  <TouchableOpacity
+                    key={`thumb-${key}`}
+                    activeOpacity={0.85}
+                    onPress={() => setCurIdx(page.index)}
+                    style={[ui.thumb, on && ui.thumbOn]}>
+                    <View style={ui.thumbImgBox}>
+                      {page.url ? (
+                        <Image
+                          source={{
+                            uri: scoreImageUri(page, imgRetry[key] || 0),
+                            cache: 'force-cache',
+                          }}
+                          style={ui.thumbImg}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                    </View>
+                    <Text style={ui.thumbLabel} numberOfLines={1}>
+                      第{page.index + 1}页{tag}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           ) : null}
-          <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => setUploadSheet(true)}>
-              <Text style={ui.btnText}>添加乐谱</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onRecognizeTerms}>
-              <Text style={ui.btnGhostText}>翻译术语</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={ui.row}>
-            <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={onSuggest}>
-              <Text style={ui.btnGhostText}>再翻译一次</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={ui.btn} onPress={onBoxesFromDividers}>
-              <Text style={ui.btnText}>按分段线生成重点框</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={ui.row}>
-            <TouchableOpacity
-              style={[ui.btn, ui.btnGhost]}
-              onPress={() => setDividers([])}>
-              <Text style={ui.btnGhostText}>清空分段线</Text>
-            </TouchableOpacity>
-            <View style={{flex: 1}} />
-          </View>
-          <View style={ui.row}>
-            <TouchableOpacity style={ui.btn} onPress={() => saveAll(false)}>
-              <Text style={ui.btnText}>保存确认</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[ui.btn, ui.btnDanger]} onPress={clearAllScores}>
-              <Text style={ui.btnText}>删除全部乐谱</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={ui.addBtn}
+            activeOpacity={0.85}
+            onPress={() => setUploadSheet(true)}>
+            <Image
+              source={dark ? Images.seAddDark : Images.seAddLight}
+              style={ui.addIcon}
+            />
+            <Text style={ui.addText}>添加乐谱</Text>
+          </TouchableOpacity>
           {hasPending ? (
-            <TouchableOpacity style={[ui.btn, {marginTop: 12}]} onPress={() => saveAll(true)}>
-              <Text style={ui.btnText}>通过并发布学生上传</Text>
-            </TouchableOpacity>
+            <>
+              <Text style={ui.pending}>
+                学生有待审乐谱页，确认后点「通过并发布」。
+              </Text>
+              <TouchableOpacity
+                style={ui.approveBtn}
+                onPress={() => saveAll(true)}>
+                <Text style={ui.approveText}>通过并发布学生上传</Text>
+              </TouchableOpacity>
+            </>
           ) : null}
         </View>
+
+        {/* 蓝湖 智能操作（全局）：165×44 r8 ×2，图标 18 */}
+        <Text style={ui.groupTitle}>智能操作（全局）</Text>
+        <View style={ui.smartRow}>
+          <TouchableOpacity
+            style={ui.smartBtn}
+            activeOpacity={0.85}
+            onPress={onRecognizeTerms}>
+            <Image
+              source={dark ? Images.seTermsDark : Images.seTermsLight}
+              style={ui.smartIcon}
+            />
+            <Text style={ui.smartText}>一键识别术语</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={ui.smartBtn}
+            activeOpacity={0.85}
+            onPress={onBoxesFromDividers}>
+            <Image
+              source={dark ? Images.seSplitDark : Images.seSplitLight}
+              style={ui.smartIcon}
+            />
+            <Text style={ui.smartText}>按分段线生成重点框</Text>
+          </TouchableOpacity>
+        </View>
+
+        {loading || busy ? (
+          <View style={{marginTop: 24, alignItems: 'center'}}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={[ui.sub, {marginTop: 8}]}>
+              {busy ? '处理中，请稍候…' : '加载中…'}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 蓝湖 当前页卡：第N页 14/400；点谱面模式 95×36 r8 间距 15；提示 11 lh20；谱面 315 宽 r10；页工具 h28 r4 */}
+        {curPage
+          ? [curPage].map(page => {
+              const key = page.name || String(page.index);
+              const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
+              const pageDivs = (dividers || []).filter(
+                d => (d.page || 0) === page.index,
+              );
+              const pageTerms = (termOverlays || []).filter(
+                t => (t.page || 0) === page.index,
+              );
+              return (
+                <View key={key} style={ui.pageCard}>
+                  <Text style={ui.pageTitle}>第{cnNum(page.index + 1)}页</Text>
+                  <View style={ui.modeRow}>
+                    {[
+                      ['note', '写重点'],
+                      ['divider', '加分段线'],
+                      ['term', '认术语'],
+                    ].map(([m, label]) => (
+                      <TouchableOpacity
+                        key={m}
+                        style={[ui.modeBtn, tapMode === m && ui.modeBtnOn]}
+                        onPress={() => {
+                          modeChosen.current = true;
+                          setTapMode(m);
+                        }}>
+                        <Text
+                          style={[ui.modeText, tapMode === m && ui.modeTextOn]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={ui.modeHint}>
+                    {tapMode === 'term'
+                      ? '哪个术语没认出来，就用手指点在那串字上。认出来会直接标在谱上，并记进术语库。'
+                      : tapMode === 'note'
+                      ? '点谱上有颜色的一段，就能写这一段的重点。学生点「第几段」就能看到，陪练也会照着念。'
+                      : '在一段的结尾点一下就是一条段尾线。点线可以删掉。分好以后点「按分段线生成重点框」。'}
+                  </Text>
+                  <View
+                    style={{
+                      width: pageW,
+                      height: pageH,
+                      backgroundColor: '#F4EFE6',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                    }}>
+                    {page.url ? (
+                      <Image
+                        key={`img-${key}-${imgRetry[key] || 0}`}
+                        source={{
+                          uri: scoreImageUri(page, imgRetry[key] || 0),
+                          cache: 'force-cache',
+                        }}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          width: pageW,
+                          height: pageH,
+                        }}
+                        resizeMode="contain"
+                        onError={() => retryPage(key)}
+                        onLoad={e => {
+                          const src = e?.nativeEvent?.source || {};
+                          const w = Number(src.width) || 0;
+                          const h = Number(src.height) || 0;
+                          if (w > 0 && h > 0) {
+                            setNaturalSizes(prev =>
+                              prev[key]?.w === w && prev[key]?.h === h
+                                ? prev
+                                : {...prev, [key]: {w, h}},
+                            );
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <TapOnly
+                      onPress={e => onPageTap(page.index, pageH, e)}
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: pageW,
+                        height: pageH,
+                      }}
+                    />
+                    <SectionMarks
+                      sections={marks}
+                      page={page.index}
+                      pageW={pageW}
+                      pageH={pageH}
+                      onOpen={openSection}
+                    />
+                    {pageDivs.map(d => (
+                      <SimpleDivider
+                        key={d.id}
+                        divider={d}
+                        pageW={pageW}
+                        pageH={pageH}
+                        onDelete={removeDivider}
+                      />
+                    ))}
+                    {pageTerms.map(ov => {
+                      const label = String(
+                        ov.short || ov.translation || ov.term || '',
+                      );
+                      const fontSize = Math.max(
+                        10,
+                        Math.min(14, (ov.h || 0.025) * pageH * 0.85),
+                      );
+                      const minW = Math.max(
+                        36,
+                        label.length * (fontSize * 0.95) + 10,
+                      );
+                      return (
+                        <TapOnly
+                          key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                          onPress={() => {
+                            // 标错了就点它改；改过的会记进术语库
+                            setAskText(ov.term || '');
+                            setAskTerm({
+                              page: page.index,
+                              x: (ov.x || 0) + (ov.w || 0.08) / 2,
+                              y: (ov.y || 0) + (ov.h || 0.02) / 2,
+                              ocr: ov.term || '',
+                              replaceId: ov.id || '',
+                            });
+                          }}
+                          style={[
+                            styles.termOv,
+                            {
+                              left: (ov.x || 0) * pageW,
+                              top: (ov.y || 0) * pageH,
+                              width: Math.max(minW, (ov.w || 0.1) * pageW),
+                              height: Math.max(18, (ov.h || 0.022) * pageH),
+                              zIndex: 12,
+                            },
+                          ]}>
+                          <Text
+                            style={[styles.termOvText, {fontSize}]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.75}
+                            allowFontScaling={false}>
+                            {label}
+                          </Text>
+                        </TapOnly>
+                      );
+                    })}
+                  </View>
+                  <View style={ui.toolRow}>
+                    <TouchableOpacity
+                      style={[ui.toolBtn, {width: px(60)}]}
+                      onPress={() => {
+                        setZoomScale(1);
+                        setZoomPage(page);
+                      }}>
+                      <Image
+                        source={dark ? Images.seFullDark : Images.seFullLight}
+                        style={ui.toolIcon}
+                      />
+                      <Text style={ui.toolText}>全屏</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[ui.toolBtn, ui.toolDanger]}
+                      onPress={() => deletePage(page.index)}>
+                      <Image
+                        source={dark ? Images.seDelDark : Images.seDelLight}
+                        style={ui.toolIcon}
+                      />
+                      <Text style={[ui.toolText, {color: '#FF355F'}]}>
+                        删除本页
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={ui.toolBtn}
+                      onPress={() => addDivider(page.index)}>
+                      <Image
+                        source={dark ? Images.seAdd2Dark : Images.seAdd2Light}
+                        style={ui.toolIcon}
+                      />
+                      <Text style={ui.toolText}>加分段线</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={ui.toolBtn}
+                      onPress={() => addBox(page.index)}>
+                      <Image
+                        source={Images.seBox}
+                        style={[ui.toolIcon, ui.tintAccent]}
+                      />
+                      <Text style={ui.toolText}>手动加框</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          : null}
 
         {marks.length ? (
           <SectionNoteList
@@ -949,153 +1323,67 @@ export default function ScoreEditorScreen({navigation, route}) {
           />
         ) : null}
 
-        {loading || busy ? (
-          <View style={{marginTop: 24, alignItems: 'center'}}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={[ui.sub, {marginTop: 8}]}>{busy ? '处理中，请稍候…' : '加载中…'}</Text>
-          </View>
-        ) : null}
-
-        {(manifest?.pages || []).map(page => {
-          const key = page.name || String(page.index);
-          const pageH = pageFrameHeight(pageW, page, naturalSizes[key]);
-          const pageDivs = (dividers || []).filter(d => (d.page || 0) === page.index);
-          const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === page.index);
-          const badge = page.pending_review ? ' · 待审' : page.uploaded_by === 'student' ? ' · 学生补传' : '';
-          return (
-            <View key={key} style={ui.pageCard}>
-              <View style={ui.pageHead}>
-                <Text style={ui.pageTitle}>
-                  第 {page.index + 1} 页{badge}
-                </Text>
-                <View style={{flexDirection: 'row', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end'}}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setZoomScale(1);
-                      setZoomPage(page);
-                    }}>
-                    <Text style={ui.pageAction}>全屏放大</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => deletePage(page.index)}>
-                    <Text style={[ui.pageAction, {color: '#D14343'}]}>删除本页</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => addDivider(page.index)}>
-                    <Text style={ui.pageAction}>＋ 加分段线</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => addBox(page.index)}>
-                    <Text style={ui.pageAction}>＋ 手动加框</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <View style={{width: pageW, height: pageH, backgroundColor: '#F4EFE6', borderRadius: 12, overflow: 'hidden'}}>
-                {page.url ? (
-                  <Image
-                    key={`img-${key}-${imgRetry[key] || 0}`}
-                    source={{uri: scoreImageUri(page, imgRetry[key] || 0), cache: 'force-cache'}}
-                    style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
-                    resizeMode="contain"
-                    onError={() => retryPage(key)}
-                    onLoad={e => {
-                      const src = e?.nativeEvent?.source || {};
-                      const w = Number(src.width) || 0;
-                      const h = Number(src.height) || 0;
-                      if (w > 0 && h > 0) {
-                        setNaturalSizes(prev =>
-                          prev[key]?.w === w && prev[key]?.h === h ? prev : {...prev, [key]: {w, h}},
-                        );
-                      }
-                    }}
-                  />
-                ) : null}
-                <TapOnly
-                  onPress={e => onPageTap(page.index, pageH, e)}
-                  style={{position: 'absolute', left: 0, top: 0, width: pageW, height: pageH}}
+        {/* 蓝湖 音乐术语翻译卡：标题 14/400；添加术语 80×24 r4；序号 24 r6 + 译文 14/500 + 原文 */}
+        {pages.length ? (
+          <View style={ui.termCard}>
+            <View style={ui.termHead}>
+              <Text style={ui.cardTitle}>音乐术语翻译</Text>
+              <TouchableOpacity
+                style={ui.termAdd}
+                onPress={() => openTerm(null, -1)}>
+                <Image
+                  source={Images.seAddterm}
+                  style={[ui.termAddIcon, ui.tintAccent]}
                 />
-                <SectionMarks
-                  sections={marks}
-                  page={page.index}
-                  pageW={pageW}
-                  pageH={pageH}
-                  onOpen={openSection}
-                />
-                {pageDivs.map(d => (
-                  <SimpleDivider
-                    key={d.id}
-                    divider={d}
-                    pageW={pageW}
-                    pageH={pageH}
-                    onDelete={removeDivider}
-                  />
-                ))}
-                {pageTerms.map(ov => {
-                  const label = String(ov.short || ov.translation || ov.term || '');
-                  const fontSize = Math.max(10, Math.min(14, (ov.h || 0.025) * pageH * 0.85));
-                  const minW = Math.max(36, label.length * (fontSize * 0.95) + 10);
-                  return (
-                    <TapOnly
-                      key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                      onPress={() => {
-                        // 标错了就点它改；改过的会记进术语库
-                        setAskText(ov.term || '');
-                        setAskTerm({
-                          page: page.index,
-                          x: (ov.x || 0) + (ov.w || 0.08) / 2,
-                          y: (ov.y || 0) + (ov.h || 0.02) / 2,
-                          ocr: ov.term || '',
-                          replaceId: ov.id || '',
-                        });
-                      }}
-                      style={[
-                        styles.termOv,
-                        {
-                          left: (ov.x || 0) * pageW,
-                          top: (ov.y || 0) * pageH,
-                          width: Math.max(minW, (ov.w || 0.1) * pageW),
-                          height: Math.max(18, (ov.h || 0.022) * pageH),
-                          zIndex: 12,
-                        },
-                      ]}>
-                      <Text
-                        style={[styles.termOvText, {fontSize}]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.75}
-                        allowFontScaling={false}>
-                        {label}
-                      </Text>
-                    </TapOnly>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
-
-        {manifest?.pages?.length ? (
-          <View style={ui.card}>
-            <View style={ui.pageHead}>
-              <Text style={ui.section}>音乐术语（已标在谱面）</Text>
-              <TouchableOpacity onPress={() => openTerm(null, -1)}>
-                <Text style={ui.pageAction}>＋ 添加术语</Text>
+                <Text style={ui.termAddText}>添加术语</Text>
               </TouchableOpacity>
             </View>
-            <Text style={ui.help}>蓝色小条覆盖原文位置；下方列表便于核对修改。</Text>
             {terms.length ? (
               terms.map((term, idx) => (
-                <TouchableOpacity key={`${term.term}_${idx}`} onPress={() => openTerm(term, idx)}>
+                <TouchableOpacity
+                  key={`${term.term}_${idx}`}
+                  style={ui.termRow}
+                  onPress={() => openTerm(term, idx)}>
+                  <View style={ui.termNo}>
+                    <Text style={ui.termNoText}>{idx + 1}</Text>
+                  </View>
                   <Text style={ui.termLine}>
-                    {term.term}：{term.translation}
+                    {term.translation}
+                    {'  '}
+                    {term.term}
                   </Text>
                 </TouchableOpacity>
               ))
             ) : (
-              <Text style={ui.help}>还没有术语。上传谱面后点「翻译术语」（含力度记号）；偶有漏标可长按补。</Text>
+              <Text style={ui.modeHint}>
+                还没有术语。上传谱面后点「一键识别术语」；偶有漏标可在「认术语」里点谱面补。
+              </Text>
             )}
           </View>
         ) : null}
       </ScrollView>
 
-      <Modal visible={termOpen} transparent animationType="fade" onRequestClose={() => setTermOpen(false)}>
+      {/* 蓝湖底栏：删除全部乐谱 / 保存确认 165×44 r22 */}
+      <View style={[ui.bottomBar, {paddingBottom: px(8) + insets.bottom}]}>
+        <TouchableOpacity
+          style={ui.bottomGhost}
+          onPress={clearAllScores}
+          activeOpacity={0.85}>
+          <Text style={ui.bottomGhostText}>删除全部乐谱</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={ui.bottomMain}
+          onPress={() => saveAll(false)}
+          activeOpacity={0.85}>
+          <Text style={ui.bottomMainText}>保存确认</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={termOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTermOpen(false)}>
         <View style={ui.modalMask}>
           <View style={ui.modalCard}>
             <Text style={ui.section}>编辑术语翻译</Text>
@@ -1125,7 +1413,9 @@ export default function ScoreEditorScreen({navigation, route}) {
                   <Text style={ui.btnText}>删除</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={[ui.btn, ui.btnGhost]} onPress={() => setTermOpen(false)}>
+                <TouchableOpacity
+                  style={[ui.btn, ui.btnGhost]}
+                  onPress={() => setTermOpen(false)}>
                   <Text style={ui.btnGhostText}>取消</Text>
                 </TouchableOpacity>
               )}
@@ -1171,7 +1461,13 @@ export default function ScoreEditorScreen({navigation, route}) {
                   const txt = askText.trim();
                   setAskTerm(null);
                   if (pack && txt) {
-                    confirmTerm(pack.page, pack.x, pack.y, txt, pack.replaceId || '');
+                    confirmTerm(
+                      pack.page,
+                      pack.x,
+                      pack.y,
+                      txt,
+                      pack.replaceId || '',
+                    );
                   }
                 }}>
                 <Text style={ui.btnText}>记进术语库</Text>
@@ -1189,10 +1485,14 @@ export default function ScoreEditorScreen({navigation, route}) {
         <View style={ui.modalMask}>
           <View style={[ui.modalCard, {maxHeight: '80%'}]}>
             <Text style={ui.section}>确认乐谱页序</Text>
-            <Text style={ui.help}>按第 1、2、3… 页顺序上传。点「上移/下移」调整。</Text>
+            <Text style={ui.help}>
+              按第 1、2、3… 页顺序上传。点「上移/下移」调整。
+            </Text>
             <ScrollView style={{maxHeight: 360}}>
               {(pendingFiles?.files || []).map((f, idx) => (
-                <View key={`${f.uri || f.dataUri || idx}_${idx}`} style={styles.orderRow}>
+                <View
+                  key={`${f.uri || f.dataUri || idx}_${idx}`}
+                  style={styles.orderRow}>
                   <Text style={styles.orderBadge}>{idx + 1}</Text>
                   {pendingPreviewUri(f) ? (
                     <Image
@@ -1204,7 +1504,9 @@ export default function ScoreEditorScreen({navigation, route}) {
                         setPendingFiles(prev => {
                           if (!prev) return prev;
                           const files = prev.files.map((x, i) =>
-                            i === idx ? {...x, uri: '', previewUri: '', dataUri: ''} : x,
+                            i === idx
+                              ? {...x, uri: '', previewUri: '', dataUri: ''}
+                              : x,
                           );
                           return {...prev, files};
                         });
@@ -1271,150 +1573,184 @@ export default function ScoreEditorScreen({navigation, route}) {
             {tapMode === 'term'
               ? '放大后可以拖动查看 · 点谱面认术语'
               : tapMode === 'note'
-                ? '放大后可以拖动查看 · 点有颜色的一段写重点'
-                : '放大后可以拖动查看 · 点谱面加分段线'}
+              ? '放大后可以拖动查看 · 点有颜色的一段写重点'
+              : '放大后可以拖动查看 · 点谱面加分段线'}
           </Text>
-          {zoomPage ? (() => {
-            const win = Dimensions.get('window');
-            const zw = Math.max(320, win.width);
-            const baseH = pageFrameHeight(
-              zw,
-              zoomPage,
-              naturalSizes[zoomPage.name || String(zoomPage.index)],
-            );
-            const zh = Math.max(baseH, win.height * 0.55);
-            const scale = zoomScale;
-            const pageTerms = (termOverlays || []).filter(t => (t.page || 0) === zoomPage.index);
-            const pageDivs = (dividers || []).filter(d => (d.page || 0) === zoomPage.index);
-            const zoomKey = zoomPage.name || String(zoomPage.index);
-            const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
-            return (
-              <ScrollView
-                style={{flex: 1, backgroundColor: '#F4EFE6'}}
-                contentContainerStyle={{
-                  width: zw * scale,
-                  height: zh * scale,
-                }}
-                bounces
-                directionalLockEnabled={false}
-                showsVerticalScrollIndicator
-                showsHorizontalScrollIndicator>
-                <View
-                  style={{
-                    width: zw * scale,
-                    height: zh * scale,
-                    backgroundColor: '#F4EFE6',
-                    overflow: 'hidden',
-                  }}>
-                  {imgUri ? (
-                    <Image
-                      key={`zoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
-                      source={{uri: imgUri, cache: 'force-cache'}}
-                      style={{
-                        position: 'absolute',
-                        left: 0,
-                        top: 0,
-                        width: zw * scale,
-                        height: zh * scale,
-                      }}
-                      resizeMode="contain"
-                      onError={() => retryPage(zoomKey)}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                      <Text style={{color: '#666'}}>乐谱加载中…</Text>
-                    </View>
-                  )}
-                  <Pressable
-                    onPress={e => {
-                      const lx = e?.nativeEvent?.locationX;
-                      const ly = e?.nativeEvent?.locationY;
-                      if (!(lx >= 0) || !(ly >= 0)) return;
-                      onPageTap(
-                        zoomPage.index,
-                        zh,
-                        {nativeEvent: {locationX: lx / scale, locationY: ly / scale}},
-                        zw,
-                      );
-                    }}
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
+          {zoomPage
+            ? (() => {
+                const win = Dimensions.get('window');
+                const zw = Math.max(320, win.width);
+                const baseH = pageFrameHeight(
+                  zw,
+                  zoomPage,
+                  naturalSizes[zoomPage.name || String(zoomPage.index)],
+                );
+                const zh = Math.max(baseH, win.height * 0.55);
+                const scale = zoomScale;
+                const pageTerms = (termOverlays || []).filter(
+                  t => (t.page || 0) === zoomPage.index,
+                );
+                const pageDivs = (dividers || []).filter(
+                  d => (d.page || 0) === zoomPage.index,
+                );
+                const zoomKey = zoomPage.name || String(zoomPage.index);
+                const imgUri = scoreImageUri(zoomPage, imgRetry[zoomKey] || 0);
+                return (
+                  <ScrollView
+                    style={{flex: 1, backgroundColor: '#F4EFE6'}}
+                    contentContainerStyle={{
                       width: zw * scale,
                       height: zh * scale,
                     }}
-                  />
-                  <SectionMarks
-                    sections={marks}
-                    page={zoomPage.index}
-                    pageW={zw * scale}
-                    pageH={zh * scale}
-                    onOpen={openSection}
-                  />
-                  {pageDivs.map(d => (
-                    <SimpleDivider
-                      key={d.id}
-                      divider={d}
-                      pageW={zw * scale}
-                      pageH={zh * scale}
-                      onDelete={removeDivider}
-                    />
-                  ))}
-                  {pageTerms.map(ov => {
-                    const label = String(ov.short || ov.translation || ov.term || '');
-                    const fontSize = Math.max(11, Math.min(16, (ov.h || 0.025) * zh * scale * 0.85));
-                    const minW = Math.max(40, label.length * (fontSize * 0.95) + 10);
-                    return (
-                      <TapOnly
-                        key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
-                        onPress={() => {
-                          setAskText(ov.term || '');
-                          setAskTerm({
-                            page: zoomPage.index,
-                            x: (ov.x || 0) + (ov.w || 0.08) / 2,
-                            y: (ov.y || 0) + (ov.h || 0.02) / 2,
-                            ocr: ov.term || '',
-                            replaceId: ov.id || '',
-                          });
+                    bounces
+                    directionalLockEnabled={false}
+                    showsVerticalScrollIndicator
+                    showsHorizontalScrollIndicator>
+                    <View
+                      style={{
+                        width: zw * scale,
+                        height: zh * scale,
+                        backgroundColor: '#F4EFE6',
+                        overflow: 'hidden',
+                      }}>
+                      {imgUri ? (
+                        <Image
+                          key={`zoom-${zoomKey}-${imgRetry[zoomKey] || 0}`}
+                          source={{uri: imgUri, cache: 'force-cache'}}
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            width: zw * scale,
+                            height: zh * scale,
+                          }}
+                          resizeMode="contain"
+                          onError={() => retryPage(zoomKey)}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            flex: 1,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                          <Text style={{color: '#666'}}>乐谱加载中…</Text>
+                        </View>
+                      )}
+                      <Pressable
+                        onPress={e => {
+                          const lx = e?.nativeEvent?.locationX;
+                          const ly = e?.nativeEvent?.locationY;
+                          if (!(lx >= 0) || !(ly >= 0)) return;
+                          onPageTap(
+                            zoomPage.index,
+                            zh,
+                            {
+                              nativeEvent: {
+                                locationX: lx / scale,
+                                locationY: ly / scale,
+                              },
+                            },
+                            zw,
+                          );
                         }}
-                        style={[
-                          styles.termOv,
-                          {
-                            left: (ov.x || 0) * zw * scale,
-                            top: (ov.y || 0) * zh * scale,
-                            width: Math.max(minW, (ov.w || 0.1) * zw * scale),
-                            height: Math.max(20, (ov.h || 0.022) * zh * scale),
-                            zIndex: 12,
-                          },
-                        ]}>
-                        <Text style={[styles.termOvText, {fontSize}]} numberOfLines={1}>
-                          {label}
-                        </Text>
-                      </TapOnly>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            );
-          })() : null}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          width: zw * scale,
+                          height: zh * scale,
+                        }}
+                      />
+                      <SectionMarks
+                        sections={marks}
+                        page={zoomPage.index}
+                        pageW={zw * scale}
+                        pageH={zh * scale}
+                        onOpen={openSection}
+                      />
+                      {pageDivs.map(d => (
+                        <SimpleDivider
+                          key={d.id}
+                          divider={d}
+                          pageW={zw * scale}
+                          pageH={zh * scale}
+                          onDelete={removeDivider}
+                        />
+                      ))}
+                      {pageTerms.map(ov => {
+                        const label = String(
+                          ov.short || ov.translation || ov.term || '',
+                        );
+                        const fontSize = Math.max(
+                          11,
+                          Math.min(16, (ov.h || 0.025) * zh * scale * 0.85),
+                        );
+                        const minW = Math.max(
+                          40,
+                          label.length * (fontSize * 0.95) + 10,
+                        );
+                        return (
+                          <TapOnly
+                            key={ov.id || `${ov.term}_${ov.x}_${ov.y}`}
+                            onPress={() => {
+                              setAskText(ov.term || '');
+                              setAskTerm({
+                                page: zoomPage.index,
+                                x: (ov.x || 0) + (ov.w || 0.08) / 2,
+                                y: (ov.y || 0) + (ov.h || 0.02) / 2,
+                                ocr: ov.term || '',
+                                replaceId: ov.id || '',
+                              });
+                            }}
+                            style={[
+                              styles.termOv,
+                              {
+                                left: (ov.x || 0) * zw * scale,
+                                top: (ov.y || 0) * zh * scale,
+                                width: Math.max(
+                                  minW,
+                                  (ov.w || 0.1) * zw * scale,
+                                ),
+                                height: Math.max(
+                                  20,
+                                  (ov.h || 0.022) * zh * scale,
+                                ),
+                                zIndex: 12,
+                              },
+                            ]}>
+                            <Text
+                              style={[styles.termOvText, {fontSize}]}
+                              numberOfLines={1}>
+                              {label}
+                            </Text>
+                          </TapOnly>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                );
+              })()
+            : null}
           <View style={styles.zoomTools}>
-            <TouchableOpacity onPress={() => setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))}>
+            <TouchableOpacity
+              onPress={() =>
+                setZoomScale(s => Math.max(1, +(s - 0.35).toFixed(2)))
+              }>
               <Text style={styles.zoomTool}>缩小</Text>
             </TouchableOpacity>
             <Text style={styles.zoomTool}>{Math.round(zoomScale * 100)}%</Text>
-            <TouchableOpacity onPress={() => setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))}>
+            <TouchableOpacity
+              onPress={() =>
+                setZoomScale(s => Math.min(3.2, +(s + 0.35).toFixed(2)))
+              }>
               <Text style={styles.zoomTool}>放大</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
       <SectionNoteSheet
+        allSections={marks}
         section={editSec}
         editable
         lessonTips={lessonTips}
@@ -1430,7 +1766,9 @@ export default function ScoreEditorScreen({navigation, route}) {
         onClose={() => setUploadSheet(false)}
         onCamera={doCameraSequential}
         onGallery={() =>
-          doUpload(() => pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}))
+          doUpload(() =>
+            pickFromGallery({...SCORE_IMG_OPTS, selectionLimit: 0}),
+          )
         }
         onPdf={() => doUpload(pickPdf)}
       />
@@ -1492,7 +1830,13 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     backgroundColor: '#1A1A1A',
   },
-  zoomTool: {color: '#fff', fontSize: 16, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 6},
+  zoomTool: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   zoomHint: {
     color: 'rgba(255,255,255,0.72)',
     fontSize: 12,
@@ -1588,43 +1932,282 @@ const styles = StyleSheet.create({
   },
 });
 
-const makeStyles = colors =>
-  StyleSheet.create({
-    container: {flex: 1, backgroundColor: colors.bg},
-    scroll: {padding: 16, paddingBottom: 32},
-    card: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 14,
-    },
-    title: {fontSize: 17, fontWeight: '800', color: colors.textPrimary},
+const makeStyles = (colors, dark) => {
+  const ink = dark ? '#FFFFFF' : '#261216';
+  const sub = dark ? '#A1A1B4' : '#A6A6A6';
+  const accent = dark ? '#B595FF' : '#FF355F';
+  const accentBg = dark ? 'rgba(181,149,255,0.2)' : '#FFEAEF';
+  const card = dark ? '#040428' : '#FFFFFF';
+  return StyleSheet.create({
+    container: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
+    scroll: {paddingHorizontal: 15, paddingTop: px(10), paddingBottom: px(20)},
     sub: {fontSize: 12.5, color: colors.textSecondary, marginTop: 4},
-    help: {fontSize: 12.5, lineHeight: 19, color: colors.textSecondary, marginTop: 8},
-    pending: {
-      marginTop: 10,
-      padding: 10,
-      borderRadius: 10,
-      backgroundColor: colors.bg,
-      color: colors.textPrimary,
+    help: {
       fontSize: 12.5,
-      lineHeight: 18,
+      lineHeight: 19,
+      color: colors.textSecondary,
+      marginTop: 8,
     },
-    row: {flexDirection: 'row', gap: 10, marginTop: 12},
-    modeRow: {flexDirection: 'row', gap: 10, marginTop: 12},
-    modeBtn: {
-      flex: 1,
-      height: 38,
-      borderRadius: 19,
-      borderWidth: 1.5,
-      borderColor: colors.cardBorder,
-      backgroundColor: colors.bg,
+    pending: {
+      marginTop: px(10),
+      fontSize: px(12),
+      lineHeight: px(18),
+      color: sub,
+    },
+    approveBtn: {
+      marginTop: px(8),
+      height: px(40),
+      borderRadius: px(8),
+      backgroundColor: dark ? '#7F47FE' : '#FF355F',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    modeBtnOn: {borderColor: colors.primary, backgroundColor: colors.primary},
-    modeText: {fontSize: 13, fontWeight: '700', color: colors.textSecondary},
-    modeTextOn: {color: '#fff'},
+    approveText: {fontSize: px(14), color: '#FFFFFF', fontWeight: '500'},
+    headCard: {
+      height: px(70),
+      borderRadius: px(10),
+      backgroundColor: card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: px(15),
+      paddingRight: px(15),
+    },
+    headIcon: {width: px(44), height: px(44), marginRight: px(10)},
+    headTitle: {
+      fontSize: px(16),
+      lineHeight: px(22),
+      fontWeight: '600',
+      color: ink,
+    },
+    headSub: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      marginTop: px(3),
+      color: sub,
+    },
+    uploadCard: {
+      marginTop: px(15),
+      borderRadius: px(10),
+      backgroundColor: card,
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(19),
+    },
+    cardTitle: {fontSize: px(14), lineHeight: px(17), color: ink},
+    thumbRow: {marginTop: px(20)},
+    thumb: {
+      width: px(100),
+      height: px(125),
+      borderRadius: px(10),
+      marginRight: px(10),
+      borderWidth: 1,
+      borderColor: dark ? 'rgba(181,149,255,0.3)' : '#E5E5E5',
+      backgroundColor: dark ? '#131444' : '#FFFFFF',
+      padding: px(4),
+      alignItems: 'center',
+    },
+    thumbOn: {borderColor: accent},
+    thumbImgBox: {
+      width: px(90),
+      height: px(90),
+      borderRadius: px(8),
+      overflow: 'hidden',
+      backgroundColor: '#F4EFE6',
+    },
+    thumbImg: {width: px(90), height: px(90)},
+    thumbLabel: {
+      marginTop: px(6),
+      fontSize: px(12),
+      lineHeight: px(17),
+      fontWeight: '600',
+      color: dark ? '#FFFFFF' : '#3D3D3D',
+    },
+    addBtn: {
+      marginTop: px(15),
+      height: px(44),
+      borderRadius: px(8),
+      borderWidth: 0.5,
+      borderStyle: 'dashed',
+      borderColor: accent,
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : 'rgba(255,53,95,0.1)',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addIcon: {width: px(16), height: px(16), marginRight: px(10)},
+    addText: {
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: accent,
+    },
+    groupTitle: {
+      marginTop: px(15),
+      fontSize: px(14),
+      lineHeight: px(17),
+      color: ink,
+    },
+    smartRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: px(10),
+    },
+    smartBtn: {
+      width: px(165),
+      height: px(44),
+      borderRadius: px(8),
+      backgroundColor: dark ? '#7F47FE' : '#FF355F',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    smartIcon: {width: px(18), height: px(18), marginRight: px(6)},
+    smartText: {fontSize: px(13), lineHeight: px(17), color: '#FFFFFF'},
+    pageCard: {
+      marginTop: px(15),
+      borderRadius: px(10),
+      backgroundColor: card,
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(14),
+    },
+    pageTitle: {
+      fontSize: px(14),
+      lineHeight: px(17),
+      color: ink,
+      marginLeft: -px(3),
+    },
+    modeRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: px(10),
+    },
+    modeBtn: {
+      width: px(95),
+      height: px(36),
+      borderRadius: px(8),
+      backgroundColor: accentBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeBtnOn: {backgroundColor: dark ? '#7F47FE' : '#FF355F'},
+    modeText: {
+      fontSize: px(13),
+      lineHeight: px(24),
+      fontWeight: '500',
+      color: accent,
+    },
+    modeTextOn: {color: '#FFFFFF'},
+    modeHint: {
+      marginTop: px(10),
+      marginBottom: px(10),
+      fontSize: px(11),
+      lineHeight: px(20),
+      color: sub,
+    },
+    toolRow: {flexDirection: 'row', marginTop: px(10)},
+    toolBtn: {
+      width: px(80),
+      height: px(28),
+      borderRadius: px(4),
+      marginRight: px(5),
+      backgroundColor: accentBg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: px(8),
+    },
+    toolDanger: {backgroundColor: dark ? 'rgba(255,53,95,0.2)' : '#FFEAEF'},
+    toolIcon: {width: px(16), height: px(16), marginRight: px(5)},
+    tintAccent: {tintColor: accent},
+    toolText: {fontSize: px(12), lineHeight: px(20), color: accent},
+    termCard: {
+      marginTop: px(15),
+      borderRadius: px(10),
+      backgroundColor: card,
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(11),
+    },
+    termHead: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: px(11),
+    },
+    termAdd: {
+      height: px(24),
+      borderRadius: px(4),
+      paddingHorizontal: px(7),
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: dark ? 'rgba(181,149,255,0.2)' : 'rgba(255,53,95,0.1)',
+    },
+    termAddIcon: {width: px(16), height: px(16), marginRight: px(2)},
+    termAddText: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      fontWeight: '500',
+      color: accent,
+    },
+    termRow: {flexDirection: 'row', alignItems: 'center', marginBottom: px(10)},
+    termNo: {
+      width: px(24),
+      height: px(24),
+      borderRadius: px(6),
+      backgroundColor: accentBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: px(10),
+    },
+    termNoText: {
+      fontSize: px(12),
+      lineHeight: px(17),
+      fontWeight: '500',
+      color: accent,
+    },
+    termLine: {
+      flex: 1,
+      fontSize: px(14),
+      lineHeight: px(20),
+      fontWeight: '500',
+      color: dark ? '#FFFFFF' : '#3D3D3D',
+    },
+    bottomBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 15,
+      paddingTop: px(8),
+      backgroundColor: card,
+    },
+    bottomGhost: {
+      width: px(165),
+      height: px(44),
+      borderRadius: px(22),
+      backgroundColor: dark ? 'rgba(255,53,95,0.2)' : 'rgba(255,53,95,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bottomGhostText: {
+      fontSize: px(15),
+      lineHeight: px(24),
+      fontWeight: '500',
+      color: '#FF355F',
+    },
+    bottomMain: {
+      width: px(165),
+      height: px(44),
+      borderRadius: px(22),
+      backgroundColor: dark ? '#7F47FE' : '#FF355F',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bottomMainText: {
+      fontSize: px(15),
+      lineHeight: px(24),
+      fontWeight: '500',
+      color: '#FFF5F7',
+    },
+    row: {flexDirection: 'row', gap: 10, marginTop: 12},
     btn: {
       flex: 1,
       height: 44,
@@ -1633,17 +2216,27 @@ const makeStyles = colors =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    btnGhost: {backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.cardBorder},
+    btnGhost: {
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
     btnDanger: {backgroundColor: '#D14343'},
     btnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
     btnGhostText: {color: colors.textPrimary, fontSize: 14, fontWeight: '700'},
-    pageCard: {marginBottom: 16},
-    pageHead: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8},
-    pageTitle: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
     pageAction: {fontSize: 13, fontWeight: '700', color: colors.accent},
-    section: {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 10},
-    termLine: {fontSize: 13.5, lineHeight: 20, color: colors.textPrimary, marginBottom: 8},
-    modalMask: {flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 20},
+    section: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      marginBottom: 10,
+    },
+    modalMask: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      justifyContent: 'center',
+      padding: 20,
+    },
     modalCard: {backgroundColor: colors.card, borderRadius: 16, padding: 16},
     input: {
       backgroundColor: colors.bg,
@@ -1655,3 +2248,4 @@ const makeStyles = colors =>
     },
     noteInput: {minHeight: 88, textAlignVertical: 'top'},
   });
+};
