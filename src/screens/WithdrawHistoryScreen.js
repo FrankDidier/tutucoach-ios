@@ -29,9 +29,15 @@ const TABS = [
   {id: 'paid', label: '已到账'},
 ];
 
+function yuanOf(it) {
+  const y =
+    it.yuan != null ? Number(it.yuan) : ((Number(it.amount) || 0) * 7) / 100;
+  return y.toFixed(2);
+}
+
 function statusLabel(s) {
   if (s === 'paid' || s === 'done') return '已到账';
-  if (s === 'rejected') return '已拒绝';
+  if (s === 'rejected') return '已驳回';
   if (s === 'review' || s === 'reviewing') return '审核中';
   return '处理中';
 }
@@ -39,7 +45,7 @@ function statusLabel(s) {
 function statusBucket(s) {
   if (s === 'paid' || s === 'done') return 'paid';
   if (s === 'review' || s === 'reviewing') return 'review';
-  if (s === 'rejected') return 'review';
+  if (s === 'rejected') return 'rejected';
   return 'pending';
 }
 
@@ -115,10 +121,11 @@ export default function WithdrawHistoryScreen({navigation}) {
             <WalletRecordRow
               dark={dark}
               icon={dark ? Images.recDiamondDark : Images.recDiamondLight}
-              title={`提现${Number(item.amount || 0).toLocaleString(
+              title={`提现课时费${Number(item.amount || 0).toLocaleString(
                 'en-US',
               )}光币`}
               time={fmtTime(item.createdAt)}
+              side={`¥${yuanOf(item)}`}
               badge={{
                 kind: statusBucket(item.status),
                 label: statusLabel(item.status),

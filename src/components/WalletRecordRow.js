@@ -7,7 +7,12 @@ import {View, Text, Image, StyleSheet, Dimensions} from 'react-native';
 const {width: SCREEN_W} = Dimensions.get('window');
 const px = n => Math.round((n * SCREEN_W) / 375);
 
-const BADGE = {paid: '#00C777', review: '#FF355F', pending: '#FF9519'};
+const BADGE = {
+  paid: '#00C777',
+  review: '#FF355F',
+  pending: '#FF9519',
+  rejected: '#979797',
+};
 
 function tint(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -21,6 +26,7 @@ export default function WalletRecordRow({
   time,
   amount,
   badge,
+  side,
   timeColor,
 }) {
   const ink = dark ? '#FFFFFF' : '#261216';
@@ -40,17 +46,28 @@ export default function WalletRecordRow({
           {time}
         </Text>
       </View>
-      {badge ? (
-        <View
-          style={[
-            styles.badge,
-            {backgroundColor: tint(color, dark ? 0.2 : 0.1)},
-          ]}>
-          <Text style={[styles.badgeText, {color}]}>{badge.label}</Text>
-        </View>
-      ) : (
-        <Text style={[styles.amount, {color: ink}]}>{amount}</Text>
-      )}
+      <View style={styles.right}>
+        {badge ? (
+          <View
+            style={[
+              styles.badge,
+              {backgroundColor: tint(color, dark ? 0.2 : 0.1)},
+            ]}>
+            <Text style={[styles.badgeText, {color}]}>{badge.label}</Text>
+          </View>
+        ) : (
+          <Text style={[styles.amount, {color: ink}]}>{amount}</Text>
+        )}
+        {side ? (
+          <Text
+            style={[
+              styles.side,
+              {color: timeColor || (dark ? '#A1A1B4' : '#A6A6A6')},
+            ]}>
+            {side}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -83,19 +100,19 @@ const styles = StyleSheet.create({
     marginTop: px(3),
     marginLeft: px(1),
   },
+  right: {alignSelf: 'stretch', alignItems: 'flex-end'},
   amount: {
     fontSize: px(16),
     lineHeight: px(22),
     fontWeight: '600',
-    alignSelf: 'flex-start',
     marginTop: px(15),
     marginRight: px(1),
   },
+  side: {fontSize: px(12), lineHeight: px(17), marginTop: px(3)},
   badge: {
     width: px(48),
     height: px(22),
     borderRadius: px(4),
-    alignSelf: 'flex-start',
     marginTop: px(13),
     alignItems: 'center',
     justifyContent: 'center',

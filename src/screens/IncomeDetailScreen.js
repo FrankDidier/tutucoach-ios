@@ -64,9 +64,13 @@ export default function IncomeDetailScreen({navigation}) {
           renderItem={({item}) => (
             <WalletRecordRow
               dark={dark}
-              title={item.title || '课时费'}
+              title={
+                item.title && item.title !== '课时费'
+                  ? item.title
+                  : '课时费入账'
+              }
               time={fmtTime(item.createdAt)}
-              amount={`+${item.delta}`}
+              amount={`+${item.delta}光币`}
             />
           )}
         />

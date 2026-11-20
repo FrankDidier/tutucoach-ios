@@ -66,7 +66,7 @@ export default function WithdrawScreen({navigation}) {
       if (r && r.ok) {
         setBalance(Number(r.balance) || 0);
         setAmt('');
-        Alert.alert('已提交', '兑现申请已记下，我们会把对应现金打给你。', [
+        Alert.alert('已提交', '提现申请已提交，状态为「审核中」。审核通过后进入「处理中」，打款后显示「已到账」，可在提现记录里查看。', [
           {text: '查看记录', onPress: () => navigation.navigate('WithdrawHistory')},
           {text: '好的'},
         ]);

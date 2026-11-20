@@ -1,7 +1,15 @@
 // 蓝湖「提现」t2/t3 —— 我的光币（教师端光币总览）
 import {SafeAreaView as EdgeSafeArea} from 'react-native-safe-area-context';
 import React, {useCallback, useMemo, useState} from 'react';
-import {View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, Dimensions} from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {useTheme} from '../theme/ThemeContext';
 import {Images} from '../assets/images';
@@ -17,6 +25,7 @@ export default function MyGuangbiScreen({navigation}) {
   const dark = mode === 'dark';
   const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
   const [balance, setBalance] = useState(0);
+  const [yuan, setYuan] = useState(0);
   const [income, setIncome] = useState(0);
   const [cashout, setCashout] = useState(0);
 
@@ -27,11 +36,18 @@ export default function MyGuangbiScreen({navigation}) {
         .then(r => {
           if (!r || !r.ok) return;
           setBalance(Number(r.balance) || 0);
+          setYuan(
+            r.yuan != null
+              ? Number(r.yuan) || 0
+              : ((Number(r.balance) || 0) * 7) / 100,
+          );
           const list = Array.isArray(r.cashouts) ? r.cashouts : [];
           setCashout(
             r.totalCashout != null
               ? Number(r.totalCashout) || 0
-              : list.filter(c => c.status !== 'rejected').reduce((s, c) => s + (Number(c.amount) || 0), 0),
+              : list
+                  .filter(c => c.status !== 'rejected')
+                  .reduce((s, c) => s + (Number(c.amount) || 0), 0),
           );
         })
         .catch(() => {});
@@ -54,7 +70,9 @@ export default function MyGuangbiScreen({navigation}) {
   return (
     <EdgeSafeArea edges={['bottom', 'left', 'right']} style={styles.root}>
       <ScreenHeader title="我的光币" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}>
         {/* (15,98) 345×180：切图含「立即提现」按钮 */}
         <View style={styles.card}>
           <Image
@@ -63,10 +81,18 @@ export default function MyGuangbiScreen({navigation}) {
             resizeMode="stretch"
           />
           <Text style={styles.cardLabel}>当前帐户光币</Text>
-          <Image source={dark ? Images.wdSafeDark : Images.wdSafeLight} style={styles.safeIcon} />
+          <Image
+            source={dark ? Images.wdSafeDark : Images.wdSafeLight}
+            style={styles.safeIcon}
+          />
           <Text style={styles.safeText}>安全保障中</Text>
           <Text style={styles.balance}>{balance}</Text>
-          <Text style={styles.cardHint}>可提现金额以平台审核后的有效收入为准</Text>
+          <Text style={styles.cardHint}>
+            可提现金额以平台审核后的有效收入为准
+          </Text>
+          <Text style={styles.cardRate}>
+            100光币 = 7元人民币 · 当前约合 ¥{yuan.toFixed(2)}
+          </Text>
           <TouchableOpacity
             style={styles.cardBtn}
             activeOpacity={0.85}
@@ -92,7 +118,10 @@ export default function MyGuangbiScreen({navigation}) {
             style={styles.row}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('IncomeDetail')}>
-            <Image source={dark ? Images.wdIncomeDark : Images.wdIncomeLight} style={styles.rowIcon} />
+            <Image
+              source={dark ? Images.wdIncomeDark : Images.wdIncomeLight}
+              style={styles.rowIcon}
+            />
             <Text style={[styles.rowText, styles.rowTextMedium]}>收入明细</Text>
             <Image source={arrow} style={styles.rowArrow} />
           </TouchableOpacity>
@@ -100,7 +129,10 @@ export default function MyGuangbiScreen({navigation}) {
             style={styles.row}
             activeOpacity={0.7}
             onPress={() => navigation.navigate('WithdrawHistory')}>
-            <Image source={dark ? Images.wdRecordsDark : Images.wdRecordsLight} style={styles.rowIcon} />
+            <Image
+              source={dark ? Images.wdRecordsDark : Images.wdRecordsLight}
+              style={styles.rowIcon}
+            />
             <Text style={styles.rowText}>提现记录</Text>
             <Image source={arrow} style={styles.rowArrow} />
           </TouchableOpacity>
@@ -116,11 +148,34 @@ function makeStyles(colors, dark) {
   const panel = dark ? '#040428' : '#FFFFFF';
   return StyleSheet.create({
     root: {flex: 1, backgroundColor: dark ? '#020014' : '#FAFAFA'},
-    body: {paddingHorizontal: px(15), paddingTop: px(10), paddingBottom: px(30)},
+    body: {
+      paddingHorizontal: px(15),
+      paddingTop: px(10),
+      paddingBottom: px(30),
+    },
     card: {width: px(345), height: px(180)},
-    cardImg: {position: 'absolute', left: 0, top: 0, width: px(345), height: px(180)},
-    cardLabel: {position: 'absolute', left: px(15), top: px(15), fontSize: px(14), lineHeight: px(20), color: text},
-    safeIcon: {position: 'absolute', left: px(251), top: px(17), width: px(14), height: px(14)},
+    cardImg: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: px(345),
+      height: px(180),
+    },
+    cardLabel: {
+      position: 'absolute',
+      left: px(15),
+      top: px(15),
+      fontSize: px(14),
+      lineHeight: px(20),
+      color: text,
+    },
+    safeIcon: {
+      position: 'absolute',
+      left: px(251),
+      top: px(17),
+      width: px(14),
+      height: px(14),
+    },
     safeText: {
       position: 'absolute',
       left: px(270),
@@ -138,10 +193,42 @@ function makeStyles(colors, dark) {
       fontWeight: '700',
       color: text,
     },
-    cardHint: {position: 'absolute', left: px(15), top: px(84), fontSize: px(12), lineHeight: px(20), color: '#979797'},
-    cardBtn: {position: 'absolute', left: px(15), top: px(121), width: px(315), height: px(40), borderRadius: px(20)},
-    tiles: {marginTop: px(15), flexDirection: 'row', justifyContent: 'space-between'},
-    tile: {width: px(165), height: px(70), borderRadius: px(10), backgroundColor: panel},
+    cardHint: {
+      position: 'absolute',
+      left: px(15),
+      top: px(80),
+      fontSize: px(12),
+      lineHeight: px(18),
+      color: '#979797',
+    },
+    cardRate: {
+      position: 'absolute',
+      left: px(15),
+      top: px(98),
+      fontSize: px(12),
+      lineHeight: px(18),
+      fontWeight: '500',
+      color: dark ? '#B595FF' : '#FF355F',
+    },
+    cardBtn: {
+      position: 'absolute',
+      left: px(15),
+      top: px(121),
+      width: px(315),
+      height: px(40),
+      borderRadius: px(20),
+    },
+    tiles: {
+      marginTop: px(15),
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    tile: {
+      width: px(165),
+      height: px(70),
+      borderRadius: px(10),
+      backgroundColor: panel,
+    },
     tileLabel: {
       position: 'absolute',
       left: px(15),
@@ -160,9 +247,20 @@ function makeStyles(colors, dark) {
       fontWeight: '700',
       color: text,
     },
-    menu: {marginTop: px(15), borderRadius: px(10), backgroundColor: panel, overflow: 'hidden'},
+    menu: {
+      marginTop: px(15),
+      borderRadius: px(10),
+      backgroundColor: panel,
+      overflow: 'hidden',
+    },
     row: {height: px(50)},
-    rowIcon: {position: 'absolute', left: px(15), top: px(15), width: px(20), height: px(20)},
+    rowIcon: {
+      position: 'absolute',
+      left: px(15),
+      top: px(15),
+      width: px(20),
+      height: px(20),
+    },
     rowText: {
       position: 'absolute',
       left: px(45),
@@ -173,6 +271,12 @@ function makeStyles(colors, dark) {
       color: text,
     },
     rowTextMedium: {top: px(14), fontWeight: '500'},
-    rowArrow: {position: 'absolute', left: px(314), top: px(17), width: px(16), height: px(16)},
+    rowArrow: {
+      position: 'absolute',
+      left: px(314),
+      top: px(17),
+      width: px(16),
+      height: px(16),
+    },
   });
 }
