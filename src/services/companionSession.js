@@ -6,6 +6,7 @@ import {setCompanionTarot} from './companionTarot';
 import {isSpeaking} from './voice';
 import {currentInstrument} from './instrument';
 import {cnNum, readingSections} from '../utils/sections';
+import {EAR_LISTEN} from './config';
 
 const Ear = NativeModules.TutuRecorder || null;
 
@@ -329,8 +330,8 @@ export function createCompanionSession(host) {
       const raw = Number(lv && lv.rms) || 0;
       // 原生层按当前乐器分辨是不是在练：说话、电视、角色自己的声音再响也不算。
       const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
-      const cells = Array.isArray(lv && lv.chroma) ? lv.chroma : [];
-      if (piano && !dropChroma) {
+      const cells = EAR_LISTEN && Array.isArray(lv && lv.chroma) ? lv.chroma : [];
+      if (EAR_LISTEN && piano && !dropChroma) {
         chroma = chroma.concat(cells).slice(-32);
       } else {
         chroma = [];
@@ -377,7 +378,7 @@ export function createCompanionSession(host) {
     if (event === 'open') needOpen = false;
     try {
       if (event === 'tick') await sample();
-      const cellsOut = event === 'tick' ? chroma : [];
+      const cellsOut = EAR_LISTEN && event === 'tick' ? chroma : [];
       if (event === 'tick') chroma = [];
       const plan = await planCompanionTick({
         student_id: host.studentId(),

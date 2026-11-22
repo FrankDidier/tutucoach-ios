@@ -3,6 +3,10 @@
 // 全部复用已上线接口，iOS 端无需重建后端。
 export const BASE_URL = 'https://tutujiaolian.com';
 
+// 听音辨谱（段落耳印）。老师稳定版默认 false：不上传 chroma，服务端也不换段。
+// 实验版再改 true。错音识别是后续大项，不走本开关。
+export const EAR_LISTEN = false;
+
 // 微信开放平台（与 Android 端一致；密钥仅在服务端）。
 export const WECHAT_APP_ID = 'wx4df6edf68f7bf8ba';
 export const WECHAT_UNIVERSAL_LINK = 'https://tutujiaolian.com/app/'; // iOS 必填，待开放平台登记

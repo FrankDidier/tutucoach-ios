@@ -240,7 +240,7 @@ const WelcomeScreen = ({navigation}) => {
             styles.welcomeCaption,
             {fontWeight: mode === 'dark' ? '600' : '500'},
           ]}>
-          欢迎使用全球第一款智能手型检测软件
+          欢迎使用智能手型检测
         </Text>
 
         <View style={styles.footer}>

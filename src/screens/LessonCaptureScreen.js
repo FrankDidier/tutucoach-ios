@@ -583,11 +583,40 @@ export default function LessonCaptureScreen({navigation}) {
     g => (g.chars || 0) > 0 || (g.points || []).length || (edits[g.idx] || []).length,
   );
 
+  const ensureManualSlot = () => {
+    const active = reviewSegs.find(g => !skip[g.idx]);
+    if (active) return active.idx;
+    if (reviewSegs.length) return reviewSegs[0].idx;
+    const g = {idx: 0, piece: '', chars: 0, points: []};
+    setSegments(prev => (prev && prev.length ? prev : [g]));
+    setEdits(prev => (prev[0] ? prev : {...prev, 0: []}));
+    setSkip(prev => {
+      const next = {...prev};
+      delete next[0];
+      return next;
+    });
+    return 0;
+  };
+
   const setPointTarget = (segIdx, pointIdx, target, seg = 0) => {
     setTargets(prev => ({
       ...prev,
       [`${segIdx}:${pointIdx}`]: {target, seg: target === 'section' ? seg : 0},
     }));
+  };
+
+  const addManualPoint = () => {
+    const idx = ensureManualSlot();
+    setSkip(prev => {
+      const next = {...prev};
+      delete next[idx];
+      return next;
+    });
+    setEdits(prev => {
+      const arr = [...(prev[idx] || []), ''];
+      setTargets(t => ({...t, [`${idx}:${arr.length - 1}`]: {target: 'global', seg: 0}}));
+      return {...prev, [idx]: arr};
+    });
   };
 
   const confirm = async () => {
@@ -1085,8 +1114,7 @@ export default function LessonCaptureScreen({navigation}) {
                         setEdits(prev => ({...prev, [g.idx]: arr}));
                         setPointTarget(g.idx, arr.length - 1, 'global');
                       }}>
-                      <Image source={Images.capAdd} style={[styles.pillIcon, dark && {tintColor: '#B595FF'}]} />
-                      <Text style={styles.addPillText}>添加重点</Text>
+                      <Text style={styles.addPillText}>+ 添加重点</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.listLine} />
@@ -1191,7 +1219,7 @@ export default function LessonCaptureScreen({navigation}) {
         })}
         {!reviewSegs.length ? (
           <Text style={styles.hint}>
-            这节课没有记到老师说的话。下次请停在本页；可点「关屏省电」省电，不要真正锁屏。
+            这节课没有记到老师说的话。可以点右下角「+」自己补几条重点再挂给学生。
           </Text>
         ) : null}
       </>
@@ -1201,6 +1229,13 @@ export default function LessonCaptureScreen({navigation}) {
   const renderReviewFooter = () =>
     summarizing ? null : (
       <View style={styles.footer}>
+        <TouchableOpacity
+          accessibilityLabel="补充重点"
+          activeOpacity={0.88}
+          onPress={addManualPoint}
+          style={styles.fabPlus}>
+          <Text style={styles.fabPlusText}>+</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           activeOpacity={0.88}
           disabled={saving}
@@ -1344,7 +1379,18 @@ function makeStyles(colors, dark) {
       backgroundColor: dark ? 'rgba(181,149,255,0.16)' : '#FFE9EE',
     },
     codeRowText: {fontSize: 13, fontWeight: '500', color: dark ? '#B595FF' : colors.primary},
-    footer: {backgroundColor: colors.card, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8},
+    footer: {backgroundColor: colors.card, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8},
+    fabPlus: {
+      alignSelf: 'flex-end',
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      marginBottom: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: dark ? '#B595FF' : colors.primary,
+    },
+    fabPlusText: {fontSize: 28, fontWeight: '700', color: '#fff', lineHeight: 32},
     footBtn: {
       height: 44,
       borderRadius: 22,
@@ -1362,16 +1408,16 @@ function makeStyles(colors, dark) {
     listTitle: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
     // 蓝湖 添加重点 80×24 r4：图标 16 (7,4) + 12/500；删除 59×24 r4：图标 16 (6,4) + 12/400
     addPill: {
-      height: px(24),
-      paddingLeft: px(7),
-      paddingRight: px(7),
-      borderRadius: px(4),
+      height: px(32),
+      paddingLeft: px(12),
+      paddingRight: px(14),
+      borderRadius: px(16),
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(255,53,95,0.1)',
+      backgroundColor: dark ? '#B595FF' : '#FF355F',
     },
     pillIcon: {width: px(16), height: px(16), marginRight: px(2)},
-    addPillText: {fontSize: px(12), fontWeight: '500', color: dark ? '#B595FF' : '#FF355F'},
+    addPillText: {fontSize: px(13), fontWeight: '700', color: '#FFFFFF'},
     listLine: {height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(161,161,180,0.3)', marginTop: 12},
     pointBlock: {marginTop: 15},
     pointHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},

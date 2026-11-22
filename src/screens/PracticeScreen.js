@@ -166,7 +166,7 @@ const PracticeScreen = ({navigation}) => {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('Detection', {premium: true})}>
               <Image source={dark ? Images.practiceTileVipDark : Images.practiceTileVipLight} style={styles.tileImg} resizeMode="stretch" />
-              <Text style={styles.tileTitle}>智能AI陪练</Text>
+              <Text style={styles.tileTitle}>AI手型陪练</Text>
               <Text style={styles.tileSub}>会员专属</Text>
             </TouchableOpacity>
 
