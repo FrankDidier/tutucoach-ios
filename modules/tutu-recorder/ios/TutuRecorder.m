@@ -100,6 +100,21 @@
   return out;
 }
 
+- (NSArray *)drainPitches {
+  int cells[TUTU_CHROMA_KEEP][4];
+  int counts[TUTU_CHROMA_KEEP];
+  os_unfair_lock_lock(&_lock);
+  int n = tutu_tone_drain_pitches(_tone, cells, counts, TUTU_CHROMA_KEEP);
+  os_unfair_lock_unlock(&_lock);
+  NSMutableArray *out = [NSMutableArray arrayWithCapacity:n];
+  for (int i = 0; i < n; i++) {
+    NSMutableArray *frame = [NSMutableArray arrayWithCapacity:counts[i]];
+    for (int k = 0; k < counts[i]; k++) [frame addObject:@(cells[i][k])];
+    [out addObject:frame];
+  }
+  return out;
+}
+
 - (void)setInstrument:(NSString *)instrumentId {
   int code = TUTU_INST_PIANO;
   if ([instrumentId isEqualToString:@"violin"]) code = TUTU_INST_VIOLIN;
@@ -365,10 +380,12 @@ RCT_EXPORT_METHOD(readLevel:(RCTPromiseResolveBlock)resolve
     } else {
       [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     }
+    [[self toneFeed] drainPitches];
     [[self toneFeed] drainChroma];
     out[@"chroma"] = cells;
     return out;
   }
+  out[@"pitches"] = [[self toneFeed] drainPitches];
   out[@"chroma"] = [[self toneFeed] drainChroma];
   return out;
 }

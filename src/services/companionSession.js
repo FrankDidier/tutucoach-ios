@@ -100,6 +100,7 @@ export function createCompanionSession(host) {
   let levels = [];
   // 听音辨谱：弹琴时攒下的音名格子，跟下一次 tick 一起送上去认弹到哪一段。
   let chroma = [];
+  let pitches = [];
   // 角色刚说过话：原生那边攒的格子里有它自己的声音，下一次取到的扔掉。
   let dropChroma = false;
   let silentSec = 0;
@@ -322,6 +323,7 @@ export function createCompanionSession(host) {
     if (Date.now() < speakingUntil || (await isSpeaking())) {
       levels = levels.concat(0).slice(-6);
       chroma = [];
+      pitches = [];
       dropChroma = true;
       return;
     }
@@ -331,10 +333,13 @@ export function createCompanionSession(host) {
       // 原生层按当前乐器分辨是不是在练：说话、电视、角色自己的声音再响也不算。
       const piano = lv && lv.tone !== undefined ? Number(lv.tone) > 0 : raw >= 0.08;
       const cells = EAR_LISTEN && Array.isArray(lv && lv.chroma) ? lv.chroma : [];
+      const heardPitches = EAR_LISTEN && Array.isArray(lv && lv.pitches) ? lv.pitches : [];
       if (EAR_LISTEN && piano && !dropChroma) {
         chroma = chroma.concat(cells).slice(-32);
+        pitches = pitches.concat(heardPitches).slice(-32);
       } else {
         chroma = [];
+        pitches = [];
       }
       dropChroma = false;
       // 刚说完「我再弹一遍」就弹起来了：马上算在弹，不再当成还在说话。
@@ -379,13 +384,18 @@ export function createCompanionSession(host) {
     try {
       if (event === 'tick') await sample();
       const cellsOut = EAR_LISTEN && event === 'tick' ? chroma : [];
-      if (event === 'tick') chroma = [];
+      const pitchesOut = EAR_LISTEN && event === 'tick' ? pitches : [];
+      if (event === 'tick') {
+        chroma = [];
+        pitches = [];
+      }
       const plan = await planCompanionTick({
         student_id: host.studentId(),
         piece: piece || host.pieceName(),
         event,
         levels,
         ...(cellsOut.length ? {chroma: cellsOut} : {}),
+        ...(pitchesOut.length ? {pitches: pitchesOut} : {}),
         sections: sections.map(s => s.line),
         section_notes: sections.map(s => s.note || ''),
         recent_lines: recentSpoken.slice(-3),
@@ -465,6 +475,7 @@ export function createCompanionSession(host) {
     voiceUntil = Date.now() + 5000;
     levels = [];
     chroma = [];
+    pitches = [];
     silentSec = 0;
   };
 
@@ -721,6 +732,7 @@ export function createCompanionSession(host) {
       ended = false;
       levels = [];
       chroma = [];
+      pitches = [];
       silentSec = 0;
       hadPlaying = false;
       awaitingField = '';

@@ -77,6 +77,82 @@ static int near_any(float f, const float *freqs, int n) {
   return 0;
 }
 
+static int is_harmonic(float f, const float *bases, int n) {
+  for (int i = 0; i < n; i++) {
+    float k = bases[i];
+    if (k <= 0.f) continue;
+    int harm = (int)lround(f / k);
+    if (harm >= 2 && harm <= 8 && fabsf(f - harm * k) <= fmaxf(3.f, 0.03f * f)) return 1;
+  }
+  return 0;
+}
+
+int tutu_tone_fundamentals(const float *freq, const float *amp, int count, int mono, int *out, int max) {
+  float fs[16], as[16], score[16];
+  int n = 0;
+  for (int i = 0; i < count && n < 16; i++) {
+    float f = freq[i], a = amp[i];
+    if (a <= 0.f || f < 70.f || f > 2500.f) continue;
+    int at = n;
+    while (at > 0 && as[at - 1] < a) {
+      fs[at] = fs[at - 1];
+      as[at] = as[at - 1];
+      at--;
+    }
+    fs[at] = f;
+    as[at] = a;
+    n++;
+  }
+  for (int i = 0; i < n; i++) {
+    score[i] = as[i];
+    for (int h = 2; h <= 6; h++) {
+      float target = fs[i] * h;
+      float tol = fmaxf(3.f, 0.03f * target);
+      for (int j = 0; j < n; j++) {
+        if (fabsf(fs[j] - target) <= tol) {
+          score[i] += as[j];
+          break;
+        }
+      }
+    }
+  }
+  int order[16];
+  for (int i = 0; i < n; i++) order[i] = i;
+  for (int i = 0; i < n; i++) {
+    for (int j = i + 1; j < n; j++) {
+      if (score[order[j]] > score[order[i]]) {
+        int sw = order[i];
+        order[i] = order[j];
+        order[j] = sw;
+      }
+    }
+  }
+  float kept[4];
+  int kn = 0;
+  int limit = mono ? 1 : 4;
+  if (limit > max) limit = max;
+  for (int oi = 0; oi < n && kn < limit; oi++) {
+    float f = fs[order[oi]];
+    if (is_harmonic(f, kept, kn)) continue;
+    int w = 0;
+    for (int k = 0; k < kn; k++) {
+      float one = f;
+      if (!is_harmonic(kept[k], &one, 1)) kept[w++] = kept[k];
+    }
+    kn = w;
+    kept[kn++] = f;
+  }
+  int on = 0;
+  for (int i = 0; i < kn && on < limit; i++) {
+    int m = (int)lround(69.0 + 12.0 * log(kept[i] / 440.0) / log(2.0));
+    if (m < 36 || m > 96) continue;
+    int dup = 0;
+    for (int j = 0; j < on; j++) if (out[j] == m) dup = 1;
+    if (!dup) out[on++] = m;
+  }
+  return on;
+}
+
 static void add_chroma(TutuPianoTone *t, const float *freq, const float *amp, int count, int voiced) {
   if (voiced) {
     for (int i = 0; i < count; i++) {
@@ -85,6 +161,13 @@ static void add_chroma(TutuPianoTone *t, const float *freq, const float *amp, in
       int pc = (int)lround(12.0 * log(f / 261.6256) / log(2.0));
       pc = ((pc % 12) + 12) % 12;
       t->chromaAcc[pc] += sqrtf(amp[i]);
+    }
+    int mono = t->instrument == TUTU_INST_VIOLIN || t->instrument == TUTU_INST_ERHU
+        || t->instrument == TUTU_INST_GUZHENG;
+    int midis[4];
+    int mn = tutu_tone_fundamentals(freq, amp, count, mono, midis, 4);
+    for (int i = 0; i < mn; i++) {
+      if (midis[i] >= 0 && midis[i] < 128) t->pitchCount[midis[i]]++;
     }
     t->chromaVoiced++;
   }
@@ -105,11 +188,46 @@ static void add_chroma(TutuPianoTone *t, const float *freq, const float *amp, in
         long v = lround(99.0 * t->chromaAcc[k] / norm);
         t->chroma[at][k] = (int)(v > 99 ? 99 : v);
       }
+      int best = 0;
+      for (int m = 0; m < 128; m++) if (t->pitchCount[m] > best) best = t->pitchCount[m];
+      int need = t->chromaVoiced / 4;
+      if (need < 2) need = 2;
+      int mono = t->instrument == TUTU_INST_VIOLIN || t->instrument == TUTU_INST_ERHU
+          || t->instrument == TUTU_INST_GUZHENG;
+      int cap = mono ? 1 : 4;
+      int gn = 0;
+      while (gn < cap) {
+        int pick = -1;
+        for (int m = 0; m < 128; m++) {
+          if (t->pitchCount[m] >= need && (pick < 0 || t->pitchCount[m] > t->pitchCount[pick])) pick = m;
+        }
+        if (pick < 0) break;
+        t->pitch[at][gn++] = pick;
+        t->pitchCount[pick] = 0;
+      }
+      t->pitchN[at] = gn;
     }
   }
   memset(t->chromaAcc, 0, sizeof(t->chromaAcc));
+  memset(t->pitchCount, 0, sizeof(t->pitchCount));
   t->chromaFrames = 0;
   t->chromaVoiced = 0;
+}
+
+int tutu_tone_drain_pitches(TutuPianoTone *t, int out[][4], int *counts, int max) {
+  if (!t) return 0;
+  int n = t->chromaCount < max ? t->chromaCount : max;
+  int skip = t->chromaCount - n;
+  for (int i = 0; i < n; i++) {
+    int at = (t->chromaHead + skip + i) % TUTU_CHROMA_KEEP;
+    int c = t->pitchN[at];
+    if (c < 0) c = 0;
+    if (c > 4) c = 4;
+    counts[i] = c;
+    for (int k = 0; k < c; k++) out[i][k] = t->pitch[at][k];
+    t->pitchN[at] = 0;
+  }
+  return n;
 }
 
 int tutu_tone_drain_chroma(TutuPianoTone *t, int out[][12], int max) {

@@ -70,6 +70,9 @@ typedef struct {
   int chroma[TUTU_CHROMA_KEEP][12];
   int chromaHead;
   int chromaCount;
+  int pitchCount[128];
+  int pitch[TUTU_CHROMA_KEEP][4];
+  int pitchN[TUTU_CHROMA_KEEP];
 } TutuPianoTone;
 
 
@@ -87,5 +90,9 @@ int tutu_tone_is_playing(TutuToneLevel lv, int instrument);
 int tutu_tone_heard(const TutuPianoTone *t, TutuToneLevel *out);
 // 取走上次之后攒下的音名格子，每格 12 个 0~99。返回取走了几格。
 int tutu_tone_drain_chroma(TutuPianoTone *t, int out[][12], int max);
+// 和上一批 chroma 格子对齐的 MIDI。先取 pitches 再取 chroma（chroma 会清掉计数）。
+int tutu_tone_drain_pitches(TutuPianoTone *t, int out[][4], int *counts, int max);
+// 从频谱峰留基频。mono 非 0 时只留一个音。返回写入 out 的个数。
+int tutu_tone_fundamentals(const float *freq, const float *amp, int count, int mono, int *out, int max);
 
 #endif
