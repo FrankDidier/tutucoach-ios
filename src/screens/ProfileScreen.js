@@ -12,6 +12,8 @@ import {
   Platform,
   Linking,
   Dimensions,
+  Modal,
+  TextInput,
 } from 'react-native';
 
 const {width: SCREEN_W} = Dimensions.get('window');
@@ -29,8 +31,8 @@ import {
 } from '../services/profilePrefs';
 import {getPoints} from '../services/companion';
 import {fetchWallet, syncPracticeGuangbi} from '../services/guangbi';
-import {getDeviceId, resetLocalIdentity} from '../services/device';
-import {registerAccount, getMembership, deleteAccount} from '../services/account';
+import {adoptUserId, getDeviceId, getPreviousUserId, resetLocalIdentity} from '../services/device';
+import {registerAccount, getMembership, deleteAccount, requestSmsCode, loginWithSms} from '../services/account';
 import {isWeChatInstalled, loginWithWeChat} from '../services/wechat';
 import {isAppleSignInReady, loginWithApple} from '../services/appleAuth';
 import {useTheme} from '../theme/ThemeContext';
@@ -175,6 +177,60 @@ const ProfileScreen = ({navigation}) => {
   };
 
   const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [smsCode, setSmsCode] = useState('');
+  const [smsBusy, setSmsBusy] = useState(false);
+
+  const refreshAfterLogin = async () => {
+    const id = getDeviceId();
+    setUserId(id);
+    try {
+      const m = await getMembership(id);
+      if (m && m.ok) setVip(m);
+    } catch (e) {}
+  };
+
+  const onPhoneLogin = () => {
+    Alert.alert('手机号登录', '登录即表示你已阅读并同意《用户协议》和《隐私政策》。', [
+      {text: '查看协议', onPress: () => navigation.navigate('Legal')},
+      {text: '取消', style: 'cancel'},
+      {text: '同意并登录', onPress: () => setPhoneOpen(true)},
+    ]);
+  };
+
+  const sendSms = async () => {
+    if (smsBusy) return;
+    setSmsBusy(true);
+    try {
+      const r = await requestSmsCode(phone.trim());
+      Alert.alert('手机号登录', (r && r.message) || (r && r.ok ? '验证码已发送' : '验证码暂时发不出去'));
+    } catch (e) {
+      Alert.alert('手机号登录', '网络异常，请重试');
+    } finally {
+      setSmsBusy(false);
+    }
+  };
+
+  const submitSms = async () => {
+    if (smsBusy) return;
+    setSmsBusy(true);
+    try {
+      const prefer = (await getPreviousUserId()) || getDeviceId() || '';
+      const r = await loginWithSms(phone.trim(), smsCode.trim(), getDeviceId(), prefer);
+      if (r && r.ok && r.user && r.user.user_id) {
+        await adoptUserId(r.user.user_id);
+        await refreshAfterLogin();
+        setPhoneOpen(false);
+        setSmsCode('');
+      }
+      Alert.alert('手机号登录', (r && r.message) || '登录没有完成，请重试');
+    } catch (e) {
+      Alert.alert('手机号登录', '网络异常，请重试');
+    } finally {
+      setSmsBusy(false);
+    }
+  };
 
   const doWeChatLogin = async () => {
     try {
@@ -272,12 +328,12 @@ const ProfileScreen = ({navigation}) => {
   const idText = userId ? `ID:${userId.slice(-8)}` : 'ID:----';
 
   const rowArrow = dark ? Images.icRowArrowDark : Images.icRowArrowLight;
-  const MenuRow = ({icon, glyph, label, onPress}) => (
+  const MenuRow = ({icon, glyph, glyphBg, label, onPress}) => (
     <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
       {icon ? (
         <Image source={icon} style={styles.menuIcon} />
       ) : (
-        <Text style={[styles.menuIcon, styles.menuGlyph]}>{glyph}</Text>
+        <Text style={[styles.menuIcon, styles.menuGlyph, glyphBg ? {backgroundColor: glyphBg} : null]}>{glyph}</Text>
       )}
       <Text style={styles.menuLabel}>{label}</Text>
       <Image source={rowArrow} style={styles.menuArrow} />
@@ -364,6 +420,7 @@ const ProfileScreen = ({navigation}) => {
           {appleReady ? (
             <MenuRow glyph={'\uF8FF'} label="通过 Apple 登录" onPress={onAppleLogin} />
           ) : null}
+          <MenuRow glyph={'\u260E'} glyphBg="#07C160" label="手机号登录" onPress={onPhoneLogin} />
         </View>
 
         <View style={styles.menuSection}>
@@ -406,6 +463,42 @@ const ProfileScreen = ({navigation}) => {
           setInstrument(id);
         }}
       />
+      <Modal visible={phoneOpen} transparent animationType="fade" onRequestClose={() => setPhoneOpen(false)}>
+        <View style={styles.phoneMask}>
+          <View style={styles.phoneCard}>
+            <Text style={styles.phoneTitle}>手机号登录</Text>
+            <TextInput
+              style={styles.phoneInput}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="手机号"
+              placeholderTextColor="#979797"
+              keyboardType="phone-pad"
+              maxLength={11}
+            />
+            <TextInput
+              style={styles.phoneInput}
+              value={smsCode}
+              onChangeText={setSmsCode}
+              placeholder="验证码"
+              placeholderTextColor="#979797"
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+            <View style={styles.phoneActions}>
+              <TouchableOpacity onPress={() => setPhoneOpen(false)}>
+                <Text style={styles.phoneAction}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={sendSms} disabled={smsBusy}>
+                <Text style={styles.phoneAction}>获取验证码</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={submitSms} disabled={smsBusy}>
+                <Text style={styles.phoneAction}>登录</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <TextPromptModal
         visible={namePromptOpen}
         title="修改昵称"
@@ -521,6 +614,21 @@ const makeStyles = (colors, dark) =>
       color: dark ? '#FFFFFF' : '#222222',
     },
     menuArrow: {position: 'absolute', left: px(314), top: px(20), width: px(16), height: px(16)},
+    phoneMask: {flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: px(28)},
+    phoneCard: {backgroundColor: dark ? '#16143A' : '#FFFFFF', borderRadius: px(14), padding: px(18)},
+    phoneTitle: {fontSize: px(17), fontWeight: '700', color: dark ? '#FFFFFF' : '#222222', marginBottom: px(12)},
+    phoneInput: {
+      borderWidth: 1,
+      borderColor: dark ? '#3A3868' : '#E6E6E6',
+      borderRadius: px(8),
+      paddingHorizontal: px(12),
+      height: px(42),
+      marginBottom: px(10),
+      color: dark ? '#FFFFFF' : '#222222',
+      fontSize: px(15),
+    },
+    phoneActions: {flexDirection: 'row', justifyContent: 'space-between', marginTop: px(6)},
+    phoneAction: {color: '#07C160', fontSize: px(15), fontWeight: '600'},
   });
 
 export default ProfileScreen;

@@ -42,6 +42,18 @@ export function unbindTeacher(teacherId, studentId) {
   });
 }
 
+/** 请求手机登录验证码。模板未过审时返回还在审核，过审后同一接口自动发出。 */
+export function requestSmsCode(phone) {
+  return postJson('/api/account/sms/send', {phone});
+}
+
+/** 校验验证码并登录。preferUserId 用于把登录前的本机身份合并回去。 */
+export function loginWithSms(phone, code, deviceId, preferUserId) {
+  const body = {phone, code, device_id: deviceId};
+  if (preferUserId) body.prefer_user_id = preferUserId;
+  return postJson('/api/account/sms/login', body);
+}
+
 /** 微信登录：App 拿到 code 后交后端换 OpenID（AppSecret 配好后生效）。
  *  preferUserId：登录前本机旧 ID，服务端可把被冲掉的 UUID 提升回主号。 */
 export function wechatLogin(code, deviceId, preferUserId) {
